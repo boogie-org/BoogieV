@@ -1,0 +1,3 @@
+[submodule "dafny-libraries"]
+	path = dafny-libraries
+	url = https://github.com/dafny-lang/libraries/
