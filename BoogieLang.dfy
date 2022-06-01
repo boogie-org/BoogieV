@@ -169,6 +169,7 @@ module BoogieLang {
     }
   }
 
+/** TODO: add return */
   datatype Cmd =
     | SimpleCmd(SimpleCmd)
     | Break(Option<lbl_name>)
@@ -241,11 +242,6 @@ module BoogieLang {
       }
     }
   }
-
-  type BasicBlock = seq<SimpleCmd>
-  type BlockId = nat 
-
-  datatype Cfg = Cfg(entry: BlockId, blocks: map<BlockId, BasicBlock>, successors: map<BlockId, seq<BlockId>>)
 
   datatype Val<A> = LitV(Lit) | AbsV(A)
 
