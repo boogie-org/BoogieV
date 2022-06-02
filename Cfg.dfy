@@ -1,7 +1,7 @@
 
 include "BoogieSemantics.dfy"
 
-module Cfg {
+module BoogieCfg {
 
   import opened BoogieLang
   import opened BoogieSemantics
@@ -44,7 +44,7 @@ module Cfg {
     requires IsAcyclicSeq(g, ns, cover)
     decreases cover, 1, ns
   { s =>
-      if |ns| == 0 then post(s)
+      if |ns| == 0 then Some(true)
       else 
         assert ns[0] in g.blocks.Keys;
         var res1 :- WpCfg(a, g, ns[0], post, cover)(s);
@@ -58,7 +58,12 @@ module Cfg {
     requires IsAcyclic(g, n, cover)
     decreases cover, 0
   {
-    WpShallowSimpleCmdConj(a, g.blocks[n], WpCfgConjunction(a, g, g.successors[n], post, cover - {n}))
+    var successors := g.successors[n];
+
+    if |successors| == 0 then 
+      WpShallowSimpleCmdConj(a, g.blocks[n], post)
+    else 
+      WpShallowSimpleCmdConj(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
   }
 
 }
