@@ -262,8 +262,4 @@ module BoogieCfg {
     }
   }
 
-  lemma IsAcyclicNodesSubset(r: SuccessorRel, cover: set<BlockId>)
-    requires IsAcyclicAlt(r, cover)
-    ensures r.successor.Keys <= cover
-
 }
