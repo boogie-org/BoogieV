@@ -190,14 +190,13 @@ module BoogieSemantics {
         post(s[x := eEval])
   }
 
-  function WpShallowSimpleCmdConj<A(!new)>(a: absval_interp<A>, simpleCmds: seq<SimpleCmd>, post: Predicate<A>) : Predicate<A>
+  function WpShallowSimpleCmdSeq<A(!new)>(a: absval_interp<A>, simpleCmds: seq<SimpleCmd>, post: Predicate<A>) : Predicate<A>
   {
     if |simpleCmds| == 0 then post
     else
       s =>
-        var res1 :- WpShallowSimpleCmd(a, simpleCmds[0], post)(s);
-        var res2 :- WpShallowSimpleCmdConj(a, simpleCmds[1..], post)(s);
-        Some(res1 && res2)
+        var res2 := WpShallowSimpleCmdSeq(a, simpleCmds[1..], post);
+        WpShallowSimpleCmd(a, simpleCmds[0], res2)(s)
   }
 
   function WpShallow<A(!new)>(a: absval_interp<A>, c: Cmd, post: WpPostShallow<A>) : Predicate<A>
