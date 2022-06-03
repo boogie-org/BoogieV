@@ -139,11 +139,18 @@ module BoogieLang {
   }
 
   datatype SimpleCmd =
-    | Skip //one reason to add this instead of using Assert/Assume true: make explicit that the command does nothing
+    | Skip //one reason to add Skip instead of using Assert/Assume true: make explicit that the command does nothing
     | Assert(Expr)
     | Assume(Expr)
     | Assign(var_name, Ty, Expr) 
     | Havoc(seq<(var_name, Ty)>)
+    | SeqSimple(SimpleCmd, SimpleCmd) 
+    /* The reason for adding a separate sequential composition for simple commands is to be able to transform the AST
+       into a form that more directly represents the desired CFG block structure.
+       Moreover, if we did not add such a constructor, then we would define a basic block as seq<SimpleCmd> 
+       (instead of SimpleCmd). As a result, one would have to define various operations on seq<SimpleCmd> that are
+       defined on SimpleCmd. This means a lot of the extra work imposed by adding a separate sequential composition
+       constructor for SimpleCmd would have to be done anyway. */
   {
     method ToString(indent: nat) returns (s: string) {
       match this {
@@ -165,6 +172,7 @@ module BoogieLang {
             i := i+1;
           }
           return IndentString("havoc " + declS + ";", indent);
+        case SeqSimple(sc1, sc2) => return "TODO";
       }
     }
   }
@@ -174,15 +182,10 @@ module BoogieLang {
     | SimpleCmd(SimpleCmd)
     | Break(Option<lbl_name>)
     | Seq(Cmd, Cmd)
-
-    /* scope name, scoped variable declarations and scope body */
-    | Scope(Option<lbl_name>, seq<(var_name,Ty)>, Cmd)
-    
-    //invariants and loop body
-    | Loop(seq<Expr>, Cmd) 
-
+    | Scope(labelName: Option<lbl_name>, varDecls: seq<(var_name,Ty)>, body: Cmd)
+    | Loop(invariants: seq<Expr>, body: Cmd) 
     //cond = None represents a non-deterministic if-statement (if(*) {...} else {...})
-    | If(Option<Expr>, Cmd, Cmd)
+    | If(Option<Expr>, thn: Cmd, els: Cmd)
   
   /*
     | ProcCall(proc_name, seq<Expr>, seq<var_name>)

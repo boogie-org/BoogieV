@@ -1,4 +1,9 @@
+include "dafny-libraries/src/Wrappers.dfy"
+
 module Util {
+
+  import opened Wrappers
+  
   function RemoveDuplicates<T>(s: seq<T>): seq<T>
   {
     RemoveDuplicatesAux(s, {})
@@ -42,5 +47,9 @@ module Util {
 
   function method IndentString(s: string, n: nat) : string {
     seq(n, _ => ' ') + s
+  }
+
+  function AndOpt(b1Opt: Option<bool>, b2Opt: Option<bool>) : Option<bool> {
+    if b1Opt.Some? && b2Opt.Some? then Some(b1Opt.value && b2Opt.value) else None
   }
 }
