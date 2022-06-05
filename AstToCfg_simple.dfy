@@ -23,22 +23,6 @@ module AstToCfg {
     case If(_, thn, els) => NoBreaksScopesLoops(thn) && NoBreaksScopesLoops(els)
   }
 
-  function MaxOfSet(s: set<nat>) : nat
-    ensures (forall i :: i in s ==> MaxOfSet(s) >= i)
-  {
-    if s == {} then 0
-    else 
-      var x :| x in s;
-      var subRes := MaxOfSet(s - {x});
-      assert (s - {x}) + {x} == s;
-      Math.Max(subRes, x)
-  }
-
-  /*
-  lemma Test(a: nat, b: nat, c: nat, s1: set<nat>, s2: set<nat>, s3: set<nat>)
-    ensures CoveredSet(a, b, s1, s2) + CoveredSet(b, c, s2, )
-  */
-
   /** 
     Transforms the Ast `c` into a Cfg.
     `precedingBlock`: The current basic block that is being processed
@@ -239,121 +223,69 @@ module AstToCfg {
         var exit1 := optExit1.value;
         var exit2 := optExit2.value;
 
-        if optCfg1.Some? && optCfg2.Some? {
-          var cfg1 := optCfg1.value;
-          var cfg2 := optCfg2.value;
-          var s1 := cfg1.successors;
-          var s2 := cfg2.successors;
+        var (entry1, s1) := if optCfg1.Some? then (optCfg1.value.entry, optCfg1.value.successors) else (exit1.0, map[]);
+        var (entry2, s2) := if optCfg2.Some? then (optCfg2.value.entry, optCfg2.value.successors) else (exit2.0, map[]);
 
-          var cover1 := CoveringSet(nextVersion+1, nextVersion1, {nextVersion}, {exit1.0});
-          assert IsAcyclicAlt(s1, cfg1.entry, cover1);
+        var cover1 := CoveringSet(nextVersion+1, nextVersion1, {nextVersion}, {exit1.0});
+        assert IsAcyclicAlt(s1, entry1, cover1);
 
-          var cover2 := CoveringSet(nextVersion1+1, nextVersion2, {nextVersion1}, {exit2.0});
-          assert IsAcyclicAlt(s2, cfg2.entry, cover2);
+        var cover2 := CoveringSet(nextVersion1+1, nextVersion2, {nextVersion1}, {exit2.0});
+        assert IsAcyclicAlt(s2, entry2, cover2);
 
-          IsAcyclicExtend2(s1, s2, cfg1.entry, cover1);
-          IsAcyclicLargerCover(s1 + s2, cfg1.entry, cover1, cover1+cover2);
-          assert IsAcyclicAlt(s1 + s2, cfg1.entry, cover1+cover2);
+        IsAcyclicExtend2(s1, s2, entry1, cover1);
+        IsAcyclicLargerCover(s1 + s2, entry1, cover1, cover1+cover2);
+        assert IsAcyclicAlt(s1 + s2, entry1, cover1+cover2);
 
-          IsAcyclicExtend(s1, s2, cfg2.entry, cover2);
-          IsAcyclicLargerCover(s1 + s2, cfg2.entry, cover2, cover1+cover2);
-          assert IsAcyclicAlt(s1 + s2, cfg2.entry, cover1+cover2);
+        IsAcyclicExtend(s1, s2, entry2, cover2);
+        IsAcyclicLargerCover(s1 + s2, entry2, cover2, cover1+cover2);
+        assert IsAcyclicAlt(s1 + s2, entry2, cover1+cover2);
 
-          var (entryBlockId, entryBlock) := precedingBlock;
+        var (entryBlockId, entryBlock) := precedingBlock;
 
-          var successorsBeforeJoin := (s1 + s2)[entryBlockId := [thnStartId, elsStartId]];
+        var successorsBeforeJoin := (s1 + s2)[entryBlockId := [thnStartId, elsStartId]];
 
-          assert IsAcyclicAlt(successorsBeforeJoin, entryBlockId, cover1+cover2+{entryBlockId}) by {
-            calc {
-              IsAcyclicAlt(successorsBeforeJoin, entryBlockId, cover1+cover2+{entryBlockId});
-              IsAcyclicSeqAlt(successorsBeforeJoin, [thnStartId, elsStartId], cover1+cover2);
-              IsAcyclicAlt(successorsBeforeJoin, thnStartId, cover1+cover2) &&
-              IsAcyclicSeqAlt(successorsBeforeJoin, [elsStartId], cover1+cover2);
-              IsAcyclicAlt(successorsBeforeJoin, thnStartId, cover1+cover2) &&
-              IsAcyclicAlt(successorsBeforeJoin, elsStartId, cover1+cover2);
-              { IsAcyclicUpdate(s1+s2, cfg1.entry, entryBlockId, [thnStartId, elsStartId], cover1+cover2);
-                IsAcyclicUpdate(s1+s2, cfg2.entry, entryBlockId, [thnStartId, elsStartId], cover1+cover2);
-              }
-              IsAcyclicAlt(s1+s2, thnStartId, cover1+cover2) &&
-              IsAcyclicAlt(s1+s2, elsStartId, cover1+cover2);
+        assert IsAcyclicAlt(successorsBeforeJoin, entryBlockId, cover1+cover2+{entryBlockId}) by {
+          calc {
+            IsAcyclicAlt(successorsBeforeJoin, entryBlockId, cover1+cover2+{entryBlockId});
+            IsAcyclicSeqAlt(successorsBeforeJoin, [thnStartId, elsStartId], cover1+cover2);
+            IsAcyclicAlt(successorsBeforeJoin, thnStartId, cover1+cover2) &&
+            IsAcyclicSeqAlt(successorsBeforeJoin, [elsStartId], cover1+cover2);
+            IsAcyclicAlt(successorsBeforeJoin, thnStartId, cover1+cover2) &&
+            IsAcyclicAlt(successorsBeforeJoin, elsStartId, cover1+cover2);
+            { IsAcyclicUpdate(s1+s2, entry1, entryBlockId, [thnStartId, elsStartId], cover1+cover2);
+              IsAcyclicUpdate(s1+s2, entry2, entryBlockId, [thnStartId, elsStartId], cover1+cover2);
             }
+            IsAcyclicAlt(s1+s2, thnStartId, cover1+cover2) &&
+            IsAcyclicAlt(s1+s2, elsStartId, cover1+cover2);
           }
+        }
 
-          var (thnExitId, thenExitBlock) := optExit1.value;
-          var (elsExitId, elseExitBlock) := optExit2.value;
+        var (thnExitId, thenExitBlock) := optExit1.value;
+        var (elsExitId, elseExitBlock) := optExit2.value;
 
-          IsAcyclicUpdate2(successorsBeforeJoin, entryBlockId, thnExitId, [nextVersion2], cover1+cover2+{entryBlockId});
-          IsAcyclicUpdate2(successorsBeforeJoin[thnExitId := [nextVersion2]], entryBlockId, elsExitId, [nextVersion2], cover1+cover2+{entryBlockId}+{thnExitId});
+        IsAcyclicUpdate2(successorsBeforeJoin, entryBlockId, thnExitId, [nextVersion2], cover1+cover2+{entryBlockId});
+        IsAcyclicUpdate2(successorsBeforeJoin[thnExitId := [nextVersion2]], entryBlockId, elsExitId, [nextVersion2], cover1+cover2+{entryBlockId}+{thnExitId});
 
-          var successors := successorsBeforeJoin[thnExitId := [nextVersion2]][elsExitId := [nextVersion2]];
-          var cover3 := cover1+cover2+{entryBlockId}+{thnExitId}+{elsExitId};
 
-          assert IsAcyclicAlt(successors, entryBlockId, cover3);
-          
-          //assert cover3 == CoveringSet(nextVersion, nextVersion2, {precedingBlock.0}, {nextVersion2});
+        var successorsBeforeJoinImpl := 
+          if optCfg1.Some? && optCfg2.Some? then
+            (s1+s2)[entryBlockId := [thnStartId, elsStartId]]
+          else if optCfg1.Some? then
+            s1[entryBlockId := [thnStartId, elsStartId]]
+          else if optCfg2.Some? then
+            s2[entryBlockId := [thnStartId, elsStartId]]
+          else 
+            (map[])[entryBlockId := [thnStartId, elsStartId]];
 
-          assert IsAcyclicAlt(successors, entryBlockId, CoveringSet(nextVersion, nextVersion2+1, {precedingBlock.0}, {nextVersion2})) by {
-            assert cover3 == CoveringSet(nextVersion, nextVersion2+1, {precedingBlock.0}, {nextVersion2});
-          }
-        } else if optCfg1.Some? {
-            var cfg1 := optCfg1.value;
-            var s1 := cfg1.successors;
-            var s2 := map[];
-            var entry1 := cfg1.entry;
-            var entry2 := exit2.0;
+        var successors := successorsBeforeJoinImpl[thnExitId := [nextVersion2]][elsExitId := [nextVersion2]];
+        var cover3 := cover1+cover2+{entryBlockId}+{thnExitId}+{elsExitId};
 
-            var cover1 := CoveringSet(nextVersion+1, nextVersion1, {nextVersion}, {exit1.0});
-            assert IsAcyclicAlt(s1, entry1, cover1);
-
-            var cover2 := CoveringSet(nextVersion1+1, nextVersion2, {nextVersion1}, {exit2.0});
-            assert IsAcyclicAlt(s2, entry2, cover2);
-
-            IsAcyclicExtend2(s1, s2, entry1, cover1);
-            IsAcyclicLargerCover(s1 + s2, entry1, cover1, cover1+cover2);
-            assert IsAcyclicAlt(s1 + s2, entry1, cover1+cover2);
-
-            IsAcyclicExtend(s1, s2, entry2, cover2);
-            IsAcyclicLargerCover(s1 + s2, entry2, cover2, cover1+cover2);
-            assert IsAcyclicAlt(s1 + s2, entry2, cover1+cover2);
-
-            var (entryBlockId, entryBlock) := precedingBlock;
-
-            var successorsBeforeJoin := (s1 + s2)[entryBlockId := [thnStartId, elsStartId]];
-
-            assert IsAcyclicAlt(successorsBeforeJoin, entryBlockId, cover1+cover2+{entryBlockId}) by {
-              calc {
-                IsAcyclicAlt(successorsBeforeJoin, entryBlockId, cover1+cover2+{entryBlockId});
-                IsAcyclicSeqAlt(successorsBeforeJoin, [thnStartId, elsStartId], cover1+cover2);
-                IsAcyclicAlt(successorsBeforeJoin, thnStartId, cover1+cover2) &&
-                IsAcyclicSeqAlt(successorsBeforeJoin, [elsStartId], cover1+cover2);
-                IsAcyclicAlt(successorsBeforeJoin, thnStartId, cover1+cover2) &&
-                IsAcyclicAlt(successorsBeforeJoin, elsStartId, cover1+cover2);
-                { IsAcyclicUpdate(s1+s2, entry1, entryBlockId, [thnStartId, elsStartId], cover1+cover2);
-                  IsAcyclicUpdate(s1+s2, entry2, entryBlockId, [thnStartId, elsStartId], cover1+cover2);
-                }
-                IsAcyclicAlt(s1+s2, thnStartId, cover1+cover2) &&
-                IsAcyclicAlt(s1+s2, elsStartId, cover1+cover2);
-              }
-            }
-
-            var (thnExitId, thenExitBlock) := optExit1.value;
-            var (elsExitId, elseExitBlock) := optExit2.value;
-
-            IsAcyclicUpdate2(successorsBeforeJoin, entryBlockId, thnExitId, [nextVersion2], cover1+cover2+{entryBlockId});
-            IsAcyclicUpdate2(successorsBeforeJoin[thnExitId := [nextVersion2]], entryBlockId, elsExitId, [nextVersion2], cover1+cover2+{entryBlockId}+{thnExitId});
-
-            var successors := s1[entryBlockId := [thnStartId, elsStartId]][thnExitId := [nextVersion2]][elsExitId := [nextVersion2]];
-            var cover3 := cover1+cover2+{entryBlockId}+{thnExitId}+{elsExitId};
-
-            assert IsAcyclicAlt(successors, entryBlockId, cover3) by {
-              assert successors == successorsBeforeJoin[thnExitId := [nextVersion2]][elsExitId := [nextVersion2]];
-            }
-
-            assert IsAcyclicAlt(successors, entryBlockId, CoveringSet(nextVersion, nextVersion2+1, {precedingBlock.0}, {nextVersion2})) by {
-              assert cover3 == CoveringSet(nextVersion, nextVersion2+1, {precedingBlock.0}, {nextVersion2});
-            }
-        } else {
-          assume false;
+        assert IsAcyclicAlt(successors, entryBlockId, cover3) by {
+          assert successors == successorsBeforeJoin[thnExitId := [nextVersion2]][elsExitId := [nextVersion2]];
+        }
+        
+        assert IsAcyclicAlt(successors, entryBlockId, CoveringSet(nextVersion, nextVersion2+1, {precedingBlock.0}, {nextVersion2})) by {
+          assert cover3 == CoveringSet(nextVersion, nextVersion2+1, {precedingBlock.0}, {nextVersion2});
         }
     }
   }           
