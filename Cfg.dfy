@@ -243,7 +243,7 @@ module BoogieCfg {
       IsAcyclicExtendSeq(r1, r2, ns[1..], cover);
     }
   }
-  
+ 
   lemma IsAcyclicExtend(r1: SuccessorRel, r2: SuccessorRel, n2Entry: BlockId, cover: set<BlockId>)
     requires IsAcyclicAlt(r2, n2Entry, cover)
     requires !(n2Entry in r1.Keys)
@@ -262,4 +262,67 @@ module BoogieCfg {
     }
   }
 
+  lemma IsAcyclicExtend2(r1: SuccessorRel, r2: SuccessorRel, n1Entry: BlockId, cover: set<BlockId>)
+    requires IsAcyclicAlt(r1, n1Entry, cover)
+    requires !(n1Entry in r2.Keys)
+    requires 
+      forall n1 :: n1 in r1.Keys ==>   
+        (forall i :: 0 <= i < |r1[n1]| ==> !(r1[n1][i] in r2.Keys))
+    requires r1.Keys !! r2.Keys
+    ensures IsAcyclicAlt(r1+r2, n1Entry, cover)
+  {
+    IsAcyclicExtend(r2, r1, n1Entry, cover);
+    assert r2 + r1 == r1 + r2;
+  }
+
+  lemma IsAcyclicUpdate(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+    requires IsAcyclicAlt(r, entry, cover)
+    requires !(n in r.Keys)
+    requires entry != n;
+    requires 
+      forall n1 :: n1 in r.Keys ==>   
+        (forall i :: 0 <= i < |r[n1]| ==> r[n1][i] != n)
+    ensures IsAcyclicAlt(r[n := m], entry, cover)
+  {
+    IsAcyclicExtend2(r, map[n := m], entry, cover);
+    assert r+map[n := m] == r[n := m];
+  }
+
+  lemma IsAcyclicSeqOneStep(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
+    requires (forall i :: 0 <= i < |ns| ==> ! (ns[i] in r.Keys))
+    ensures IsAcyclicSeqAlt(r, ns, cover)
+  {
+  }
+
+  lemma IsAcyclicSeqUpdate2(r: SuccessorRel, ns: seq<BlockId>, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+    requires IsAcyclicSeqAlt(r, ns, cover)
+    requires !(n in r.Keys)
+    requires (forall i :: 0 <= i < |m| ==> ! (m[i] in r.Keys) && !(m[i] == n))
+    ensures IsAcyclicSeqAlt(r[n := m], ns, cover + {n})
+    decreases cover, 1, ns
+  {
+    if |ns| != 0 {
+      IsAcyclicUpdate2(r, ns[0], n, m, cover);
+      IsAcyclicSeqUpdate2(r, ns[1..], n, m, cover);
+    }
+  }
+
+  lemma IsAcyclicUpdate2(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+    requires IsAcyclicAlt(r, entry, cover)
+    requires !(n in r.Keys)
+    requires (forall i :: 0 <= i < |m| ==> ! (m[i] in r.Keys) && !(m[i] ==n))
+    ensures IsAcyclicAlt(r[n := m], entry, cover + {n})
+    decreases cover, 0
+  {
+    if(entry == n) {
+      assert IsAcyclicAlt(r[n := m], entry, cover + {n}) by {
+          IsAcyclicSeqOneStep(r[n := m], m, (cover + {n}) - {n});
+      }
+    }
+
+    if entry in r.Keys {
+        IsAcyclicSeqUpdate2(r, r[entry], n, m, cover - {entry}); 
+        assert (cover - {entry}) + {n} == (cover + {n}) - {entry};
+    }
+  }
 }
