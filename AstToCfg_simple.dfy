@@ -156,7 +156,7 @@ module AstToCfg {
         && (forall n :: n in s.Keys ==>   
             (forall i :: 0 <= i < |s[n]| ==> (s[n][i] == exitBlockId || s[n][i] in s.Keys))) 
         && cfg.entry in s.Keys 
-        && IsAcyclicAlt(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', {precedingBlock.0}, {exitBlockId}))
+        && IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', {precedingBlock.0}, {exitBlockId}))
 
       else  
         precedingBlock.0 == exitBlockId 
@@ -227,36 +227,36 @@ module AstToCfg {
         var (entry2, s2) := if optCfg2.Some? then (optCfg2.value.entry, optCfg2.value.successors) else (exit2.0, map[]);
 
         var cover1 := CoveringSet(nextVersion+1, nextVersion1, {nextVersion}, {exit1.0});
-        assert IsAcyclicAlt(s1, entry1, cover1);
+        assert IsAcyclic(s1, entry1, cover1);
 
         var cover2 := CoveringSet(nextVersion1+1, nextVersion2, {nextVersion1}, {exit2.0});
-        assert IsAcyclicAlt(s2, entry2, cover2);
+        assert IsAcyclic(s2, entry2, cover2);
 
         IsAcyclicExtend2(s1, s2, entry1, cover1);
         IsAcyclicLargerCover(s1 + s2, entry1, cover1, cover1+cover2);
-        assert IsAcyclicAlt(s1 + s2, entry1, cover1+cover2);
+        assert IsAcyclic(s1 + s2, entry1, cover1+cover2);
 
         IsAcyclicExtend(s1, s2, entry2, cover2);
         IsAcyclicLargerCover(s1 + s2, entry2, cover2, cover1+cover2);
-        assert IsAcyclicAlt(s1 + s2, entry2, cover1+cover2);
+        assert IsAcyclic(s1 + s2, entry2, cover1+cover2);
 
         var (entryBlockId, entryBlock) := precedingBlock;
 
         var successorsBeforeJoin := (s1 + s2)[entryBlockId := [thnStartId, elsStartId]];
 
-        assert IsAcyclicAlt(successorsBeforeJoin, entryBlockId, cover1+cover2+{entryBlockId}) by {
+        assert IsAcyclic(successorsBeforeJoin, entryBlockId, cover1+cover2+{entryBlockId}) by {
           calc {
-            IsAcyclicAlt(successorsBeforeJoin, entryBlockId, cover1+cover2+{entryBlockId});
-            IsAcyclicSeqAlt(successorsBeforeJoin, [thnStartId, elsStartId], cover1+cover2);
-            IsAcyclicAlt(successorsBeforeJoin, thnStartId, cover1+cover2) &&
-            IsAcyclicSeqAlt(successorsBeforeJoin, [elsStartId], cover1+cover2);
-            IsAcyclicAlt(successorsBeforeJoin, thnStartId, cover1+cover2) &&
-            IsAcyclicAlt(successorsBeforeJoin, elsStartId, cover1+cover2);
+            IsAcyclic(successorsBeforeJoin, entryBlockId, cover1+cover2+{entryBlockId});
+            IsAcyclicSeq(successorsBeforeJoin, [thnStartId, elsStartId], cover1+cover2);
+            IsAcyclic(successorsBeforeJoin, thnStartId, cover1+cover2) &&
+            IsAcyclicSeq(successorsBeforeJoin, [elsStartId], cover1+cover2);
+            IsAcyclic(successorsBeforeJoin, thnStartId, cover1+cover2) &&
+            IsAcyclic(successorsBeforeJoin, elsStartId, cover1+cover2);
             { IsAcyclicUpdate(s1+s2, entry1, entryBlockId, [thnStartId, elsStartId], cover1+cover2);
               IsAcyclicUpdate(s1+s2, entry2, entryBlockId, [thnStartId, elsStartId], cover1+cover2);
             }
-            IsAcyclicAlt(s1+s2, thnStartId, cover1+cover2) &&
-            IsAcyclicAlt(s1+s2, elsStartId, cover1+cover2);
+            IsAcyclic(s1+s2, thnStartId, cover1+cover2) &&
+            IsAcyclic(s1+s2, elsStartId, cover1+cover2);
           }
         }
 
@@ -280,11 +280,11 @@ module AstToCfg {
         var successors := successorsBeforeJoinImpl[thnExitId := [nextVersion2]][elsExitId := [nextVersion2]];
         var cover3 := cover1+cover2+{entryBlockId}+{thnExitId}+{elsExitId};
 
-        assert IsAcyclicAlt(successors, entryBlockId, cover3) by {
+        assert IsAcyclic(successors, entryBlockId, cover3) by {
           assert successors == successorsBeforeJoin[thnExitId := [nextVersion2]][elsExitId := [nextVersion2]];
         }
         
-        assert IsAcyclicAlt(successors, entryBlockId, CoveringSet(nextVersion, nextVersion2+1, {precedingBlock.0}, {nextVersion2})) by {
+        assert IsAcyclic(successors, entryBlockId, CoveringSet(nextVersion, nextVersion2+1, {precedingBlock.0}, {nextVersion2})) by {
           assert cover3 == CoveringSet(nextVersion, nextVersion2+1, {precedingBlock.0}, {nextVersion2});
         }
     }

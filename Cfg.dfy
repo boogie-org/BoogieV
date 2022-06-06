@@ -20,58 +20,6 @@ module BoogieCfg {
       (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys))
   }
 
-  function IsAcyclicSeq(g: Cfg, ns: seq<BlockId>, cover: set<BlockId>) : bool
-    requires CfgWf(g)
-    requires (forall i :: 0 <= i < |ns| ==> ns[i] in g.blocks.Keys)
-    decreases cover, 1, ns
-  {
-    if |ns| == 0 then true
-    else
-      IsAcyclic(g, ns[0], cover) && IsAcyclicSeq(g, ns[1..], cover)
-  }
-
-  function IsAcyclic(g: Cfg, n: BlockId, cover: set<BlockId>) : bool
-    requires CfgWf(g)
-    requires n in g.blocks.Keys
-    decreases cover, 0
-  {
-    (n in cover) && IsAcyclicSeq(g, g.successors[n], cover - {n})
-  }
-
-  function WpCfgConjunction<A(!new)>(a: absval_interp<A>, g: Cfg, ns: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>) : Predicate<A>
-    requires CfgWf(g)
-    requires (forall i :: 0 <= i < |ns| ==> ns[i] in g.blocks.Keys)
-    requires IsAcyclicSeq(g, ns, cover)
-    decreases cover, 1, ns
-  { s =>
-      if |ns| == 0 then Some(true)
-      else 
-        assert ns[0] in g.blocks.Keys;
-        var res1 :- WpCfg(a, g, ns[0], post, cover)(s);
-        var res2 :- WpCfgConjunction(a, g, ns[1..], post, cover)(s);
-        Some(res1 && res2)
-  }
-
-  function WpCfg<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, post: Predicate<A>, cover: set<BlockId>) : Predicate<A>
-    requires CfgWf(g)
-    requires n in g.blocks.Keys
-    requires IsAcyclic(g, n, cover)
-    decreases cover, 0
-  {
-    var successors := g.successors[n];
-
-    if |successors| == 0 then 
-      WpShallowSimpleCmdSeq(a, g.blocks[n], post)
-    else 
-      WpShallowSimpleCmdSeq(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
-  }
-
-  /***********************************************************************************
-                    Alternatives (more liberal conditions on graphs)
-  ************************************************************************************
-  ************************************************************************************
-  ************************************************************************************/
-
   function CfgWfAlt(g: Cfg, notRecorded: set<BlockId>) : bool
   {
     g.blocks.Keys == g.successors.Keys &&
@@ -82,40 +30,40 @@ module BoogieCfg {
 
   type SuccessorRel = map<BlockId, seq<BlockId>>
 
-  function IsAcyclicSeqAlt(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>) : bool
+  function IsAcyclicSeq(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>) : bool
     decreases cover, 1, ns
   {
-    |ns| != 0 ==> ( IsAcyclicAlt(r, ns[0], cover) && IsAcyclicSeqAlt(r, ns[1..], cover) )
+    |ns| != 0 ==> ( IsAcyclic(r, ns[0], cover) && IsAcyclicSeq(r, ns[1..], cover) )
   }
 
-  function IsAcyclicAlt(r: SuccessorRel, n: BlockId, cover: set<BlockId>) : bool
+  function IsAcyclic(r: SuccessorRel, n: BlockId, cover: set<BlockId>) : bool
     decreases cover, 0
   {
-    n in r.Keys ==> ( n in cover && IsAcyclicSeqAlt(r, r[n], cover - {n}) )
+    n in r.Keys ==> ( n in cover && IsAcyclicSeq(r, r[n], cover - {n}) )
   }
 
   datatype WpPostCfg<!A> = WpPostCfg(normal: Predicate<A>, exceptional: map<BlockId, Predicate<A>>)
 
-  function WpCfgConjunctionAlt<A(!new)>(
+  function WpCfgConjunction<A(!new)>(
     a: absval_interp<A>, 
     g: Cfg, 
     ns: seq<BlockId>, 
     post: Predicate<A>, 
     cover: set<BlockId>) : Predicate<A>
     requires g.blocks.Keys == g.successors.Keys
-    requires IsAcyclicSeqAlt(g.successors, ns, cover)
+    requires IsAcyclicSeq(g.successors, ns, cover)
     decreases cover, 1, ns
   { s =>
       if |ns| == 0 then Some(true)
       else 
-        var res1 :- WpCfgAlt(a, g, ns[0], post, cover)(s);
-        var res2 :- WpCfgConjunctionAlt(a, g, ns[1..], post, cover)(s);
+        var res1 :- WpCfg(a, g, ns[0], post, cover)(s);
+        var res2 :- WpCfgConjunction(a, g, ns[1..], post, cover)(s);
         Some(res1 && res2)
   }
 
-  function WpCfgAlt<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, post: Predicate<A>, cover: set<BlockId>) : Predicate<A>
+  function WpCfg<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, post: Predicate<A>, cover: set<BlockId>) : Predicate<A>
     requires g.blocks.Keys == g.successors.Keys
-    requires IsAcyclicAlt(g.successors, n, cover)
+    requires IsAcyclic(g.successors, n, cover)
     decreases cover, 0
   {
     if !(n in g.blocks.Keys) then
@@ -125,13 +73,13 @@ module BoogieCfg {
       if |successors| == 0 then 
         WpShallowSimpleCmdSeq(a, g.blocks[n], post)
       else 
-        WpShallowSimpleCmdSeq(a, g.blocks[n], WpCfgConjunctionAlt(a, g, successors, post, cover - {n}))
+        WpShallowSimpleCmdSeq(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
   }
 
   /** Lemmas */
   lemma IsAcyclicSeqLargerCover(r: SuccessorRel, ns: seq<BlockId>, cover1: set<BlockId>, cover2: set<BlockId>)
-    requires cover1 <= cover2 && IsAcyclicSeqAlt(r, ns, cover1)
-    ensures IsAcyclicSeqAlt(r, ns, cover2)
+    requires cover1 <= cover2 && IsAcyclicSeq(r, ns, cover1)
+    ensures IsAcyclicSeq(r, ns, cover2)
     decreases cover1, 1, ns
   {
     if |ns| != 0 {
@@ -141,8 +89,8 @@ module BoogieCfg {
   }
 
   lemma IsAcyclicLargerCover(r: SuccessorRel, n: BlockId, cover1: set<BlockId>, cover2: set<BlockId>)
-    requires cover1 <= cover2 && IsAcyclicAlt(r, n, cover1)
-    ensures IsAcyclicAlt(r, n, cover2)
+    requires cover1 <= cover2 && IsAcyclic(r, n, cover1)
+    ensures IsAcyclic(r, n, cover2)
     decreases cover1, 0
   {
     if n in r.Keys {
@@ -159,8 +107,8 @@ module BoogieCfg {
     cover2: set<BlockId>)
     requires cover1 !! cover2
     requires r1.Keys !! r2.Keys
-    requires IsAcyclicSeqAlt(r1, ns1, cover1)
-    requires IsAcyclicAlt(r2, n2Entry, cover2)
+    requires IsAcyclicSeq(r1, ns1, cover1)
+    requires IsAcyclic(r2, n2Entry, cover2)
 
     requires 
       (forall i :: 0 <= i < |ns1| ==> 
@@ -180,7 +128,7 @@ module BoogieCfg {
     requires
       forall n2 :: n2 in r2.Keys ==>   
         (forall i :: 0 <= i < |r2[n2]| ==> !(r2[n2][i] in r1.Keys))
-    ensures IsAcyclicSeqAlt(r1 + r2, ns1, cover1 + cover2)
+    ensures IsAcyclicSeq(r1 + r2, ns1, cover1 + cover2)
     decreases cover1, 1, ns1
   {
     if |ns1| != 0 {
@@ -198,8 +146,8 @@ module BoogieCfg {
     cover2: set<BlockId>)
     requires cover1 !! cover2
     requires r1.Keys !! r2.Keys
-    requires IsAcyclicAlt(r1, n1Entry, cover1)
-    requires IsAcyclicAlt(r2, n2Entry, cover2)
+    requires IsAcyclic(r1, n1Entry, cover1)
+    requires IsAcyclic(r2, n2Entry, cover2)
 
     requires n1Entry in r1.Keys || n1Entry == n2Entry
     requires !(n2Entry in r1.Keys)
@@ -213,15 +161,15 @@ module BoogieCfg {
     requires
       forall n2 :: n2 in r2.Keys ==>   
         (forall i :: 0 <= i < |r2[n2]| ==> !(r2[n2][i] in r1.Keys))
-    ensures IsAcyclicAlt(r1 + r2, n1Entry, cover1 + cover2)
+    ensures IsAcyclic(r1 + r2, n1Entry, cover1 + cover2)
     decreases cover1, 0
   {
     if n1Entry in r1.Keys {
       IsAcyclicSeqMerge(r1, r2, r1[n1Entry], n2Entry, cover1 - {n1Entry}, cover2);
       calc {
-        IsAcyclicSeqAlt(r1 + r2, r1[n1Entry], (cover1 - {n1Entry}) + cover2); 
+        IsAcyclicSeq(r1 + r2, r1[n1Entry], (cover1 - {n1Entry}) + cover2); 
       == { assert (cover1 - {n1Entry}) + cover2 == (cover1 + cover2) - {n1Entry}; }
-        IsAcyclicSeqAlt(r1 + r2, r1[n1Entry], (cover1 + cover2) - {n1Entry});
+        IsAcyclicSeq(r1 + r2, r1[n1Entry], (cover1 + cover2) - {n1Entry});
       }
     } else {
       IsAcyclicExtend(r1, r2, n2Entry, cover2);
@@ -230,12 +178,12 @@ module BoogieCfg {
   }
 
   lemma IsAcyclicExtendSeq(r1: SuccessorRel, r2: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
-    requires IsAcyclicSeqAlt(r2, ns, cover)
+    requires IsAcyclicSeq(r2, ns, cover)
     requires (forall i :: 0 <= i < |ns| ==> !(ns[i] in r1.Keys))
     requires 
       forall n2 :: n2 in r2.Keys ==>   
         (forall i :: 0 <= i < |r2[n2]| ==> !(r2[n2][i] in r1.Keys))
-    ensures IsAcyclicSeqAlt(r1+r2, ns, cover)
+    ensures IsAcyclicSeq(r1+r2, ns, cover)
     decreases cover, 1, ns
   {
     if |ns| != 0 {
@@ -245,44 +193,44 @@ module BoogieCfg {
   }
  
   lemma IsAcyclicExtend(r1: SuccessorRel, r2: SuccessorRel, n2Entry: BlockId, cover: set<BlockId>)
-    requires IsAcyclicAlt(r2, n2Entry, cover)
+    requires IsAcyclic(r2, n2Entry, cover)
     requires !(n2Entry in r1.Keys)
     requires 
       forall n2 :: n2 in r2.Keys ==>   
         (forall i :: 0 <= i < |r2[n2]| ==> !(r2[n2][i] in r1.Keys))
-    ensures IsAcyclicAlt(r1+r2, n2Entry, cover)
+    ensures IsAcyclic(r1+r2, n2Entry, cover)
     decreases cover, 0
   {
     var r := r1 + r2;
     if(n2Entry in r.Keys) {
       assert n2Entry in r2.Keys;
-      assert IsAcyclicSeqAlt(r2, r2[n2Entry], cover - {n2Entry});
+      assert IsAcyclicSeq(r2, r2[n2Entry], cover - {n2Entry});
 
       IsAcyclicExtendSeq(r1, r2, r2[n2Entry], cover - {n2Entry});
     }
   }
 
   lemma IsAcyclicExtend2(r1: SuccessorRel, r2: SuccessorRel, n1Entry: BlockId, cover: set<BlockId>)
-    requires IsAcyclicAlt(r1, n1Entry, cover)
+    requires IsAcyclic(r1, n1Entry, cover)
     requires !(n1Entry in r2.Keys)
     requires 
       forall n1 :: n1 in r1.Keys ==>   
         (forall i :: 0 <= i < |r1[n1]| ==> !(r1[n1][i] in r2.Keys))
     requires r1.Keys !! r2.Keys
-    ensures IsAcyclicAlt(r1+r2, n1Entry, cover)
+    ensures IsAcyclic(r1+r2, n1Entry, cover)
   {
     IsAcyclicExtend(r2, r1, n1Entry, cover);
     assert r2 + r1 == r1 + r2;
   }
 
   lemma IsAcyclicUpdate(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
-    requires IsAcyclicAlt(r, entry, cover)
+    requires IsAcyclic(r, entry, cover)
     requires !(n in r.Keys)
     requires entry != n;
     requires 
       forall n1 :: n1 in r.Keys ==>   
         (forall i :: 0 <= i < |r[n1]| ==> r[n1][i] != n)
-    ensures IsAcyclicAlt(r[n := m], entry, cover)
+    ensures IsAcyclic(r[n := m], entry, cover)
   {
     IsAcyclicExtend2(r, map[n := m], entry, cover);
     assert r+map[n := m] == r[n := m];
@@ -290,15 +238,15 @@ module BoogieCfg {
 
   lemma IsAcyclicSeqOneStep(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
     requires (forall i :: 0 <= i < |ns| ==> ! (ns[i] in r.Keys))
-    ensures IsAcyclicSeqAlt(r, ns, cover)
+    ensures IsAcyclicSeq(r, ns, cover)
   {
   }
 
   lemma IsAcyclicSeqUpdate2(r: SuccessorRel, ns: seq<BlockId>, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
-    requires IsAcyclicSeqAlt(r, ns, cover)
+    requires IsAcyclicSeq(r, ns, cover)
     requires !(n in r.Keys)
     requires (forall i :: 0 <= i < |m| ==> ! (m[i] in r.Keys) && !(m[i] == n))
-    ensures IsAcyclicSeqAlt(r[n := m], ns, cover + {n})
+    ensures IsAcyclicSeq(r[n := m], ns, cover + {n})
     decreases cover, 1, ns
   {
     if |ns| != 0 {
@@ -308,14 +256,14 @@ module BoogieCfg {
   }
 
   lemma IsAcyclicUpdate2(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
-    requires IsAcyclicAlt(r, entry, cover)
+    requires IsAcyclic(r, entry, cover)
     requires !(n in r.Keys)
     requires (forall i :: 0 <= i < |m| ==> ! (m[i] in r.Keys) && !(m[i] ==n))
-    ensures IsAcyclicAlt(r[n := m], entry, cover + {n})
+    ensures IsAcyclic(r[n := m], entry, cover + {n})
     decreases cover, 0
   {
     if(entry == n) {
-      assert IsAcyclicAlt(r[n := m], entry, cover + {n}) by {
+      assert IsAcyclic(r[n := m], entry, cover + {n}) by {
           IsAcyclicSeqOneStep(r[n := m], m, (cover + {n}) - {n});
       }
     }
