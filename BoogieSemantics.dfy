@@ -1,11 +1,14 @@
 include "BoogieLang.dfy"
 include "BoogieOp.dfy"
+include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
 
 module BoogieSemantics {
   import opened BoogieLang
   import opened Wrappers
   import opened Util
   import opened BoogieOp
+
+  import Sequences = Seq
 
   function EvalExpr<A(!new)>(a: absval_interp<A>, e: Expr, s: state<A>) : Option<Val<A>>
   {
@@ -328,15 +331,81 @@ module BoogieSemantics {
       case _ => 
   }
 
-  /* TODO
-    function ImpliesOpt<A(!new)>(a: Option<bool>, b: Option<bool>):bool
-    {
-        a.None? || (a.Some? && b.Some? && a.value ==> b.value)
-    }
+  function ImpliesOpt(a: Option<bool>, b: Option<bool>):bool
+  {
+      a.None? || (a.Some? && b.Some? && (a.value ==> b.value))
+  }
 
+  /*
+  lemma WpShallowSimpleCmdMono<A(!new)>(a: absval_interp<A>, c: SimpleCmd, s: state<A>, P: Predicate<A>, Q: Predicate<A>)
+  requires (forall s' :: ImpliesOpt(P(s'), Q(s'))) 
+  ensures ImpliesOpt(WpShallowSimpleCmd(a, c, P)(s), WpShallowSimpleCmd(a, c, Q)(s))
+
+  lemma WpShallowSimpleCmdSeqMono<A(!new)>(a: absval_interp<A>, scs: seq<SimpleCmd>, s: state<A>, P: Predicate<A>, Q: Predicate<A>)
+  requires (forall s' :: ImpliesOpt(P(s'), Q(s'))) 
+  ensures ImpliesOpt(WpShallowSimpleCmdSeq(a, scs, P)(s), WpShallowSimpleCmdSeq(a, scs, Q)(s))
+  */
+  
+  /*
     lemma WpShallowNormalMono<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, P: WpPostShallow, Q: WpPostShallow)
     requires LabelsWellDefAux(c, P.scopes.Keys) && LabelsWellDefAux(c, Q.scopes.Keys)
     requires (forall s' :: ImpliesOpt<A>(P.normal(s'), Q.normal(s'))) && P.currentScope == Q.currentScope && P.scopes == Q.scopes
     ensures ImpliesOpt<A>(WpShallow(a, c, P)(s), WpShallow(a, c, Q)(s))
   */
+
+  /** operational semantics */
+  datatype ExtState<A> = NormalState(state<A>) | MagicState | FailureState
+
+  function SequentialMapUpdate<K,V>(m: map<K,V>, keys: seq<K>, values: seq<V>) : map<K,V>
+    requires |keys| == |values|
+    decreases keys
+  {
+    if |keys| == 0  
+      then m
+    else 
+      SequentialMapUpdate(m[keys[0] := values[0]], keys[1..], values[1..])
+  }
+
+  least predicate SimpleCmdOpSem<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, y: ExtState<A>, y': ExtState<A>)
+  {
+    match y
+    case NormalState(s) => 
+      match sc {
+      case Skip => y == y'
+      case Assume(e) => 
+        if(ExprEvalBoolOpt(a, e, s) == Some(true)) then
+          y' == y
+        else
+          y' == MagicState
+      case Assert(e) =>
+        if(ExprEvalBoolOpt(a, e, s) == Some(true)) then
+          y' == y
+        else
+          y' == FailureState
+      case Assign(x, _, e) =>
+        var vOpt := EvalExpr(a, e, s);
+        match vOpt {
+          case Some(v) => y' == NormalState(s[x := v])
+          case None => false
+        }
+      case Havoc(vDecls) =>
+        var (varNames,_) := Sequences.Unzip(vDecls);
+        exists vs : seq<Val<A>> :: 
+          && |vs| == |vDecls|
+          && (forall i :: 0 <= i < |vDecls| ==> TypeOfVal(a, vs[i]) == vDecls[i].1)
+          && y' == NormalState(SequentialMapUpdate(s, varNames, vs))
+      }
+    case MagicState => y == y'
+    case FailureState => y == y'
+  }
+
+  least predicate SimpleCmdSeqOpSem<A(!new)>(a: absval_interp<A>, scs: seq<SimpleCmd>, y: ExtState<A>, y': ExtState<A>)
+  {
+    if |scs| == 0 then
+      y == y'
+    else 
+      exists y'' :: SimpleCmdOpSem(a, scs[0], y, y'') && SimpleCmdSeqOpSem(a, scs[1..], y'', y')
+  }
+
 }
+

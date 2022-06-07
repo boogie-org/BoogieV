@@ -20,14 +20,6 @@ module BoogieCfg {
       (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys))
   }
 
-  function CfgWfAlt(g: Cfg, notRecorded: set<BlockId>) : bool
-  {
-    g.blocks.Keys == g.successors.Keys &&
-    g.entry in g.blocks.Keys &&
-    (forall blockId :: blockId in g.blocks.Keys ==> 
-      (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys + notRecorded))
-  }
-
   type SuccessorRel = map<BlockId, seq<BlockId>>
 
   function IsAcyclicSeq(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>) : bool
@@ -42,6 +34,7 @@ module BoogieCfg {
     n in r.Keys ==> ( n in cover && IsAcyclicSeq(r, r[n], cover - {n}) )
   }
 
+  /*=================== Wp semantics ==========================================*/
   datatype WpPostCfg<!A> = WpPostCfg(normal: Predicate<A>, exceptional: map<BlockId, Predicate<A>>)
 
   function WpCfgConjunction<A(!new)>(
@@ -75,6 +68,102 @@ module BoogieCfg {
       else 
         WpShallowSimpleCmdSeq(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
   }
+
+  lemma IsAcyclicElem(r: SuccessorRel, ns: seq<BlockId>, nSucc: BlockId, cover: set<BlockId>)
+    requires IsAcyclicSeq(r, ns, cover)
+    requires nSucc in ns
+    ensures IsAcyclic(r, nSucc, cover)
+  /** TODO proof */
+
+  lemma WpCfgConjunctionSingle<A(!new)>(
+    a: absval_interp<A>, 
+    g: Cfg, 
+    ns: seq<BlockId>, 
+    n: BlockId,
+    post: Predicate<A>, 
+    cover: set<BlockId>,
+    s: state<A>) 
+  requires g.blocks.Keys == g.successors.Keys
+  requires IsAcyclic(g.successors, n, cover)
+  requires IsAcyclicSeq(g.successors, ns, cover)
+  requires n in ns
+  ensures  var nPre := WpCfg(a, g, n, post, cover)(s);
+           var nsPre := WpCfgConjunction(a, g, ns, post, cover)(s);
+           ImpliesOpt(nsPre, nPre)
+  /** TODO proof */
+ 
+  /*============================Operational semantics========================*/
+
+  least predicate CfgRed<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, s: ExtState<A>, s': ExtState<A>)
+    requires g.blocks.Keys == g.successors.Keys
+  {
+    if n in g.blocks.Keys then
+      var blocks := g.blocks[n];
+      var successors := g.successors[n];
+
+      if |successors| == 0 then
+        SimpleCmdSeqOpSem(a, blocks, s, s')
+      else
+        //DISCUSS
+        assert successors[0] in successors; //required for non-emptiness constraint in next line to go through
+        var succ :| succ in successors;
+        (exists s'' :: SimpleCmdSeqOpSem(a, blocks, s, s'') && CfgRed(a, g, succ, s'' , s'))
+    else 
+      false
+  }
+
+/*==========Correspondence Wp and Operational Semantics===========================*/
+
+  lemma WpSemToOpSem_SimpleCmdSeq<A(!new)>(a: absval_interp<A>, scs: seq<SimpleCmd>, post: Predicate<A>, s: state<A>, s': ExtState<A>)
+    requires WpShallowSimpleCmdSeq(a, scs, post)(s) == Some(true)
+    requires SimpleCmdSeqOpSem(a, scs, NormalState(s), s')
+    ensures s' != FailureState
+    ensures forall ns' :: s' == NormalState(ns') ==> post(ns') == Some(true)
+  /** TODO proof */
+ 
+  //Note that the following lemma is trivially satisfied if CfgRed is the empty relation
+  lemma WpSemToOpSem<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, post: Predicate<A>, cover: set<BlockId>, s: state<A>, s': ExtState<A>)
+    requires IsAcyclic(g.successors, n, cover)
+    requires g.successors.Keys == g.blocks.Keys
+    requires WpCfg(a, g, n, post, cover)(s) == Some(true)
+    requires CfgRed(a, g, n, NormalState(s), s')
+    requires CfgWf(g) && n in g.blocks.Keys
+    ensures s' != FailureState
+    ensures forall ns' :: s' == NormalState(ns') ==> post(ns') == Some(true)
+    decreases cover
+  {
+    var block := g.blocks[n];
+    var successors := g.successors[n];
+
+    if |successors| == 0 {
+      WpSemToOpSem_SimpleCmdSeq(a, block, post, s, s');
+    } else {
+      assert WpShallowSimpleCmdSeq(a, block, WpCfgConjunction(a, g, successors, post, cover - {n}))(s) == Some(true);
+
+      var succ, y :| succ in successors && SimpleCmdSeqOpSem(a, block, NormalState(s), y) && CfgRed(a, g, succ, y , s');
+
+      WpSemToOpSem_SimpleCmdSeq(a, block, WpCfgConjunction(a, g, successors, post, cover - {n}), s, y);
+
+      match y {
+        case MagicState => assume false; //TODO magic state stays magic
+        case NormalState(s'') => 
+        calc {
+          IsAcyclic(g.successors, n, cover);
+          ==>
+          IsAcyclicSeq(g.successors, successors, cover - {n});
+          ==> { IsAcyclicElem(g.successors, successors, succ, cover - {n}); }
+          IsAcyclic(g.successors, succ, cover - {n});
+        }
+        assert WpCfg(a, g, succ, post, cover - {n})(s'') == Some(true) by {
+          WpCfgConjunctionSingle(a, g, successors, succ, post, cover - {n}, s'');
+        }
+        
+        WpSemToOpSem(a, g, succ, post, cover - {n}, s'', s');
+      }
+    }
+  }
+
+  /** TODO OpSem to WP */
 
   /** Lemmas */
   lemma IsAcyclicSeqLargerCover(r: SuccessorRel, ns: seq<BlockId>, cover1: set<BlockId>, cover2: set<BlockId>)
