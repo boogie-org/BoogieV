@@ -59,14 +59,14 @@ ensures  WpShallow(a, EliminateLoops(c), post)(s) == WpShallow(a, c, post)(s)
       var updatedScopes := if optLabel.Some? then post.scopes[optLabel.value := post.normal] else post.scopes;
       assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
 
-      var bodyPost := WpPostShallow(post.normal, post.normal, updatedScopes);
+      var bodyPost := ResetVarsPost(a, varDecls, WpPostShallow(post.normal, post.normal, updatedScopes), s);
 
       forall s: state<A> | true 
         ensures WpShallow(a, EliminateLoops(body), bodyPost)(s) == 
                 WpShallow(a, body, bodyPost)(s)
       {
           calc {
-            WpShallow(a, EliminateLoops(body), bodyPost)(s); {EliminateLoopsCorrect2(a, body, s, bodyPost); }
+            WpShallow(a, EliminateLoops(body), bodyPost)(s); {EliminateLoopsCorrect(a, body, s, bodyPost); }
             WpShallow(a, body, bodyPost)(s);
           }
       }
