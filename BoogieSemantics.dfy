@@ -47,8 +47,6 @@ module BoogieSemantics {
     v.Some? && TypeOfVal(a, v.value) == t
   }
 
-  datatype WpPost = WpPost(normal: Expr, currentScope: Expr, scopes: map<lbl_name, Expr>)
-
   function ForallVarDecls(varDecls: seq<(var_name, Ty)>, e: Expr) : Expr
   {
     if |varDecls| == 0 then e 
@@ -117,57 +115,6 @@ module BoogieSemantics {
       }
   }
 
-  function WpDeep(c: Cmd, post: WpPost): Expr
-    requires LabelsWellDefAux(c, post.scopes.Keys)
-    decreases NumScopesAndLoops(c), c
-  {
-    match c 
-    case SimpleCmd(Skip) => post.normal
-    case SimpleCmd(Assert(e)) => BinOp(e, And, post.normal)
-    case SimpleCmd(Assume(e)) => BinOp(e, Imp, post.normal)
-    case SimpleCmd(Assign(x, _, e)) => SubstExpr(post.normal, x, e)
-    case SimpleCmd(Havoc(vdecls)) => ForallVarDecls(vdecls, post.normal)
-    case Break(optLabel) => if optLabel.Some? then post.scopes[optLabel.value] else post.currentScope 
-    case Seq(c1, c2) => WpDeep(c1, WpPost(WpDeep(c2, post), post.currentScope, post.scopes)) 
-    case Scope(optLabel, varDecls, body) => 
-      var updatedScopes := 
-        if optLabel.Some? then 
-          post.scopes[optLabel.value := post.normal]
-        else post.scopes;
-      
-      assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
-      assert NumScopesAndLoops(Seq(SimpleCmd(Havoc(varDecls)), body)) == NumScopesAndLoops(body);
-      WpDeep(Seq(SimpleCmd(Havoc(varDecls)), body), WpPost(post.normal, post.normal, updatedScopes))
-    case If(condOpt, thn, els) => 
-      match condOpt {
-        case Some(cond) => 
-          BinOp(BinOp(cond, Imp, WpDeep(thn, post)), 
-                And,
-                BinOp(cond, Imp, WpDeep(els, post)))
-        case None =>
-          BinOp(WpDeep(thn, post), 
-                And,
-                WpDeep(els, post))
-      }
-    case Loop(invs, body) => 
-      var loopTargets := ModifiedVars(body);
-      var invsConj := NAryBinOp(And, ELit(Lit.TrueLit), invs);
-      /*BinOp(invsConj, And, 
-            ForallVarDecls(loopTargets, 
-              BinOp(invsConj, Imp, WpDeep(body, WpPost(invsConj, post.currentScope, post.scopes))))
-      )*/
-
-      assert LabelsWellDefAux(body, post.scopes.Keys);
-
-      var body' := [SimpleCmd(Assert(invsConj)), SimpleCmd(Havoc(loopTargets)), SimpleCmd(Assume(invsConj)), body,  SimpleCmd(Assert(invsConj)), SimpleCmd(Assume(ELit(Lit.FalseLit)))];
-
-      
-      LoopDesugaringNumScopesAndLoops(invs, body);
-      LoopDesugaringLabelsWellDef(invs, body, post.scopes.Keys);
-
-      WpDeep(SeqToCmd(body'), post)
-  }
-
   type Predicate<!A> = state<A> -> Option<bool>
   datatype WpPostShallow<!A> = WpPostShallow(normal: Predicate<A>, currentScope: Predicate<A>, scopes: map<lbl_name, Predicate<A>>)
 
@@ -191,6 +138,8 @@ module BoogieSemantics {
       s => 
         var eEval :- EvalExpr(a, e, s); 
         post(s[x := eEval])
+    case SeqSimple(sc1, sc2) =>
+      s => WpShallowSimpleCmd(a, sc1, WpShallowSimpleCmd(a, sc2, post))(s)
   }
 
   function WpShallowSimpleCmdSeq<A(!new)>(a: absval_interp<A>, simpleCmds: seq<SimpleCmd>, post: Predicate<A>) : Predicate<A>
@@ -278,6 +227,22 @@ module BoogieSemantics {
       }
   }
 
+  lemma WpShallowSimpleCmdPointwise<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, P: Predicate<A>, Q: Predicate<A>, s: state<A>)
+  requires (forall s' :: P(s') == Q(s'))
+  ensures WpShallowSimpleCmd(a, sc, P)(s) == WpShallowSimpleCmd(a, sc, Q)(s)
+  {
+    match sc
+    case Havoc(varDecls) =>
+      ForallVarDeclsPointwise(a, varDecls, P, Q, s);
+    case SeqSimple(sc1, sc2) =>
+      forall s':state<A> | true
+        ensures WpShallowSimpleCmd(a, sc2, P)(s') == WpShallowSimpleCmd(a, sc2, Q)(s')
+      {
+        WpShallowSimpleCmdPointwise(a, sc2, P ,Q, s');
+      }
+    case _ => 
+  }
+
   lemma WpShallowPointwise<A(!new)>(a: absval_interp<A>, c: Cmd, P: WpPostShallow, Q: WpPostShallow, s: state<A>)
   requires LabelsWellDefAux(c, P.scopes.Keys) && LabelsWellDefAux(c, Q.scopes.Keys)
   requires (forall s' :: P.normal(s') == Q.normal(s'))
@@ -287,6 +252,7 @@ module BoogieSemantics {
   decreases NumScopesAndLoops(c), c
   {
       match c
+      case SimpleCmd(sc) => WpShallowSimpleCmdPointwise(a, sc, P.normal, Q. normal, s);
       case Seq(c1, c2) =>
         forall s':state<A> | true
             ensures WpShallow(a, c2, P)(s') == WpShallow(a, c2, Q)(s')
@@ -326,9 +292,11 @@ module BoogieSemantics {
         LoopDesugaringNumScopesAndLoops(invs, body); //needed for termination
         assert NumScopesAndLoops(body) == NumScopesAndLoops(body'); //needed for termination
         //WpShallowPointwise(a, body', P, Q, s); //this call is inferred by Dafny, which surprises me
+      case _ =>
+      /*
       case SimpleCmd(Havoc(varDecls)) =>
         ForallVarDeclsPointwise(a, varDecls, P.normal, Q.normal, s);
-      case _ => 
+      case _ => */
   }
 
   function ImpliesOpt(a: Option<bool>, b: Option<bool>):bool
@@ -394,6 +362,8 @@ module BoogieSemantics {
           && |vs| == |vDecls|
           && (forall i :: 0 <= i < |vDecls| ==> TypeOfVal(a, vs[i]) == vDecls[i].1)
           && y' == NormalState(SequentialMapUpdate(s, varNames, vs))
+      case SeqSimple(sc1, sc2) =>
+        exists y'' :: SimpleCmdOpSem(a, sc1, y, y'') && SimpleCmdOpSem(a, sc2, y'', y')
       }
     case MagicState => y == y'
     case FailureState => y == y'

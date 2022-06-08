@@ -49,6 +49,7 @@ module AstToCfg {
                     && nextVersion == nextVersion' 
                     && precedingBlock.0 == exitBlockOpt.value.0 
                  else 
+                  && res.0.value.blocks.Keys == res.0.value.successors.Keys
                   && nextVersion < nextVersion' 
                   && (nextVersion <= exitBlockOpt.value.0 < nextVersion')
                   && res.0.value.successors.Keys <= CoveringSet(nextVersion, nextVersion', {precedingBlock.0}, {exitBlockOpt.value.0})
@@ -121,7 +122,7 @@ module AstToCfg {
         var (thnExitId, thenExitBlock) := optExit1.value;
         var (elsExitId, elseExitBlock) := optExit2.value;
 
-        var blocks := blocksBeforeJoin[thnExitId := thenExitBlock];
+        var blocks := blocksBeforeJoin[thnExitId := thenExitBlock][elsExitId := elseExitBlock];
         var successors := successorsBeforeJoin[thnExitId := [joinId]][elsExitId := [joinId]];
         var cfg := Cfg(entryBlockId, blocks, successors);
 

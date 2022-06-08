@@ -7,7 +7,7 @@ module BoogieCfg {
   import opened BoogieSemantics
   import opened Wrappers
 
-  type BasicBlock = seq<SimpleCmd>
+  type BasicBlock = SimpleCmd
   type BlockId = nat 
 
   datatype Cfg = Cfg(entry: BlockId, blocks: map<BlockId, BasicBlock>, successors: map<BlockId, seq<BlockId>>)
@@ -32,6 +32,11 @@ module BoogieCfg {
     decreases cover, 0
   {
     n in r.Keys ==> ( n in cover && IsAcyclicSeq(r, r[n], cover - {n}) )
+  }
+
+  function BasicBlockToCmd(block: BasicBlock) : Cmd
+  {
+    SimpleCmd(block)
   }
 
   /*=================== Wp semantics ==========================================*/
@@ -64,9 +69,9 @@ module BoogieCfg {
     else 
       var successors := g.successors[n];
       if |successors| == 0 then 
-        WpShallowSimpleCmdSeq(a, g.blocks[n], post)
+        WpShallowSimpleCmd(a, g.blocks[n], post)
       else 
-        WpShallowSimpleCmdSeq(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
+        WpShallowSimpleCmd(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
   }
 
   lemma IsAcyclicElem(r: SuccessorRel, ns: seq<BlockId>, nSucc: BlockId, cover: set<BlockId>)
@@ -102,21 +107,20 @@ module BoogieCfg {
       var successors := g.successors[n];
 
       if |successors| == 0 then
-        SimpleCmdSeqOpSem(a, blocks, s, s')
+        SimpleCmdOpSem(a, blocks, s, s')
       else
-        //DISCUSS
         assert successors[0] in successors; //required for non-emptiness constraint in next line to go through
         var succ :| succ in successors;
-        (exists s'' :: SimpleCmdSeqOpSem(a, blocks, s, s'') && CfgRed(a, g, succ, s'' , s'))
+        (exists s'' :: SimpleCmdOpSem(a, blocks, s, s'') && CfgRed(a, g, succ, s'' , s'))
     else 
       false
   }
 
 /*==========Correspondence Wp and Operational Semantics===========================*/
 
-  lemma WpSemToOpSem_SimpleCmdSeq<A(!new)>(a: absval_interp<A>, scs: seq<SimpleCmd>, post: Predicate<A>, s: state<A>, s': ExtState<A>)
-    requires WpShallowSimpleCmdSeq(a, scs, post)(s) == Some(true)
-    requires SimpleCmdSeqOpSem(a, scs, NormalState(s), s')
+  lemma WpSemToOpSem_SimpleCmd<A(!new)>(a: absval_interp<A>, scs: SimpleCmd, post: Predicate<A>, s: state<A>, s': ExtState<A>)
+    requires WpShallowSimpleCmd(a, scs, post)(s) == Some(true)
+    requires SimpleCmdOpSem(a, scs, NormalState(s), s')
     ensures s' != FailureState
     ensures forall ns' :: s' == NormalState(ns') ==> post(ns') == Some(true)
   /** TODO proof */
@@ -136,13 +140,13 @@ module BoogieCfg {
     var successors := g.successors[n];
 
     if |successors| == 0 {
-      WpSemToOpSem_SimpleCmdSeq(a, block, post, s, s');
+      WpSemToOpSem_SimpleCmd(a, block, post, s, s');
     } else {
-      assert WpShallowSimpleCmdSeq(a, block, WpCfgConjunction(a, g, successors, post, cover - {n}))(s) == Some(true);
+      assert WpShallowSimpleCmd(a, block, WpCfgConjunction(a, g, successors, post, cover - {n}))(s) == Some(true);
 
-      var succ, y :| succ in successors && SimpleCmdSeqOpSem(a, block, NormalState(s), y) && CfgRed(a, g, succ, y , s');
+      var succ, y :| succ in successors && SimpleCmdOpSem(a, block, NormalState(s), y) && CfgRed(a, g, succ, y , s');
 
-      WpSemToOpSem_SimpleCmdSeq(a, block, WpCfgConjunction(a, g, successors, post, cover - {n}), s, y);
+      WpSemToOpSem_SimpleCmd(a, block, WpCfgConjunction(a, g, successors, post, cover - {n}), s, y);
 
       match y {
         case MagicState => assume false; //TODO magic state stays magic
@@ -164,6 +168,22 @@ module BoogieCfg {
   }
 
   /** TODO OpSem to WP */
+  function CfgRedSet<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, y: ExtState<A>) : iset<ExtState<A>>
+    requires g.blocks.Keys == g.successors.Keys
+  {
+    iset y' | CfgRed(a, g, n, y, y')
+  }
+
+  lemma OpSemToWpSem<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, post: Predicate<A>, cover: set<BlockId>, s: state<A>)
+    requires IsAcyclic(g.successors, n, cover)
+    requires g.successors.Keys == g.blocks.Keys
+    requires !(FailureState in CfgRedSet(a, g, n, NormalState(s)))
+    requires CfgWf(g) && n in g.blocks.Keys
+    ensures var wpRes := WpCfg(a, g, n, s' => Some(NormalState(s') in CfgRedSet(a, g, n, NormalState(s))), cover)(s);
+            wpRes == Some(true) || wpRes == None
+    decreases cover
+  /** TODO: proof */
+
 
   /** Lemmas */
   lemma IsAcyclicSeqLargerCover(r: SuccessorRel, ns: seq<BlockId>, cover1: set<BlockId>, cover2: set<BlockId>)

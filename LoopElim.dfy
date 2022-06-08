@@ -32,7 +32,7 @@ function EliminateLoops(c: Cmd) : Cmd {
 
 /** Shallow WP */
 
-lemma EliminateLoopsCorrect2<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPostShallow)
+lemma EliminateLoopsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPostShallow)
 requires LabelsWellDefAux(c, post.scopes.Keys) && LabelsWellDefAux(EliminateLoops(c), post.scopes.Keys)
 ensures  WpShallow(a, EliminateLoops(c), post)(s) == WpShallow(a, c, post)(s)
 {
@@ -44,7 +44,7 @@ ensures  WpShallow(a, EliminateLoops(c), post)(s) == WpShallow(a, c, post)(s)
         forall s':state<A> | true
             ensures c2ElimPost(s') == c2Post(s')
         {
-            EliminateLoopsCorrect2(a, c2, s', post);
+            EliminateLoopsCorrect(a, c2, s', post);
         }
 
         calc {
@@ -76,42 +76,4 @@ ensures  WpShallow(a, EliminateLoops(c), post)(s) == WpShallow(a, c, post)(s)
         //trivial because of how the Wp is defined
 
     case _ => //trivial (EliminateLoops is the identity function here)
-}
-
-/** Deep WP */
-
-lemma EliminateLoopsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPost)
-requires LabelsWellDefAux(c, post.scopes.Keys) && LabelsWellDefAux(EliminateLoops(c), post.scopes.Keys)
-ensures EvalExpr(a, WpDeep(EliminateLoops(c), post), s) == EvalExpr(a, WpDeep(c, post), s)
-decreases c
-{
-    match c
-    case Seq(c1, c2) => 
-      var c2Post := WpDeep(c2, post);
-      var c2ElimPost := WpDeep(EliminateLoops(c2), post);
-
-      assert (forall s' :: EvalExpr(a, c2Post, s') == EvalExpr(a, c2ElimPost, s'));
-
-      calc {
-          WpDeep(EliminateLoops(c), post); 
-          WpDeep(Seq(EliminateLoops(c1), EliminateLoops(c2)), post);
-          WpDeep(EliminateLoops(c1), WpPost(c2ElimPost, post.currentScope, post.scopes)); 
-      }
-
-      calc {
-          EvalExpr(a, WpDeep(EliminateLoops(c1), WpPost(c2ElimPost, post.currentScope, post.scopes)), s);
-            { 
-                assert (forall s' :: EvalExpr(a, c2Post, s') == EvalExpr(a, c2ElimPost, s'));
-                //TODO
-                assume false;
-            }
-          EvalExpr(a, WpDeep(EliminateLoops(c1), WpPost(c2Post, post.currentScope, post.scopes)), s);
-          //I.H.
-          EvalExpr(a, WpDeep(c1, WpPost(c2Post, post.currentScope, post.scopes)), s);
-          EvalExpr(a, WpDeep(Seq(c1, c2), post), s);
-      }
-    case If(optCond, c1, c2) => assume false;
-    case Loop(invs, body) => assume false;
-    case Scope(optLabel, varDecls, body) => assume false;
-    case _ => //trivial
 }
