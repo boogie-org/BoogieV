@@ -1,10 +1,12 @@
 include "BoogieLang.dfy"
 include "BoogieSemantics.dfy"
+include "Util.dfy"
 
 module NormalizeAst {
   import opened BoogieLang
   import opened BoogieSemantics
   import opened Wrappers
+  import Util
 
   function SeqCmdOpt(c1Opt: Option<Cmd>, c2Opt: Option<Cmd>) : Option<Cmd>
   {
@@ -16,7 +18,7 @@ module NormalizeAst {
       c2Opt
   }
 
-  function SeqSimpleCmdAndCmdOpt(c1Opt: Option<SimpleCmd>, c2: Cmd) : Cmd
+  function SeqSimpleOptCmd(c1Opt: Option<SimpleCmd>, c2: Cmd) : Cmd
   {
     if c1Opt.Some? then
       Seq(SimpleCmd(c1Opt.value), c2)
@@ -24,7 +26,7 @@ module NormalizeAst {
       c2
   }
 
-  function SeqCmdAndSimpleCmdOpt(c1Opt: Option<Cmd>, c2Opt: Option<SimpleCmd>) : Cmd
+  function SeqCmdSimpleOpt(c1Opt: Option<Cmd>, c2Opt: Option<SimpleCmd>) : Cmd
     requires c1Opt.Some? || c2Opt.Some?
   {
     if c1Opt.Some? && c2Opt.Some? then
@@ -45,7 +47,7 @@ module NormalizeAst {
     case SimpleCmd(sc) => 
       if precedingSimple.Some? then (None, Some(SeqSimple(precedingSimple.value, sc))) else (None, Some(sc))
     case Break(_) => 
-      (Some(SeqSimpleCmdAndCmdOpt(precedingSimple, c)), None)
+      (Some(SeqSimpleOptCmd(precedingSimple, c)), None)
     case Seq(c1, c2) => 
       var (c1Opt', scExitOpt1) := NormalizeAst(c1, precedingSimple);
       var (c2Opt', scExitOpt2) := NormalizeAst(c2, scExitOpt1);
@@ -55,31 +57,31 @@ module NormalizeAst {
       (prefixCmd, scExitOpt2)
     case Scope(optLbl, varDecls, body) =>
       var (body', scExitOpt) := NormalizeAst(body, None);
-      var bodyNew := SeqCmdAndSimpleCmdOpt(body', scExitOpt);
+      var bodyNew := SeqCmdSimpleOpt(body', scExitOpt);
 
-      (Some(SeqSimpleCmdAndCmdOpt(precedingSimple, Scope(optLbl, varDecls, bodyNew))), None)
+      (Some(SeqSimpleOptCmd(precedingSimple, Scope(optLbl, varDecls, bodyNew))), None)
     case If(optCond, thn, els) =>
       var (thnOpt', scExitOpt1) := NormalizeAst(thn, None);
       var (elsOpt', scExitOpt2) := NormalizeAst(els, None);
 
-      var thn' := SeqCmdAndSimpleCmdOpt(thnOpt', scExitOpt1);
-      var els' := SeqCmdAndSimpleCmdOpt(elsOpt', scExitOpt2);
+      var thn' := SeqCmdSimpleOpt(thnOpt', scExitOpt1);
+      var els' := SeqCmdSimpleOpt(elsOpt', scExitOpt2);
 
-      (Some(SeqSimpleCmdAndCmdOpt(precedingSimple, If(optCond, thn', els'))), None)
+      (Some(SeqSimpleOptCmd(precedingSimple, If(optCond, thn', els'))), None)
     case Loop(invs, body) =>
       var (bodyOpt', scExitOpt) := NormalizeAst(body, None);
-      var body' := SeqCmdAndSimpleCmdOpt(bodyOpt', scExitOpt);
+      var body' := SeqCmdSimpleOpt(bodyOpt', scExitOpt);
 
-      (Some(SeqSimpleCmdAndCmdOpt(precedingSimple, Loop(invs, body') )), None)
+      (Some(SeqSimpleOptCmd(precedingSimple, Loop(invs, body') )), None)
   }
 
-  lemma TransformAstCorrectness<A(!new)>(a: absval_interp<A>, c: Cmd, precedingSimple: Option<SimpleCmd>, post: WpPostShallow<A>)
-    requires LabelsWellDefAux(SeqSimpleCmdAndCmdOpt(precedingSimple, c), post.scopes.Keys)
+  lemma TransformAstCorrectness<A(!new)>(a: absval_interp<A>, c: Cmd, precedingSimple: Option<SimpleCmd>, post: WpPostShallow<A>, s: state<A>)
+    requires LabelsWellDefAux(SeqSimpleOptCmd(precedingSimple, c), post.scopes.Keys)
     requires var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
-             LabelsWellDefAux(SeqCmdAndSimpleCmdOpt(cOpt', scExitOpt), post.scopes.Keys)
+             LabelsWellDefAux(SeqCmdSimpleOpt(cOpt', scExitOpt), post.scopes.Keys)
     ensures 
       var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
-      forall s :: WpShallow(a, SeqSimpleCmdAndCmdOpt(precedingSimple, c), post)(s) == WpShallow(a, SeqCmdAndSimpleCmdOpt(cOpt', scExitOpt), post)(s)
+      WpShallow(a, SeqSimpleOptCmd(precedingSimple, c), post)(s) == WpShallow(a, SeqCmdSimpleOpt(cOpt', scExitOpt), post)(s)
   {
     var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
 
@@ -87,66 +89,93 @@ module NormalizeAst {
     case SimpleCmd(sc) =>
     case Break(_) =>
     case Seq(c1, c2) => 
-      /*
-      var prefixCmd := SeqCmdOpt(c1Opt', c2Opt');
-      
-      (prefixCmd, scExitOpt2)
-      */
-
-
-      /* Case where 
-          precedingSimple, cOpt1', scExitOpt1, cOpt2', scExitOpt2 are Some(precedingSimple), Some(c1'), Some(scExit1), c2', Some(scExit2) respectively
-        Wp(Seq(precedingSimple, c1), post)(s) == (IH)
-        Wp(Seq(c1', scExit1), post)(s) == (helper lemma)
-        Wp(c1', WpShallow(a, scExit1, post))(s)
-
-        Wp(Seq(scExit1, c2), post)(s) == (IH) 
-        Wp(Seq(c2', scExit2), post)(s) == (helper lemma)
-        Wp(c2', WpShallow(a, scExit2, post))(s) == (helper lemma)
-
-        Wp(Seq(precedingSimple, Seq(c1,c2)), post)(s) == (helper lemma)
-        Wp(Seq(Seq(precedingSimple, c1), c2), post)(s) == (def. Wp)
-        Wp(Seq(precedingSimple, c1), Wp(c2, post))(s) == (IH --> post instantiated with Wp(c2, post))
-        Wp(Seq(c1', scExit1), Wp(c2, post))(s) == (helper lemma)
-        Wp(c1', Wp(Seq(scExit1, c2), post))(s) == (IH. + Wp pointwise lemma)
-        Wp(c1', Wp(Seq(c2', scExit2), post))(s) ==
-        Wp(Seq(Seq(c1',c2'), scExit2), post)(s)
-      */
-
       var (c1Opt', scExitOpt1) := NormalizeAst(c1, precedingSimple);
       var (c2Opt', scExitOpt2) := NormalizeAst(c2, scExitOpt1);
+      var post2 := WpShallow(a, c2, post);
 
-      forall s | true 
-        ensures WpShallow(a, SeqSimpleCmdAndCmdOpt(precedingSimple, c), post)(s) == WpShallow(a, SeqCmdAndSimpleCmdOpt(cOpt', scExitOpt), post)(s)
-      {
-        if precedingSimple.Some?  && c1Opt'.Some? && scExitOpt1.Some? && c2Opt'.Some? && scExitOpt2.Some? {
-          var preceding := precedingSimple.value;
-          var (c1', scExit1, c2', scExit2) := (c1Opt'.value, scExitOpt1.value, c2Opt'.value, scExitOpt2.value);
-          var post2 := WpShallow(a, c2, post);
+      calc {
+        WpShallow(a, SeqSimpleOptCmd(precedingSimple, Seq(c1,c2)), post)(s); 
+        WpShallow(a, Seq(SeqSimpleOptCmd(precedingSimple, c1), c2), post)(s);
+
+        WpShallow(a, SeqSimpleOptCmd(precedingSimple, c1), WpPostShallow(post2, post.currentScope, post.scopes))(s); //IH1
+          { TransformAstCorrectness(a, c1, precedingSimple, WpPostShallow(post2, post.currentScope, post.scopes), s); }
+        WpShallow(a, SeqCmdSimpleOpt(c1Opt', scExitOpt1), WpPostShallow(post2, post.currentScope, post.scopes))(s);
+      }
+
+      if c1Opt'.Some? {
+        var p := WpPostShallow(WpShallow(a, SeqSimpleOptCmd(scExitOpt1, c2), post), post.currentScope, post.scopes);
+        var q := WpPostShallow(WpShallow(a, SeqCmdSimpleOpt(c2Opt', scExitOpt2), post), post.currentScope, post.scopes);
+
+        calc {
+          WpShallow(a, SeqCmdSimpleOpt(c1Opt', scExitOpt1), WpPostShallow(post2, post.currentScope, post.scopes))(s);
+          WpShallow(a, c1Opt'.value, p)(s); 
+            { 
+              forall s' | true 
+              ensures WpShallow(a, SeqSimpleOptCmd(scExitOpt1, c2), post)(s') == WpShallow(a, SeqCmdSimpleOpt(c2Opt', scExitOpt2), post)(s')
+              {
+                TransformAstCorrectness(a, c2, scExitOpt1, post, s');
+              }
+
+              WpShallowPointwise(a, c1Opt'.value, p, q, s);
+            }//IH2 + WP pointwise
+          WpShallow(a, c1Opt'.value, q)(s);
+          WpShallow(a, Seq(c1Opt'.value, SeqCmdSimpleOpt(c2Opt', scExitOpt2)), post)(s);
+          WpShallow(a, SeqCmdSimpleOpt(SeqCmdOpt(c1Opt', c2Opt'), scExitOpt2), post)(s);
+        }
+      } else {
+        calc {
+          WpShallow(a, SeqCmdSimpleOpt(c1Opt', scExitOpt1), WpPostShallow(post2, post.currentScope, post.scopes))(s);
+          WpShallow(a, SimpleCmd(scExitOpt1.value), WpPostShallow(post2, post.currentScope, post.scopes))(s);
+          WpShallow(a, SeqSimpleOptCmd(scExitOpt1, c2), post)(s); //IH2
+            { TransformAstCorrectness(a, c2, scExitOpt1, post, s); }
+          WpShallow(a, SeqCmdSimpleOpt(c2Opt', scExitOpt2), post)(s);
+          WpShallow(a, SeqCmdSimpleOpt(SeqCmdOpt(c1Opt', c2Opt'), scExitOpt2), post)(s);
+        }
+      }
+    case If(condOpt, thn, els) =>
+      /*
+      var (thnOpt', scExitOpt1) := NormalizeAst(thn, None);
+      var (elsOpt', scExitOpt2) := NormalizeAst(els, None);
+      var thn' := SeqCmdSimpleOpt(thnOpt', scExitOpt1);
+      var els' := SeqCmdSimpleOpt(elsOpt', scExitOpt2);
+
+      (Some(SeqSimpleOptCmd(precedingSimple, If(optCond, thn', els'))), None)
+      */
+      var (thnOpt', scExitOpt1) := NormalizeAst(thn, None);
+      var (elsOpt', scExitOpt2) := NormalizeAst(els, None);
+
+      if condOpt.Some? {
+        assume false;
+      } else {
+        // WpShallow(a, SeqSimpleOptCmd(precedingSimple, If(condOpt, thn, els)), post)(s);
+        calc {
+          WpShallow(a, If(condOpt, thn, els), post)(s);
+          WpShallow(a, If(condOpt, SeqSimpleOptCmd(None, thn), SeqSimpleOptCmd(None, els)), post)(s);
+          Util.AndOpt(WpShallow(a, SeqSimpleOptCmd(None, thn), post)(s), 
+                      WpShallow(a, SeqSimpleOptCmd(None, els), post)(s));
+            { assume false;
+              TransformAstCorrectness(a, thn, scExitOpt1, post, s);
+              TransformAstCorrectness(a, els, scExitOpt2, post, s); }
+          Util.AndOpt(WpShallow(a, SeqCmdSimpleOpt(thnOpt', scExitOpt1), post)(s),
+                      WpShallow(a, SeqCmdSimpleOpt(elsOpt', scExitOpt2), post)(s));
+          WpShallow(a, If(condOpt, SeqCmdSimpleOpt(thnOpt', scExitOpt1), SeqCmdSimpleOpt(elsOpt', scExitOpt2)), post)(s);
+        }
+
+        if precedingSimple.Some? {
           calc {
-            WpShallow(a, Seq(SimpleCmd(preceding), Seq(c1,c2)), post)(s); { assume false; }
-            WpShallow(a, Seq(Seq(SimpleCmd(preceding), c1), c2), post)(s);
-            WpShallow(a, Seq(SimpleCmd(preceding), c1), WpPostShallow(post2, post.currentScope, post.scopes))(s); //IH1
-            WpShallow(a, Seq(c1', SimpleCmd(scExit1)), WpPostShallow(post2, post.currentScope, post.scopes))(s);
-            WpShallow(a, c1', WpPostShallow(WpShallow(a, Seq(SimpleCmd(scExit1), c2), post), post.currentScope, post.scopes))(s); //IH2
-            WpShallow(a, c1', WpPostShallow(WpShallow(a, Seq(c2', SimpleCmd(scExit2)), post), post.currentScope, post.scopes))(s);
-            WpShallow(a, Seq(Seq(c1',c2'), SimpleCmd(scExit2)), post)(s);
+            WpShallow(a, SeqSimpleOptCmd(precedingSimple, If(condOpt, thn, els)), post)(s);
+            WpShallow(a, precedingSimple.value, WpShallowPost(WpShallow(a, If(condOpt, thn, els), post)))
           }
         }
       }
 
       /*
-      forall s | true 
-        ensures WpShallow(a, SeqSimpleCmdAndCmdOpt(precedingSimple, c), post)(s) == WpShallow(a, SeqCmdAndSimpleCmdOpt(cOpt', scExitOpt), post)(s)
-      {
-        calc {
-          WpShallow(a, SeqSimpleCmdAndCmdOpt(precedingSimple, c), post)(s);
-          WpShallow()
-        }
+      calc {
+        WpShallow(a, If(optCond, thn, els), post)(s);
+
+
       }
       */
-    case If(condOpt, thn, els) =>
-
     case _ => assume false;
   }
 
