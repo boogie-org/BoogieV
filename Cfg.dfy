@@ -48,7 +48,7 @@ module BoogieCfg {
     ns: seq<BlockId>, 
     post: Predicate<A>, 
     cover: set<BlockId>) : Predicate<A>
-    requires g.blocks.Keys == g.successors.Keys
+    requires g.successors.Keys <= g.blocks.Keys //not being in the domain of the successor relation is the same as not having any successors
     requires IsAcyclicSeq(g.successors, ns, cover)
     decreases cover, 1, ns
   { s =>
@@ -60,25 +60,59 @@ module BoogieCfg {
   }
 
   function WpCfg<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, post: Predicate<A>, cover: set<BlockId>) : Predicate<A>
-    requires g.blocks.Keys == g.successors.Keys
+    requires g.successors.Keys <= g.blocks.Keys //not being in the domain of the successor relation is the same as not having any successors
     requires IsAcyclic(g.successors, n, cover)
     decreases cover, 0
   {
     if !(n in g.blocks.Keys) then
       post
     else 
-      var successors := g.successors[n];
+      var successors := if n in g.successors.Keys then g.successors[n] else [];
       if |successors| == 0 then 
         WpShallowSimpleCmd(a, g.blocks[n], post)
       else 
         WpShallowSimpleCmd(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
   }
 
-  lemma IsAcyclicElem(r: SuccessorRel, ns: seq<BlockId>, nSucc: BlockId, cover: set<BlockId>)
-    requires IsAcyclicSeq(r, ns, cover)
-    requires nSucc in ns
-    ensures IsAcyclic(r, nSucc, cover)
-  /** TODO proof */
+
+  lemma WpCfgConjunctionPointwise<A(!new)>(a: absval_interp<A>, g: Cfg, ns: seq<BlockId>, post1: Predicate<A>, post2: Predicate<A>, cover: set<BlockId>, s: state<A>) 
+    requires g.successors.Keys <= g.blocks.Keys //not being in the domain of the successor relation is the same as not having any successors
+    requires IsAcyclicSeq(g.successors, ns, cover)
+    requires (forall s :: post1(s) == post2(s))
+    ensures WpCfgConjunction(a, g, ns, post1, cover)(s) == WpCfgConjunction(a, g, ns, post2, cover)(s)
+    decreases cover, 1, ns
+  {
+    if |ns| > 0 {
+      WpCfgPointwise(a, g, ns[0], post1, post2, cover, s);
+      WpCfgConjunctionPointwise(a, g, ns[1..], post1, post2, cover, s);
+    }
+  }
+
+  lemma WpCfgPointwise<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, post1: Predicate<A>, post2: Predicate<A>, cover: set<BlockId>, s: state<A>)
+    requires g.successors.Keys <= g.blocks.Keys //not being in the domain of the successor relation is the same as not having any successors
+    requires IsAcyclic(g.successors, n, cover)
+    requires (forall s :: post1(s) == post2(s))
+    ensures WpCfg(a, g, n, post1, cover)(s) == WpCfg(a, g, n, post2, cover)(s)
+    decreases cover, 0
+  {
+    if n in g.blocks.Keys {
+      var block := g.blocks[n];
+      var successors := if n in g.successors.Keys then g.successors[n] else [];
+      if |successors| == 0  {
+        WpShallowSimpleCmdPointwise(a, block, post1, post2, s);
+      } else {
+        var successorPost1 := WpCfgConjunction(a, g, successors, post1, cover - {n});
+        var successorPost2 := WpCfgConjunction(a, g, successors, post2, cover - {n});
+        
+        forall s' | true
+          ensures successorPost1(s') == successorPost2(s')
+        {
+          WpCfgConjunctionPointwise(a, g, successors, post1, post2, cover - {n}, s');
+        }
+        WpShallowSimpleCmdPointwise(a, block, successorPost1, successorPost2, s);
+      }
+    }
+  }
 
   lemma WpCfgConjunctionSingle<A(!new)>(
     a: absval_interp<A>, 
@@ -184,8 +218,14 @@ module BoogieCfg {
     decreases cover
   /** TODO: proof */
 
+  /*======================Acyclicity lemmas ===================================*/
 
-  /** Lemmas */
+  lemma IsAcyclicElem(r: SuccessorRel, ns: seq<BlockId>, nSucc: BlockId, cover: set<BlockId>)
+    requires IsAcyclicSeq(r, ns, cover)
+    requires nSucc in ns
+    ensures IsAcyclic(r, nSucc, cover)
+  { }
+
   lemma IsAcyclicSeqLargerCover(r: SuccessorRel, ns: seq<BlockId>, cover1: set<BlockId>, cover2: set<BlockId>)
     requires cover1 <= cover2 && IsAcyclicSeq(r, ns, cover1)
     ensures IsAcyclicSeq(r, ns, cover2)
@@ -285,6 +325,99 @@ module BoogieCfg {
       IsAcyclicLargerCover(r1+r2, n2Entry, cover2, cover1 + cover2);
     }
   }
+
+  lemma WpCfgConjunctionMerge<A(!new)>(
+    a: absval_interp<A>, 
+    g1: Cfg,
+    g2: Cfg,
+    exit1: BlockId, 
+    post: Predicate<A>, 
+    cover1: set<BlockId>, 
+    cover2: set<BlockId>, 
+    s: state<A>)
+
+  lemma WpCfgMerge<A(!new)>(
+    a: absval_interp<A>, 
+    g1: Cfg,
+    g2: Cfg,
+    g1Entry: BlockId,
+    exit1: BlockId, 
+    post: Predicate<A>, 
+    cover1: set<BlockId>, 
+    cover2: set<BlockId>, 
+    s: state<A>)
+    requires g1.successors.Keys <= g1.blocks.Keys
+    requires g2.successors.Keys <= g2.blocks.Keys
+    requires exit1 in g1.blocks.Keys
+    requires exit1 !in g1.successors.Keys
+    requires g1.blocks.Keys !! g2.blocks.Keys
+    requires IsAcyclic(g1.successors, g1Entry, cover1)
+    requires IsAcyclic(g2.successors, g2.entry, cover2)
+    requires IsAcyclic(g1.successors[exit1 := [g2.entry]] + g2.successors, g1Entry, cover1+cover2+{exit1})
+
+    requires !(g2.entry in g1.successors.Keys)
+
+    // successors in g1.successors are either g2.entry or blocks recorded in g1.successors
+    requires 
+      forall n1 :: n1 in g1.successors.Keys ==>   
+        (forall i :: 0 <= i < |g1.successors[n1]| ==> (g1.successors[n1][i] in g1.successors.Keys || 
+                                                         g1.successors[n1][i] == exit1))
+
+    requires g1Entry in g1.blocks.Keys
+
+    // successors in g2.successors are not recorded in g1.successors
+    requires
+      forall n2 :: n2 in g2.successors.Keys ==>   
+        (forall i :: 0 <= i < |g2.successors[n2]| ==> !(g2.successors[n2][i] in g1.successors.Keys))
+    ensures 
+      var successors' := (g1.successors[exit1 := [g2.entry]] + g2.successors);
+      var mergedCfg := Cfg(g1Entry, g1.blocks + g2.blocks, successors');
+      WpCfg(a, g1, g1Entry, WpCfg(a, g2, g2.entry, post, cover2), cover1)(s) ==
+      WpCfg(a, mergedCfg, g1Entry, post, cover1+cover2+{exit1})(s)
+    /*{
+      assert g1Entry in g1.blocks.Keys;
+      assert g1.successors.Keys <= g1.blocks.Keys;
+
+      var block := g1.blocks[g1Entry];
+      var successors := if g1Entry in g1.successors.Keys then g1.successors[g1Entry] else [];
+
+      var successors' := (g1.successors + g2.successors)[exit1 := [g2.entry]];
+      var mergedCfg := Cfg(g1Entry, g1.blocks + g2.blocks, successors');
+      assume IsAcyclic(mergedCfg.successors, g1Entry, cover1+cover2);
+
+      if |successors| == 0 {
+        assert g1Entry == exit1;
+        calc {
+          WpCfg(a, g1, g1Entry, WpCfg(a, g2, g2.entry, post, cover2), cover1)(s);
+          WpShallowSimpleCmd(a, block, WpCfg(a, g2, g2.entry, post, cover2))(s);
+          WpCfg(a, mergedCfg, g1Entry, WpCfg(a, mergedCfg, g2.entry, post, cover2), cover1)(s);
+          WpCfg(a, mergedCfg, g1Entry, post, cover1)(s);
+        }
+      } else {
+        assume false;  
+      }
+    }*/
+
+
+  lemma WpCfgExtend<A(!new)>(
+    a: absval_interp<A>, 
+    g1: Cfg,
+    g2: Cfg,
+    exit1: BlockId, 
+    post: Predicate<A>, 
+    cover1: set<BlockId>, 
+    cover2: set<BlockId>) 
+    requires g1.successors.Keys <= g1.blocks.Keys
+    requires g2.successors.Keys <= g2.blocks.Keys
+    requires IsAcyclic(g2.successors, g2.entry, cover2)
+    requires exit1 in g1.blocks.Keys
+    ensures 
+      var successors' := (g1.successors + g2.successors)[exit1 := [g2.entry]];
+      var mergedCfg := Cfg(g1.entry, g1.blocks + g2.blocks, successors');
+      assume IsAcyclic(mergedCfg.successors, g2.entry, cover1+cover2);
+
+      WpCfg(a, g2, g2.entry, post, cover2) ==
+      WpCfg(a, mergedCfg, g2.entry, post, cover1+cover2)
 
   lemma IsAcyclicExtendSeq(r1: SuccessorRel, r2: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
     requires IsAcyclicSeq(r2, ns, cover)

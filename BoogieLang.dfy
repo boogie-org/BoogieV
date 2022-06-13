@@ -182,15 +182,10 @@ module BoogieLang {
     | SimpleCmd(SimpleCmd)
     | Break(Option<lbl_name>)
     | Seq(Cmd, Cmd)
-
-    /* scope name, scoped variable declarations and scope body */
-    | Scope(Option<lbl_name>, seq<(var_name,Ty)>, Cmd)
-    
-    //invariants and loop body
-    | Loop(seq<Expr>, Cmd) 
-
+    | Scope(labelName: Option<lbl_name>, varDecls: seq<(var_name,Ty)>, body: Cmd)
+    | Loop(invariants: seq<Expr>, body: Cmd) 
     //cond = None represents a non-deterministic if-statement (if(*) {...} else {...})
-    | If(Option<Expr>, Cmd, Cmd)
+    | If(Option<Expr>, thn: Cmd, els: Cmd)
   
   /*
     | ProcCall(proc_name, seq<Expr>, seq<var_name>)

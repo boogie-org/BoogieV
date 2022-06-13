@@ -44,6 +44,8 @@ module AstToCfg {
                 && cfg.successors.Keys <= CoveringSet2(nextVersion, nextVersion', {exit})
                 && cfg.entry in cfg.blocks.Keys
                 && exit in cfg.blocks.Keys
+                   //exit block is the only sink block (note that exit block is not in successors.Keys)
+                && (forall n :: n in cfg.successors.Keys ==> cfg.successors[n] != []) 
   {
     match c
     case SimpleCmd(simpleC) =>
@@ -124,7 +126,7 @@ module AstToCfg {
     (set x : nat | oldVersion <= x < newVersion) - exclude
   }
 
-  lemma AstToCfgAcyclic(
+  lemma {:verify false} AstToCfgAcyclic(
     c: Cmd, 
     nextVersion: BlockId)
     requires NoBreaksScopesLoops(c)

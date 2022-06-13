@@ -155,7 +155,6 @@ module NormalizeAst {
         assert forall s' :: WpShallow(a, body, updatedPost(s'))(s') == WpShallow(a, bodyNew, updatedPost(s'))(s');
         ForallVarDeclsPointwise(a, varDecls,  WpShallow(a, body, updatedPost(s')), WpShallow(a, bodyNew, updatedPost(s')), s');
       }
-      //assume false;
 
       var c' := SeqSimpleOptCmd(precedingSimple, Scope(optLabel, varDecls, bodyNew));
 
