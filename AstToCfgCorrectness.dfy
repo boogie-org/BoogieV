@@ -30,14 +30,14 @@ module AstToCfgCorrectness
     post: WpPostShallow<A>,
     s: state<A>)
     requires NoBreaksScopesLoops(c)
+    requires LabelsWellDefAux(c, post.scopes.Keys)
     ensures 
       var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
       var exit := exitOpt.value;
       var cover' := CoveringSet2(nextVersion, nextVersion', {exitOpt.value});
 
-      assume LabelsWellDefAux(c, post.scopes.Keys); 
-      assume IsAcyclic(cfg.successors, cfg.entry, CoveringSet2(nextVersion, nextVersion', {exitOpt.value}));
-      WpShallow(a, c, post)(s) == WpCfg(a, cfg, cfg.entry, post.normal, cover')(s)
+      IsAcyclic(cfg.successors, cfg.entry, CoveringSet2(nextVersion, nextVersion', {exitOpt.value})) ==> 
+        WpShallow(a, c, post)(s) == WpCfg(a, cfg, cfg.entry, post.normal, cover')(s);
     {
       match c {
         case SimpleCmd(sc) => 
@@ -61,59 +61,68 @@ module AstToCfgCorrectness
 
           var cfg' := Cfg(cfg1.entry, cfg1.blocks + cfg2.blocks, successors);
 
+          /*
           AstToCfgAcyclicTemp(c1, nextVersion);
           AstToCfgAcyclicTemp(c2, nextVersion1);
-
-          assume LabelsWellDefAux(c, post.scopes.Keys); 
 
           AstToCfgAcyclicTemp(c1, nextVersion);
           AstToCfgAcyclicTemp(c2, nextVersion1);
           AstToCfgAcyclicTemp(c, nextVersion);
-          
-          calc {
-            WpShallow(a, c, post)(s);
-            WpShallow(a, Seq(c1,c2), post)(s); //normal definition
-            WpShallow(a, c1, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes))(s); //IH
-            WpCfg(a, cfg1, cfg1.entry, WpShallow(a, c2, post), cover1)(s); //IH + pointwise
-            {
-              forall s' | true
-              ensures WpShallow(a, c2, post)(s') == WpCfg(a, cfg2, cfg2.entry, post.normal, cover2)(s')
-              { 
-                AstToCfgSemanticsPreservation(a, c2, nextVersion1, post, s');
-              }
-              WpCfgPointwise(a, cfg1, cfg1.entry, WpShallow(a, c2, post), WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1, s);
-            }
-            WpCfg(a, cfg1, cfg1.entry, WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1)(s); 
-              { 
-                assert cfg1.blocks.Keys == cfg1.successors.Keys + {exitOpt1.value};
-                assert cfg2.blocks.Keys == cfg2.successors.Keys + {exitOpt2.value};
-                assert cfg1.successors.Keys <= CoveringSet2(nextVersion, nextVersion1, {exit1});
-                assert cfg2.successors.Keys <= CoveringSet2(nextVersion1, nextVersion2, {exit1});
-                assert CoveringSet2(nextVersion, nextVersion1, {}) !! CoveringSet2(nextVersion1, nextVersion2, {});
-                AstToCfgAcyclic(c1, nextVersion);
+          */
 
-                assert IsAcyclic(cfg1.successors, cfg1.entry, cover1);
-
-                assert IsAcyclic(cfg1.successors[exit1 := [cfg2.entry]], cfg1.entry, cover1 + {exit1}) by {
-                  IsAcyclicUpdate2(cfg1.successors, cfg1.entry, exit1, [cfg2.entry], cover1);
+          if && IsAcyclic(cfg1.successors, cfg1.entry, cover1)
+             && IsAcyclic(cfg2.successors, cfg2.entry, cover2)
+             && IsAcyclic(cfg'.successors, cfg1.entry, cover3)
+          {
+            calc {
+              WpShallow(a, c, post)(s);
+              WpShallow(a, Seq(c1,c2), post)(s); //normal definition
+              WpShallow(a, c1, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes))(s); //IH
+              WpCfg(a, cfg1, cfg1.entry, WpShallow(a, c2, post), cover1)(s); //IH + pointwise
+              {
+                forall s' | true
+                ensures WpShallow(a, c2, post)(s') == WpCfg(a, cfg2, cfg2.entry, post.normal, cover2)(s')
+                { 
+                  AstToCfgSemanticsPreservation(a, c2, nextVersion1, post, s');
                 }
-
-                AstToCfgAcyclic(c2, nextVersion1);
-
-                assert IsAcyclic(cfg2.successors, cfg2.entry, cover2);
-
-                  IsAcyclicMerge(
-                    cfg1.successors[exit1 := [cfg2.entry]], cfg2.successors, cfg1.entry, cfg2.entry, 
-                    cover1+{exit1},
-                    cover2
-                  );
-
-                assert (cover1+{exit1})+cover2 == cover1+cover2+{exit1};
-                WpCfgMerge(a, cfg1, cfg2, cfg1.entry, exit1, post.normal, cover1, cover2, s);
-
-                assert cover3 == cover1+cover2+{exit1};
+                WpCfgPointwise(a, cfg1, cfg1.entry, WpShallow(a, c2, post), WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1, s);
               }
-            WpCfg(a, cfg', cfg1.entry, post.normal, cover3)(s);
+              WpCfg(a, cfg1, cfg1.entry, WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1)(s); 
+                { 
+
+                  assert cfg1.blocks.Keys == cfg1.successors.Keys + {exitOpt1.value};
+                  assert cfg2.blocks.Keys == cfg2.successors.Keys + {exitOpt2.value};
+                  assert cfg1.successors.Keys <= CoveringSet2(nextVersion, nextVersion1, {exit1});
+                  assert cfg2.successors.Keys <= CoveringSet2(nextVersion1, nextVersion2, {exit1});
+                  assert CoveringSet2(nextVersion, nextVersion1, {}) !! CoveringSet2(nextVersion1, nextVersion2, {});
+                  /*
+                  AstToCfgAcyclic(c1, nextVersion);
+
+                  assert IsAcyclic(cfg1.successors, cfg1.entry, cover1);
+
+                  assert IsAcyclic(cfg1.successors[exit1 := [cfg2.entry]], cfg1.entry, cover1 + {exit1}) by {
+                    IsAcyclicUpdate2(cfg1.successors, cfg1.entry, exit1, [cfg2.entry], cover1);
+                  }
+
+                  AstToCfgAcyclic(c2, nextVersion1);
+
+                  assert IsAcyclic(cfg2.successors, cfg2.entry, cover2);
+
+                    IsAcyclicMerge(
+                      cfg1.successors[exit1 := [cfg2.entry]], cfg2.successors, cfg1.entry, cfg2.entry, 
+                      cover1+{exit1},
+                      cover2
+                    );
+
+                  assert (cover1+{exit1})+cover2 == cover1+cover2+{exit1};
+                  */
+
+                  assert cover3 == cover1+cover2+{exit1};
+                  WpCfgMerge(a, cfg1, cfg2, cfg1.entry, exit1, post.normal, cover1, cover2, s);
+
+                }
+              WpCfg(a, cfg', cfg1.entry, post.normal, cover3)(s);
+            }
           }
         case _ => assume false;
       }

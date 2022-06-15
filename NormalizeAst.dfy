@@ -81,7 +81,8 @@ module NormalizeAst {
              LabelsWellDefAux(SeqCmdSimpleOpt(cOpt', scExitOpt), post.scopes.Keys)
     ensures 
       var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
-      WpShallow(a, SeqSimpleOptCmd(precedingSimple, c), post)(s) == WpShallow(a, SeqCmdSimpleOpt(cOpt', scExitOpt), post)(s)
+      WpShallow(a, SeqSimpleOptCmd(precedingSimple, c), post)(s) == 
+      WpShallow(a, SeqCmdSimpleOpt(cOpt', scExitOpt), post)(s)
   {
     var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
 
@@ -109,7 +110,8 @@ module NormalizeAst {
           WpShallow(a, c1Opt'.value, p)(s); 
             { 
               forall s' | true 
-              ensures WpShallow(a, SeqSimpleOptCmd(scExitOpt1, c2), post)(s') == WpShallow(a, SeqCmdSimpleOpt(c2Opt', scExitOpt2), post)(s')
+              ensures WpShallow(a, SeqSimpleOptCmd(scExitOpt1, c2), post)(s') ==
+                      WpShallow(a, SeqCmdSimpleOpt(c2Opt', scExitOpt2), post)(s')
               {
                 TransformAstCorrectness(a, c2, scExitOpt1, post, s');
               }

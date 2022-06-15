@@ -221,17 +221,21 @@ module BoogieSemantics {
     WpPostShallow(ResetVarsPred(a, varDecls, p.normal, s), ResetVarsPred(a, varDecls, p.currentScope, s), newScopes)
   }
 
+  function ResetVarsState<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, s: state<A>, sOrig: state<A>) : state<A>
+  {
+    if |varDecls| == 0 then 
+      s
+    else
+      var x := varDecls[0].0;
+      if x in sOrig.Keys then
+        s[x := sOrig[x]]
+      else
+        s-{x}
+  }
+
   function ResetVarsPred<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, p: Predicate<A>, s: state<A>) : Predicate<A>
   {
-    if |varDecls| == 0 then p  
-    else 
-      var p' := ResetVarsPred(a, varDecls[1..], p, s);
-      s' => 
-        var x := varDecls[0].0;
-        if x in s.Keys then
-          p'(s'[x := s[x]])
-        else
-          p'(s' - {x})
+    s' => p(ResetVarsState(a, varDecls, s', s))
   }
 
   lemma ResetVarsPredPointwise<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, p: Predicate<A>, q: Predicate<A>, resetState: state<A>, s: state<A>) 
