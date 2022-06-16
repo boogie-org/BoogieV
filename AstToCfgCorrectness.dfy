@@ -9,13 +9,17 @@ module AstToCfgCorrectness
   import opened BoogieCfg
   import opened Wrappers
 
-  lemma AstToCfgAcyclicTemp(
+  lemma AstToCfgAcyclic2(
     c: Cmd, 
     nextVersion: BlockId)
     requires NoBreaksScopesLoops(c)
-    ensures  
+    ensures 
       var (cfg, nextVersion', exitOpt) := AstToCfgAux(c, nextVersion); 
-      IsAcyclic(cfg.successors, cfg.entry, CoveringSet2(nextVersion, nextVersion', {exitOpt.value}))
+      var exit := exitOpt.value; //DISCUSS: does not work if replace {exit} by {exitOpt.value}
+      IsAcyclic(cfg.successors, cfg.entry, CoveringSet2(nextVersion, nextVersion', {exit}))
+  {
+    AstToCfgAcyclic(c, nextVersion);
+  }
 
   lemma WpCfgCoverIndep<A(!new)>(a: absval_interp<A>, cfg: Cfg, n: BlockId, post: Predicate<A>, cover1: set<BlockId>, cover2: set<BlockId>)
     requires cfg.successors.Keys <= cfg.blocks.Keys
@@ -60,19 +64,11 @@ module AstToCfgCorrectness
           var cfg1' := Cfg(cfg1.entry, cfg1.blocks, cfg1.successors[exitOpt1.value := [cfg2.entry]]);
 
           var cfg' := Cfg(cfg1.entry, cfg1.blocks + cfg2.blocks, successors);
+          
+          AstToCfgAcyclic(c1, nextVersion);
+          AstToCfgAcyclic(c2, nextVersion1);
 
-          /*
-          AstToCfgAcyclicTemp(c1, nextVersion);
-          AstToCfgAcyclicTemp(c2, nextVersion1);
-
-          AstToCfgAcyclicTemp(c1, nextVersion);
-          AstToCfgAcyclicTemp(c2, nextVersion1);
-          AstToCfgAcyclicTemp(c, nextVersion);
-          */
-
-          if && IsAcyclic(cfg1.successors, cfg1.entry, cover1)
-             && IsAcyclic(cfg2.successors, cfg2.entry, cover2)
-             && IsAcyclic(cfg'.successors, cfg1.entry, cover3)
+          if IsAcyclic(cfg'.successors, cfg1.entry, cover3)
           {
             calc {
               WpShallow(a, c, post)(s);
@@ -95,35 +91,13 @@ module AstToCfgCorrectness
                   assert cfg1.successors.Keys <= CoveringSet2(nextVersion, nextVersion1, {exit1});
                   assert cfg2.successors.Keys <= CoveringSet2(nextVersion1, nextVersion2, {exit1});
                   assert CoveringSet2(nextVersion, nextVersion1, {}) !! CoveringSet2(nextVersion1, nextVersion2, {});
-                  /*
-                  AstToCfgAcyclic(c1, nextVersion);
-
-                  assert IsAcyclic(cfg1.successors, cfg1.entry, cover1);
-
-                  assert IsAcyclic(cfg1.successors[exit1 := [cfg2.entry]], cfg1.entry, cover1 + {exit1}) by {
-                    IsAcyclicUpdate2(cfg1.successors, cfg1.entry, exit1, [cfg2.entry], cover1);
-                  }
-
-                  AstToCfgAcyclic(c2, nextVersion1);
-
-                  assert IsAcyclic(cfg2.successors, cfg2.entry, cover2);
-
-                    IsAcyclicMerge(
-                      cfg1.successors[exit1 := [cfg2.entry]], cfg2.successors, cfg1.entry, cfg2.entry, 
-                      cover1+{exit1},
-                      cover2
-                    );
-
-                  assert (cover1+{exit1})+cover2 == cover1+cover2+{exit1};
-                  */
-
                   assert cover3 == cover1+cover2+{exit1};
+                  
                   WpCfgMerge(a, cfg1, cfg2, cfg1.entry, exit1, post.normal, cover1, cover2);
-
                 }
               WpCfg(a, cfg', cfg1.entry, post.normal, cover3)(s);
             }
-          }
+          }         
         case _ => assume false;
       }
 
