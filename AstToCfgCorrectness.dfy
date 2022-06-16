@@ -118,7 +118,7 @@ module AstToCfgCorrectness
                   */
 
                   assert cover3 == cover1+cover2+{exit1};
-                  WpCfgMerge(a, cfg1, cfg2, cfg1.entry, exit1, post.normal, cover1, cover2, s);
+                  WpCfgMerge(a, cfg1, cfg2, cfg1.entry, exit1, post.normal, cover1, cover2);
 
                 }
               WpCfg(a, cfg', cfg1.entry, post.normal, cover3)(s);
