@@ -119,6 +119,29 @@ module BoogieCfg {
     }
   }
 
+  lemma WpCfgConjunctionEntryIndep<A(!new)>(a: absval_interp<A>, cfg: Cfg, entryOther: BlockId, ns: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>)
+    requires |ns| > 0
+    requires cfg.successors.Keys <= cfg.blocks.Keys
+    ensures WpCfgConjunction(a, cfg, ns, post, cover) == WpCfgConjunction(a, Cfg(entryOther, cfg.blocks, cfg.successors), ns, post, cover)
+    decreases cover, 1, |ns|
+  {
+    WpCfgEntryIndep(a, cfg, entryOther, ns[0], post, cover);
+  }
+  
+  lemma WpCfgEntryIndep<A(!new)>(a: absval_interp<A>, cfg: Cfg, entryOther: BlockId, n: BlockId, post: Predicate<A>, cover: set<BlockId>)
+    requires cfg.successors.Keys <= cfg.blocks.Keys
+    ensures WpCfg(a, cfg, n, post, cover) == WpCfg(a, Cfg(entryOther, cfg.blocks, cfg.successors), n, post, cover)
+    decreases cover, 0
+  {
+    var successors := if n in cfg.successors.Keys then cfg.successors[n] else [];
+
+    if IsAcyclic(cfg.successors, n, cover) {
+      if |successors| > 0 {
+        WpCfgConjunctionEntryIndep(a, cfg, entryOther, successors, post, cover - {n});
+      }
+    }  
+  }
+
   /*======================Acyclicity lemmas ===================================*/
 
   lemma IsAcyclicElem(r: SuccessorRel, ns: seq<BlockId>, nSucc: BlockId, cover: set<BlockId>)
