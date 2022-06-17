@@ -17,7 +17,7 @@ module AstToCfgCorrectness
     ensures 
       var (cfg, nextVersion', exitOpt) := AstToCfgAux(c, nextVersion); 
       var exit := exitOpt.value; //DISCUSS: does not work if replace {exit} by {exitOpt.value}
-      IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', {exit}))
+      IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', exit))
   {
     AstToCfgAcyclic(c, nextVersion);
   }
@@ -27,8 +27,105 @@ module AstToCfgCorrectness
     requires IsAcyclic(cfg.successors, n, cover1)
     requires IsAcyclic(cfg.successors, n, cover2)
     ensures WpCfg(a, cfg, n, post, cover1) == WpCfg(a, cfg, n, post, cover2)
+
+  lemma {:verify false} LiftWpFromBranchToFull<A(!new)>(a: absval_interp<A>, entry: BlockId, branchTarget: seq<BlockId>, cfgThn: Cfg, cfgEls: Cfg, thnExit: BlockId, elsExit: BlockId, joinId: BlockId, post: Predicate<A>, cover: set<BlockId>, cover': set<BlockId>)
+  requires IsAcyclic(cfgThn.successors, cfgThn.entry, cover)
+  requires cover + {thnExit} + {elsExit} <= cover'
+  requires cfgThn.successors.Keys <= cfgThn.blocks.Keys
+  requires cfgEls.successors.Keys <= cfgEls.blocks.Keys
+  requires cfgThn.entry in cfgThn.blocks && cfgEls.entry in cfgEls.blocks
+  requires joinId !in cfgThn.blocks + cfgEls.blocks
+  requires entry !in cfgThn.blocks + cfgEls.blocks
+  requires thnExit !in cfgThn.successors + cfgEls.successors
+  requires elsExit !in cfgThn.successors + cfgEls.successors
+  requires entry != joinId
+  requires thnExit in cfgThn.blocks
+  requires elsExit in cfgEls.blocks
+  requires cfgThn.blocks.Keys !! cfgEls.blocks.Keys
  
-  lemma AstToCfgSemanticsPreservation<A(!new)>(
+  /** Note that the following quantified preconditions are not the most general for this lemma, but they reflect more accurately
+      what the intended caller of this lemma knows (using more general preconditions may lead to a significant performance loss).*/
+  requires 
+      forall n1 :: n1 in cfgThn.successors.Keys ==>   
+        (forall i :: 0 <= i < |cfgThn.successors[n1]| ==> cfgThn.successors[n1][i] in cfgThn.successors.Keys || cfgThn.successors[n1][i] == thnExit)
+  requires 
+      forall n1 :: n1 in cfgEls.successors.Keys ==>   
+        (forall i :: 0 <= i < |cfgEls.successors[n1]| ==> cfgEls.successors[n1][i] in cfgEls.successors.Keys || cfgEls.successors[n1][i] == elsExit)
+  ensures   var blocksBeforeJoin := (cfgThn.blocks + cfgEls.blocks)[entry := Skip];
+            var successorsBeforeJoin := (cfgThn.successors + cfgEls.successors)[entry := branchTarget];
+            var blocks := blocksBeforeJoin[joinId := Skip];
+            var successors := successorsBeforeJoin[thnExit := [joinId]][elsExit := [joinId]];
+            var cfg' := Cfg(entry, blocks, successors);
+            WpCfg(a, cfgThn, cfgThn.entry, post, cover) ==
+            WpCfg(a, cfg', cfgThn.entry, post, cover'); 
+            /* This lemma handles the switch from cover to cover' because to do the swtich one must prove acyclicity of intermediate
+               CFG constructions. The goal is that only this lemma needs to do these acyclicity proofs (removing the need for users of the lemma to do so)
+               */
+  {
+    var blocksBeforeJoin := (cfgThn.blocks + cfgEls.blocks)[entry := Skip];
+    var successorsBeforeJoin := (cfgThn.successors + cfgEls.successors)[entry := branchTarget];
+    var blocks := blocksBeforeJoin[joinId := Skip];
+    var successors := successorsBeforeJoin[thnExit := [joinId]][elsExit := [joinId]];
+    var cfg' := Cfg(entry, blocks, successors);
+
+    //Obtain IsAcyclic(cfgThn.successors + cfgEls.successors, cfgThn.entry, cover1)
+    IsAcyclicExtend2(cfgThn.successors, cfgEls.successors, cfgThn.entry, cover);
+    //Obtain IsAcyclic(successorsBeforeJoin, cfgThn.entry, cover)
+    IsAcyclicUpdate(cfgThn.successors + cfgEls.successors, cfgThn.entry, entry, branchTarget, cover);
+    //Obtain IsAcyclic(successorsBeforeJoin[thnExit := [joinId]], cfgThn.entry, cover + {thnExit}) 
+    IsAcyclicUpdate2(successorsBeforeJoin, cfgThn.entry, thnExit, [joinId], cover);
+    //Obtain IsAcyclic(successorsBeforeJoin[thnExit := [joinId]][elsExit := [joinId]], cfgThn.entry, cover + {thnExit} + {elsExit}) 
+    IsAcyclicUpdate2(successorsBeforeJoin[thnExit := [joinId]], cfgThn.entry, elsExit, [joinId], cover + {thnExit});
+
+    calc {
+      WpCfg(a, cfgThn, cfgThn.entry, post, cover);
+        { WpCfgEntryIndep(a, cfgThn, entry, cfgThn.entry, post, cover); }
+      WpCfg(a, Cfg(entry, cfgThn.blocks, cfgThn.successors), cfgThn.entry, post, cover);
+        { var cfg1 := Cfg(entry, cfgThn.blocks, cfgThn.successors);
+          var cfgMerged := Cfg(entry, cfgThn.blocks + cfgEls.blocks, cfgThn.successors + cfgEls.successors);
+          WpCfgExtend2(a, cfgMerged, cfg1, cfgEls.blocks, cfgEls.successors, cfgThn.entry, post, cover);
+        }
+      WpCfg(a, Cfg(entry, cfgThn.blocks + cfgEls.blocks, cfgThn.successors + cfgEls.successors), cfgThn.entry, post, cover);
+        { 
+          var cfg1 := Cfg(entry, cfgThn.blocks + cfgEls.blocks, cfgThn.successors + cfgEls.successors);
+          WpCfgUpdate(a, cfg1, cfgThn.entry, (entry, Skip), branchTarget, post, cover); 
+        }
+      WpCfg(a, Cfg(entry, blocksBeforeJoin, successorsBeforeJoin), cfgThn.entry, post, cover);
+        { 
+          var cfg := Cfg(entry, blocksBeforeJoin, successorsBeforeJoin);
+          WpCfgUpdate2(a, cfg, cfgThn.entry, thnExit, joinId, post, cover); 
+        }
+      WpCfg(a, Cfg(entry, blocks, successorsBeforeJoin[thnExit := [joinId]]), cfgThn.entry, post, cover + {thnExit});
+        { 
+          var cfg := Cfg(entry, blocks, successorsBeforeJoin[thnExit := [joinId]]);
+          WpCfgUpdate2(a, cfg, cfgThn.entry, elsExit, joinId, post, cover + {thnExit});
+          assert blocks[joinId := Skip] == blocks; 
+        }
+      WpCfg(a, cfg', cfgThn.entry, post, cover + {thnExit} + {elsExit});
+        {
+          WpCfgLargerCover(a, cfg', cfgThn.entry, post, cover + {thnExit} + {elsExit}, cover');
+        }
+      WpCfg(a, cfg', cfgThn.entry, post, cover');
+    }
+  }
+
+  lemma {:verify false} CoveringSetAux(nextVersion0: nat, nextVersion1: nat, nextVersion2: nat, nextVersion3: nat, exclude1: nat, exclude2: nat, exclude3: nat)
+    requires nextVersion0 < nextVersion1 < nextVersion2 <= nextVersion3;
+    requires nextVersion0 < exclude1 < nextVersion3
+    requires nextVersion0 < exclude2 < nextVersion3
+    requires exclude3 < nextVersion1 || exclude3 >= nextVersion2
+    requires exclude1 != exclude3
+    requires exclude2 != exclude3
+    ensures 
+          var cover12 := CoveringSet(nextVersion1, nextVersion2, exclude1);
+          var cover03 := CoveringSet(nextVersion0, nextVersion3, exclude3);
+          cover12 + {exclude1} + {exclude2} <= cover03 - {nextVersion0}
+  {
+    reveal CoveringSet();
+  }
+  
+  
+  lemma {:verify true} AstToCfgSemanticsPreservation<A(!new)>(
     a: absval_interp<A>,
     c: Cmd, 
     nextVersion: BlockId,
@@ -39,9 +136,9 @@ module AstToCfgCorrectness
     ensures 
       var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
       var exit := exitOpt.value;
-      var cover' := CoveringSet(nextVersion, nextVersion', {exitOpt.value});
+      var cover' := CoveringSet(nextVersion, nextVersion', exitOpt.value);
 
-      IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', {exitOpt.value})) ==> 
+      IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', exitOpt.value)) ==> 
         WpShallow(a, c, post)(s) == WpCfg(a, cfg, cfg.entry, post.normal, cover')(s);
     {
       match c {
@@ -54,9 +151,9 @@ module AstToCfgCorrectness
           var (cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
           var exit2 := exitOpt2.value; 
 
-          var cover1 := CoveringSet(nextVersion, nextVersion1, {exitOpt1.value});
-          var cover2 := CoveringSet(nextVersion1, nextVersion2, {exitOpt2.value});
-          var cover3 := CoveringSet(nextVersion, nextVersion2, {exitOpt2.value});
+          var cover1 := CoveringSet(nextVersion, nextVersion1, exitOpt1.value);
+          var cover2 := CoveringSet(nextVersion1, nextVersion2, exitOpt2.value);
+          var cover3 := CoveringSet(nextVersion, nextVersion2, exitOpt2.value);
           assert cover1 + cover2 <= cover3 by {
             reveal CoveringSet();
           }
@@ -93,9 +190,9 @@ module AstToCfgCorrectness
 
                   assert cfg1.blocks.Keys == cfg1.successors.Keys + {exitOpt1.value};
                   assert cfg2.blocks.Keys == cfg2.successors.Keys + {exitOpt2.value};
-                  assert cfg1.successors.Keys <= CoveringSet(nextVersion, nextVersion1, {exit1}); 
-                  assert cfg2.successors.Keys <= CoveringSet(nextVersion1, nextVersion2, {exit1}); 
-                  assert CoveringSet(nextVersion, nextVersion1, {}) !! CoveringSet(nextVersion1, nextVersion2, {}); 
+                  assert cfg1.successors.Keys <= CoveringSet(nextVersion, nextVersion1, exit1); 
+                  assert cfg2.successors.Keys <= CoveringSet(nextVersion1, nextVersion2, exit1); 
+                  //assert CoveringSet(nextVersion, nextVersion1, {}) !! CoveringSet(nextVersion1, nextVersion2, {}); 
                   assert cover3 == cover1+cover2+{exit1};
                   
                   assert cfg1.blocks.Keys !! cover2;
@@ -106,7 +203,6 @@ module AstToCfgCorrectness
             }
           }         
         case If(optCond, thn, els) =>
-          //assume false;
           assume optCond == None; //TODO: simple case first, then handle other case
 
           /** CFG thn branch */
@@ -131,14 +227,14 @@ module AstToCfgCorrectness
           var (thnEntry, thnS) := (cfgThn.entry, cfgThn.successors);
           var thnExit := exitOpt1.value;
 
-          var cover1 := CoveringSet(nextVersion+1, nextVersion1, {thnExit});
+          var cover1 := CoveringSet(nextVersion+1, nextVersion1, thnExit);
           AstToCfgAcyclic(thn, entry+1);
           assert IsAcyclic(thnS, thnEntry, cover1);
 
           var (elsEntry, elsS) := (cfgEls.entry, cfgEls.successors);
           var elsExit := exitOpt2.value;
 
-          var cover2 := CoveringSet(nextVersion1, nextVersion2, {elsExit});
+          var cover2 := CoveringSet(nextVersion1, nextVersion2, elsExit);
           AstToCfgAcyclic(els, nextVersion1);
           assert IsAcyclic(elsS, elsEntry, cover2);
 
@@ -151,58 +247,47 @@ module AstToCfgCorrectness
           var blocks := blocksBeforeJoin[joinId := joinBlock];
           var successors := successorsBeforeJoin[thnExit := [joinId]][elsExit := [joinId]];
           var cfg' := Cfg(entry, blocks, successors);
-          var cover3 := CoveringSet(nextVersion, nextVersion2+1, {joinId});
+          var cover3 := CoveringSet(nextVersion, nextVersion2+1, joinId);
 
           /** lift thn branch WP to entire CFG */
+
           calc {
             WpShallow(a, thn, post)(s);
             WpCfg(a, cfgThn', cfgThn'.entry, post.normal, cover1)(s);
-              { WpCfgEntryIndep(a, cfgThn', entry, cfgThn'.entry, post.normal, cover1); }
-            WpCfg(a, Cfg(entry, cfgThn'.blocks, cfgThn'.successors), cfgThn'.entry, post.normal, cover1)(s);
-              { var cfg1 := Cfg(entry, cfgThn'.blocks, cfgThn'.successors);
-                var cfgMerged := Cfg(entry, cfgThn'.blocks + cfgEls'.blocks, cfgThn'.successors + cfgEls'.successors);
-                WpCfgExtend2(a, cfgMerged, cfg1, cfgEls'.blocks, cfgEls'.successors, cfgThn'.entry, post.normal, cover1);
+              { 
+                assert cover1 + {thnExit} + {elsExit} <= cover3-{entry} by {
+                  CoveringSetAux(nextVersion, nextVersion+1, nextVersion1, nextVersion2+1, thnExit, elsExit, joinId);
+                }
+                LiftWpFromBranchToFull(a, entry, [cfgThn'.entry, cfgEls'.entry], cfgThn', cfgEls', thnExit, elsExit, joinId, post.normal, cover1, cover3-{entry}); 
               }
-            WpCfg(a, Cfg(entry, cfgThn'.blocks + cfgEls'.blocks, cfgThn'.successors + cfgEls'.successors), cfgThn'.entry, post.normal, cover1)(s);
-              {assume false;}
-            WpCfg(a, Cfg(entry, blocksBeforeJoin, successorsBeforeJoin), cfgThn'.entry, post.normal, cover1)(s);
-              {assume false;}
-            WpCfg(a, Cfg(entry, blocks, successorsBeforeJoin[thnExit := [joinId]]), cfgThn'.entry, post.normal, cover1)(s);
-              {assume false;}
-            WpCfg(a, cfg', cfgThn'.entry, post.normal, cover1)(s);
-              {assume false;}
             WpCfg(a, cfg', cfgThn'.entry, post.normal, cover3-{entry})(s);
-          }
-
-          assume false;
+          } 
 
           /** lift els branch WP to entire CFG */
+
           calc {
             WpShallow(a, els, post)(s);
-              {assume false;}
-            WpCfg(a, cfg', cfgEls'.entry, post.normal, cover2)(s);
-              {assume false;}
+            WpCfg(a, cfgEls', cfgEls'.entry, post.normal, cover2)(s);
+              { 
+                assert cover2 + {elsExit} + {thnExit} <= cover3-{entry} by {
+                  CoveringSetAux(nextVersion, nextVersion1, nextVersion2, nextVersion2+1, elsExit, thnExit, joinId);
+                }
+                
+                LiftWpFromBranchToFull(a, entry, [cfgThn'.entry, cfgEls'.entry], cfgEls', cfgThn', elsExit, thnExit, joinId, post.normal, cover2, cover3-{entry}); 
+                assert cfgEls'.blocks + cfgThn'.blocks == cfgThn'.blocks + cfgEls'.blocks;
+                assert cfgEls'.successors + cfgThn'.successors == cfgThn'.successors + cfgEls'.successors;
+                assert successors == successorsBeforeJoin[elsExit := [joinId]][thnExit := [joinId]];
+                var blocksBeforeJoin'' := (cfgEls'.blocks + cfgThn'.blocks)[entry := Skip];
+                var successorsBeforeJoin'' := (cfgEls'.successors + cfgThn'.successors)[entry := [cfgThn'.entry, cfgEls'.entry]];
+                var blocks'' := blocksBeforeJoin''[joinId := Skip];
+                var successors'' := successorsBeforeJoin''[elsExit := [joinId]][thnExit := [joinId]];
+                var cfg'' := Cfg(entry, blocks'', successors'');
+                assert
+                WpCfg(a, cfgEls', cfgEls'.entry, post.normal, cover2) ==
+                WpCfg(a, cfg'', cfgEls'.entry, post.normal, cover3-{entry}); 
+              }
             WpCfg(a, cfg', cfgEls'.entry, post.normal, cover3-{entry})(s);
           }
-
-
-          /*
-          var (cfg, nextVersion', exitOpt) := AstToCfgAux(c, nextVersion); 
-
-          assume cfg'.successors == cfg.successors; //TODO: switch to assert
-          assume cfg == cfg'; //TODO: switch to assert
-          */
-
-          var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
-          var exit := exitOpt.value;
-          var cover' := CoveringSet(nextVersion, nextVersion', {exitOpt.value});
-
-          /*IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', {exitOpt.value})) ==> 
-            WpShallow(a, c, post)(s) == WpCfg(a, cfg, cfg.entry, post.normal, cover')(s);*/
-          
-          assert nextVersion' == nextVersion2+1;
-          assert cfg'.successors == cfg.successors; //TODO: switch to assert
-          assert cfg == cfg'; //TODO: switch to assert
 
           if IsAcyclic(cfg'.successors, cfg'.entry, cover3) {
             calc {
@@ -217,6 +302,8 @@ module AstToCfgCorrectness
               WpShallow(a, c, post)(s);
             }
           }
+
+          assume false; //TODO: proving postcondition takes long, find way to reduce time
       }
     }
 

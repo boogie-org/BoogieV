@@ -23,9 +23,9 @@ module AstToCfg {
     case If(_, thn, els) => NoBreaksScopesLoops(thn) && NoBreaksScopesLoops(els)
   }
 
-  function {:opaque} CoveringSet(oldVersion: nat, newVersion: nat, exclude: set<nat>) : set<nat>
+  function {:opaque} CoveringSet(oldVersion: nat, newVersion: nat, exclude: nat) : set<nat>
   {
-    (set x : nat | oldVersion <= x < newVersion) - exclude
+    (set x : nat | oldVersion <= x < newVersion) - {exclude}
   }
 
   /** 
@@ -139,14 +139,14 @@ module AstToCfg {
       && (forall n :: n in s.Keys ==>   
           (forall i :: 0 <= i < |s[n]| ==> (s[n][i] == exit || s[n][i] in s.Keys))) 
       && cfg.entry in cfg.blocks.Keys 
-      && IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', {exit}))
+      && IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', exit))
   {
     match c {
       case SimpleCmd(sc) =>  
       case Seq(c1, c2) =>
         var (cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
         var exit1 := exitOpt1.value;
-        assert IsAcyclic(cfg1.successors, cfg1.entry, CoveringSet(nextVersion, nextVersion1, {exit1}));
+        assert IsAcyclic(cfg1.successors, cfg1.entry, CoveringSet(nextVersion, nextVersion1, exit1));
 
         var (cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
         AstToCfgAcyclic(c2, nextVersion2);
@@ -155,9 +155,9 @@ module AstToCfg {
 
         //merge cfgs
 
-        var cover1 := CoveringSet(nextVersion, nextVersion1, {exit1});
-        var cover2 := CoveringSet(nextVersion1, nextVersion2, {exit2});
-        var cover3 := CoveringSet(nextVersion, nextVersion2, {exit2});
+        var cover1 := CoveringSet(nextVersion, nextVersion1, exit1);
+        var cover2 := CoveringSet(nextVersion1, nextVersion2, exit2);
+        var cover3 := CoveringSet(nextVersion, nextVersion2, exit2);
 
 
         var successors := (cfg1.successors + cfg2.successors)[exitOpt1.value := [cfg2.entry]];
@@ -209,13 +209,13 @@ module AstToCfg {
         var (entry1, s1) := (cfgThn.entry, cfgThn.successors);
         var thnExit := exitOpt1.value;
 
-        var cover1 := CoveringSet(nextVersion+1, nextVersion1, {thnExit});
+        var cover1 := CoveringSet(nextVersion+1, nextVersion1, thnExit);
         assert IsAcyclic(s1, entry1, cover1);
 
         var (entry2, s2) := (cfgEls.entry, cfgEls.successors);
         var elsExit := exitOpt2.value;
 
-        var cover2 := CoveringSet(nextVersion1, nextVersion2, {elsExit});
+        var cover2 := CoveringSet(nextVersion1, nextVersion2, elsExit);
         assert IsAcyclic(s2, entry2, cover2);
 
         IsAcyclicExtend2(s1, s2, entry1, cover1);
@@ -257,9 +257,9 @@ module AstToCfg {
           assert successors == successorsBeforeJoin[thnExit := [nextVersion2]][elsExit := [nextVersion2]];
         }
         
-        assert IsAcyclic(successors, entryId, CoveringSet(nextVersion, nextVersion2+1, {nextVersion2})) by {
+        assert IsAcyclic(successors, entryId, CoveringSet(nextVersion, nextVersion2+1, nextVersion2)) by {
           reveal CoveringSet();
-          assert cover3 == CoveringSet(nextVersion, nextVersion2+1, {nextVersion2});
+          assert cover3 == CoveringSet(nextVersion, nextVersion2+1, nextVersion2);
         }
     }
   }           
