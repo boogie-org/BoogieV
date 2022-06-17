@@ -159,7 +159,10 @@ module AstToCfgCorrectness
             WpCfg(a, cfgThn', cfgThn'.entry, post.normal, cover1)(s);
               { WpCfgEntryIndep(a, cfgThn', entry, cfgThn'.entry, post.normal, cover1); }
             WpCfg(a, Cfg(entry, cfgThn'.blocks, cfgThn'.successors), cfgThn'.entry, post.normal, cover1)(s);
-              {assume false;}
+              { var cfg1 := Cfg(entry, cfgThn'.blocks, cfgThn'.successors);
+                var cfgMerged := Cfg(entry, cfgThn'.blocks + cfgEls'.blocks, cfgThn'.successors + cfgEls'.successors);
+                WpCfgExtend2(a, cfgMerged, cfg1, cfgEls'.blocks, cfgEls'.successors, cfgThn'.entry, post.normal, cover1);
+              }
             WpCfg(a, Cfg(entry, cfgThn'.blocks + cfgEls'.blocks, cfgThn'.successors + cfgEls'.successors), cfgThn'.entry, post.normal, cover1)(s);
               {assume false;}
             WpCfg(a, Cfg(entry, blocksBeforeJoin, successorsBeforeJoin), cfgThn'.entry, post.normal, cover1)(s);
