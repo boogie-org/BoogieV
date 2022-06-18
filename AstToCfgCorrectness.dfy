@@ -1,5 +1,6 @@
 include "AstToCfg_simple.dfy"
 include "Util.dfy"
+include "SemanticsUtil.dfy"
 
 
 module AstToCfgCorrectness
@@ -9,6 +10,7 @@ module AstToCfgCorrectness
   import opened BoogieSemantics
   import opened BoogieCfg
   import opened Wrappers
+  import opened SemanticsUtil
 
   lemma AstToCfgAcyclic2(
     c: Cmd, 
@@ -123,6 +125,15 @@ module AstToCfgCorrectness
   {
     reveal CoveringSet();
   }
+
+  function CfgForIf(entryId: BlockId, cfgThn: Cfg, thnExit: BlockId, cfgEls: Cfg, elsExit: BlockId, joinId: BlockId) : Cfg
+  {
+    var blocksBeforeJoin := (cfgThn.blocks + cfgEls.blocks)[entryId := Skip];
+    var successorsBeforeJoin := (cfgThn.successors + cfgEls.successors)[entryId := [cfgThn.entry, cfgEls.entry]];
+    var blocks := blocksBeforeJoin[joinId := Skip];
+    var successors := successorsBeforeJoin[thnExit := [joinId]][elsExit := [joinId]];
+    Cfg(entryId, blocks, successors)
+  }
   
   
   lemma {:verify true} AstToCfgSemanticsPreservation<A(!new)>(
@@ -203,26 +214,13 @@ module AstToCfgCorrectness
             }
           }         
         case If(optCond, thn, els) =>
-          assume optCond == None; //TODO: simple case first, then handle other case
-
           /** CFG thn branch */
           var (entry, entryBlock) := (nextVersion, Skip);
           var (cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entry+1);
 
-          var cfgThn' := 
-            if optCond.Some? then
-              Cfg(cfgThn.entry, cfgThn.blocks[cfgThn.entry := SeqSimple(Assume(optCond.value), cfgThn.blocks[cfgThn.entry])], cfgThn.successors)
-            else
-              cfgThn;
 
           /** CFG els branch */
           var (cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
-
-          var cfgEls' := 
-            if optCond.Some? then
-              Cfg(cfgEls.entry, cfgEls.blocks[cfgEls.entry := SeqSimple(Assume(UnOp(Not, optCond.value)), cfgEls.blocks[cfgEls.entry])], cfgEls.successors)
-            else
-              cfgEls;
 
           var (thnEntry, thnS) := (cfgThn.entry, cfgThn.successors);
           var thnExit := exitOpt1.value;
@@ -238,68 +236,169 @@ module AstToCfgCorrectness
           AstToCfgAcyclic(els, nextVersion1);
           assert IsAcyclic(elsS, elsEntry, cover2);
 
-          var blocksBeforeJoin := (cfgThn'.blocks + cfgEls'.blocks)[entry := Skip];
-          var successorsBeforeJoin := (cfgThn'.successors + cfgEls'.successors)[entry := [cfgThn'.entry, cfgEls'.entry]];
-
           var (joinId, joinBlock) := (nextVersion2, Skip);
 
-          /** result data */
+          /** result cfg */
+          var successorsBeforeJoin := (cfgThn.successors + cfgEls.successors)[entry := [cfgThn.entry, cfgEls.entry]];
+          var blocksBeforeJoin := (cfgThn.blocks + cfgEls.blocks)[entry := Skip];
           var blocks := blocksBeforeJoin[joinId := joinBlock];
           var successors := successorsBeforeJoin[thnExit := [joinId]][elsExit := [joinId]];
-          var cfg' := Cfg(entry, blocks, successors);
-          var cover3 := CoveringSet(nextVersion, nextVersion2+1, joinId);
+          //var cfg' := Cfg(entry, blocks, successors);
 
-          /** lift thn branch WP to entire CFG */
+          //assume false;
+          var cfgThn' := 
+            if optCond.Some? then
+              Cfg(cfgThn.entry, cfgThn.blocks[cfgThn.entry := SeqSimple(Assume(optCond.value), cfgThn.blocks[cfgThn.entry])], cfgThn.successors)
+            else
+              cfgThn;
+
+          var cfgEls' := 
+            if optCond.Some? then
+              Cfg(cfgEls.entry, cfgEls.blocks[cfgEls.entry := SeqSimple(Assume(UnOp(Not, optCond.value)), cfgEls.blocks[cfgEls.entry])], cfgEls.successors)
+            else
+              cfgEls;
+
+          var cfg' := CfgForIf(entry, cfgThn', thnExit, cfgEls', elsExit, joinId);
+          var cover3 := CoveringSet(nextVersion, nextVersion2+1, joinId);
+          
+          /* we lift the WP of the then-branch-CFG (resp. else-branch-CFG) to the entire Cfg 
+            without the guard condition in the then "else-branch-CFG" (resp then-branch-CFG).
+            This way we can apply the induction hypothesis to relate the then-AST-command 
+            (resp. else-AST-command) with the then-branch-CFG (resp. else-branch-CFG) */
+
+          var cfgThnInter := CfgForIf(entry, cfgThn, thnExit, cfgEls', elsExit, joinId);
+          var cfgElsInter := CfgForIf(entry, cfgThn', thnExit, cfgEls, elsExit, joinId);
+
+          /** Lift then-branch-CFG WP */
 
           calc {
             WpShallow(a, thn, post)(s);
-            WpCfg(a, cfgThn', cfgThn'.entry, post.normal, cover1)(s);
+            WpCfg(a, cfgThn, cfgThn.entry, post.normal, cover1)(s);
               { 
+                assume false;
                 assert cover1 + {thnExit} + {elsExit} <= cover3-{entry} by {
                   CoveringSetAux(nextVersion, nextVersion+1, nextVersion1, nextVersion2+1, thnExit, elsExit, joinId);
                 }
-                LiftWpFromBranchToFull(a, entry, [cfgThn'.entry, cfgEls'.entry], cfgThn', cfgEls', thnExit, elsExit, joinId, post.normal, cover1, cover3-{entry}); 
+                LiftWpFromBranchToFull(a, entry, [cfgThn.entry, cfgEls.entry], cfgThn, cfgEls', thnExit, elsExit, joinId, post.normal, cover1, cover3-{entry}); 
               }
-            WpCfg(a, cfg', cfgThn'.entry, post.normal, cover3-{entry})(s);
+            WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry})(s);
           } 
 
-          /** lift els branch WP to entire CFG */
+          /** Lift els-branch-CFG WP */
 
           calc {
             WpShallow(a, els, post)(s);
-            WpCfg(a, cfgEls', cfgEls'.entry, post.normal, cover2)(s);
+            WpCfg(a, cfgEls, cfgEls.entry, post.normal, cover2)(s);
               { 
+                assume false;
                 assert cover2 + {elsExit} + {thnExit} <= cover3-{entry} by {
                   CoveringSetAux(nextVersion, nextVersion1, nextVersion2, nextVersion2+1, elsExit, thnExit, joinId);
                 }
                 
-                LiftWpFromBranchToFull(a, entry, [cfgThn'.entry, cfgEls'.entry], cfgEls', cfgThn', elsExit, thnExit, joinId, post.normal, cover2, cover3-{entry}); 
-                assert cfgEls'.blocks + cfgThn'.blocks == cfgThn'.blocks + cfgEls'.blocks;
-                assert cfgEls'.successors + cfgThn'.successors == cfgThn'.successors + cfgEls'.successors;
+                LiftWpFromBranchToFull(a, entry, [cfgThn'.entry, cfgEls.entry], cfgEls, cfgThn', elsExit, thnExit, joinId, post.normal, cover2, cover3-{entry}); 
+                assert cfgEls.blocks + cfgThn'.blocks == cfgThn'.blocks + cfgEls.blocks;
+                assert cfgEls.successors + cfgThn'.successors == cfgThn'.successors + cfgEls.successors;
                 assert successors == successorsBeforeJoin[elsExit := [joinId]][thnExit := [joinId]];
-                var blocksBeforeJoin'' := (cfgEls'.blocks + cfgThn'.blocks)[entry := Skip];
-                var successorsBeforeJoin'' := (cfgEls'.successors + cfgThn'.successors)[entry := [cfgThn'.entry, cfgEls'.entry]];
+                /** to speed up the proof */
+                var blocksBeforeJoin'' := (cfgEls.blocks + cfgThn'.blocks)[entry := Skip];
+                var successorsBeforeJoin'' := (cfgEls.successors + cfgThn'.successors)[entry := [cfgThn'.entry, cfgEls.entry]];
                 var blocks'' := blocksBeforeJoin''[joinId := Skip];
                 var successors'' := successorsBeforeJoin''[elsExit := [joinId]][thnExit := [joinId]];
                 var cfg'' := Cfg(entry, blocks'', successors'');
                 assert
-                WpCfg(a, cfgEls', cfgEls'.entry, post.normal, cover2) ==
-                WpCfg(a, cfg'', cfgEls'.entry, post.normal, cover3-{entry}); 
+                  WpCfg(a, cfgEls, cfgEls.entry, post.normal, cover2) ==
+                  WpCfg(a, cfg'', cfgEls.entry, post.normal, cover3-{entry}); 
               }
-            WpCfg(a, cfg', cfgEls'.entry, post.normal, cover3-{entry})(s);
+            WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry})(s);
           }
 
+          //assume false;
+
+          //assume false;
+          //assume optCond.Some?;
+
+          /*
+          var cfg'' :=
+            if optCond.Some? then
+              var newBlocks := 
+                cfg'.blocks[cfgThn.entry := SeqSimple(Assume(optCond.value), cfgThn.blocks[cfgThn.entry])]
+              Cfg(cfg'.entry, cfg'.blocks[cfgThn.entry := SeqSimple(Assume(optCond.value), cfgThn.blocks[cfgThn.entry])])
+          */
+
+
+          //assume optCond == None; //TODO: simple case first, then handle other case
+
+          //assume false;
           if IsAcyclic(cfg'.successors, cfg'.entry, cover3) {
+            /*
             calc {
               WpCfg(a, cfg', cfg'.entry, post.normal, cover3)(s);
                 { assert cfg'.blocks[entry] == Skip;
-                  assert cfg'.successors[entry] ==  [cfgThn'.entry, cfgEls'.entry];
+                  assert cfg'.successors[entry] ==  [cfgThn.entry, cfgEls.entry];
                 }
-              WpShallowSimpleCmd(a, Skip, WpCfgConjunction(a, cfg', [cfgThn'.entry, cfgEls'.entry], post.normal, cover3-{entry}))(s);
-              WpCfgConjunction(a, cfg', [cfgThn'.entry, cfgEls'.entry], post.normal, cover3-{entry})(s);
-              Util.AndOpt(WpCfg(a, cfg', cfgThn'.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls'.entry, post.normal, cover3-{entry})(s));
+              WpShallowSimpleCmd(a, Skip, WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry}))(s);
+              WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry})(s);
+              Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
               Util.AndOpt(WpShallow(a, thn, post)(s), WpShallow(a, els, post)(s));
               WpShallow(a, c, post)(s);
+            }
+            */
+            /*
+            calc {
+              WpCfg(a, cfg', cfg'.entry, post.normal, cover3)(s);
+                { assert cfg'.blocks[entry] == Skip;
+                  assert cfg'.successors[entry] ==  [cfgThn.entry, cfgEls.entry];
+                }
+              WpShallowSimpleCmd(a, Skip, WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry}))(s);
+              WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry})(s);
+              Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
+            }
+            */
+
+            if(optCond.Some?) {
+              var guard := optCond.value;
+              //relate then-branch-CFG with then-branch AST
+              calc {
+                WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s);
+                { 
+                  var thnOrigBlock := cfgThn.blocks[cfgThn.entry];
+                  var cfgTemp := Cfg(cfg'.entry, cfg'.blocks[cfgThn.entry := thnOrigBlock], cfg'.successors);
+                  WpCfgEntrySplit(a, cfg', cfgThn.entry, Assume(guard), thnOrigBlock, post.normal, cover3-{entry});
+                  assert cfgTemp == cfgThnInter;
+                }
+                WpShallowSimpleCmd(a, Assume(guard), WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry}))(s);
+                { assume false; }
+                WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s);
+              }
+
+
+              //relate else-branch-CFG with else-branch AST
+              calc {
+                WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s);
+                { 
+                  var elsOrigBlock := cfgEls.blocks[cfgEls.entry];
+                  var cfgTemp := Cfg(cfg'.entry, cfg'.blocks[cfgEls.entry := elsOrigBlock], cfg'.successors);
+                  WpCfgEntrySplit(a, cfg', cfgEls.entry, Assume(UnOp(Not, guard)), elsOrigBlock, post.normal, cover3-{entry});
+                  assert cfgTemp == cfgElsInter;
+                }
+                WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry}))(s);
+                { assume false; }
+                WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, els, post))(s);
+              }
+
+              //final result
+              calc {
+                WpCmd(a, c, post)(s);
+                { WpShallowIfEquiv2(a, guard, thn, els, post, s); }
+                Util.AndOpt(
+                  WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s),
+                  WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpShallow(a, els, post))(s)
+                );
+                Util.AndOpt(
+                  WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), 
+                  WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s)
+                );
+              }
             }
           }
 
