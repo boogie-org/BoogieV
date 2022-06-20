@@ -142,7 +142,7 @@ module SemanticsUtil {
         calc {
           WpCfg(a, cfg, entry, p, cover);
           WpShallowSimpleCmd(a, SeqSimple(prefix, suffix), WpCfgConjunction(a, cfg, successors, p, cover - {entry}));
-          { assume false; }
+          { WpCfgConjunctionIndepOutsideCover(a, cfg, (entry, suffix), successors, p, cover - {entry}); }
           WpShallowSimpleCmd(a, SeqSimple(prefix, suffix), WpCfgConjunction(a, cfg', successors, p, cover - {entry}));
           WpShallowSimpleCmd(a, prefix, WpShallowSimpleCmd(a, suffix, WpCfgConjunction(a, cfg', successors, p, cover - {entry})));
           WpShallowSimpleCmd(a, prefix, WpCfg(a, cfg', entry, p, cover));
