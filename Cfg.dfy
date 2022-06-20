@@ -142,7 +142,12 @@ module BoogieCfg {
     }  
   }
 
-  /*======================Acyclicity lemma {:verify false}s ===================================*/
+  /*======================Acyclicity lemmas ===================================*/
+
+  lemma IsAcyclicSeqForall(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
+    requires IsAcyclicSeq(r, ns, cover)
+    ensures forall n :: n in ns ==> IsAcyclic(r, n, cover)
+  { }
 
   lemma {:verify false} IsAcyclicElem(r: SuccessorRel, ns: seq<BlockId>, nSucc: BlockId, cover: set<BlockId>)
     requires IsAcyclicSeq(r, ns, cover)

@@ -312,38 +312,8 @@ module AstToCfgCorrectness
             WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry})(s);
           }
 
-          //assume false;
-
-          //assume false;
-          //assume optCond.Some?;
-
-          /*
-          var cfg'' :=
-            if optCond.Some? then
-              var newBlocks := 
-                cfg'.blocks[cfgThn.entry := SeqSimple(Assume(optCond.value), cfgThn.blocks[cfgThn.entry])]
-              Cfg(cfg'.entry, cfg'.blocks[cfgThn.entry := SeqSimple(Assume(optCond.value), cfgThn.blocks[cfgThn.entry])])
-          */
-
-
-          //assume optCond == None; //TODO: simple case first, then handle other case
-
-          //assume false;
           if IsAcyclic(cfg'.successors, cfg'.entry, cover3) {
-            /*
-            calc {
-              WpCfg(a, cfg', cfg'.entry, post.normal, cover3)(s);
-                { assert cfg'.blocks[entry] == Skip;
-                  assert cfg'.successors[entry] ==  [cfgThn.entry, cfgEls.entry];
-                }
-              WpShallowSimpleCmd(a, Skip, WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry}))(s);
-              WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry})(s);
-              Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
-              Util.AndOpt(WpShallow(a, thn, post)(s), WpShallow(a, els, post)(s));
-              WpShallow(a, c, post)(s);
-            }
-            */
-            /*
+            assume false;
             calc {
               WpCfg(a, cfg', cfg'.entry, post.normal, cover3)(s);
                 { assert cfg'.blocks[entry] == Skip;
@@ -353,9 +323,18 @@ module AstToCfgCorrectness
               WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry})(s);
               Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
             }
-            */
 
-            if(optCond.Some?) {
+            assume false;
+
+            if(optCond == None) {
+              calc {
+                Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
+                Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
+                Util.AndOpt(WpShallow(a, thn, post)(s), WpShallow(a, els, post)(s));
+                WpShallow(a, c, post)(s);
+              }
+            } else {
+              assume false;
               var guard := optCond.value;
               //relate then-branch-CFG with then-branch AST
               calc {
@@ -367,7 +346,7 @@ module AstToCfgCorrectness
                   assert cfgTemp == cfgThnInter;
                 }
                 WpShallowSimpleCmd(a, Assume(guard), WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry}))(s);
-                { assume false; }
+                { assume false; } //pointwise equality
                 WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s);
               }
 
@@ -375,20 +354,21 @@ module AstToCfgCorrectness
               //relate else-branch-CFG with else-branch AST
               calc {
                 WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s);
-                { 
+                {  /** This proof step relies on acyclicity currently (since WpCfgEntrySplit relies on acyclicity).
+                       It should be possible to not have to rely on acyclicity here. */
                   var elsOrigBlock := cfgEls.blocks[cfgEls.entry];
                   var cfgTemp := Cfg(cfg'.entry, cfg'.blocks[cfgEls.entry := elsOrigBlock], cfg'.successors);
                   WpCfgEntrySplit(a, cfg', cfgEls.entry, Assume(UnOp(Not, guard)), elsOrigBlock, post.normal, cover3-{entry});
                   assert cfgTemp == cfgElsInter;
                 }
                 WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry}))(s);
-                { assume false; }
-                WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, els, post))(s);
+                { assume false; } // pointwise equality
+                WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpShallow(a, els, post))(s);
               }
 
               //final result
               calc {
-                WpCmd(a, c, post)(s);
+                WpShallow(a, c, post)(s);
                 { WpShallowIfEquiv2(a, guard, thn, els, post, s); }
                 Util.AndOpt(
                   WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s),
@@ -399,12 +379,12 @@ module AstToCfgCorrectness
                   WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s)
                 );
               }
-            }
-          }
-
+            } 
+          
           assume false; //TODO: proving postcondition takes long, find way to reduce time
-      }
+        } 
     }
+  }
 
 }
 

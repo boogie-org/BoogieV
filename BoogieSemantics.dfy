@@ -118,20 +118,47 @@ module BoogieSemantics {
   type Predicate<!A> = state<A> -> Option<bool>
   datatype WpPostShallow<!A> = WpPostShallow(normal: Predicate<A>, currentScope: Predicate<A>, scopes: map<lbl_name, Predicate<A>>)
 
+  /** Note that for the weakest precondition definition making changes such as rewriting a predicate P
+      to "s => P(s)" can have an impact on proofs. The reason is that in Dafny P and "s => P(s)" are not 
+      necessarily the same predicate. Some lemmas aim to show that a predicate computed by the weakest precondition
+      is actually the same as some other predicate (instead of just showing pointwise equality), 
+      which relies on the fact on the syntactic expression used to express a predicate. */
   function WpShallowSimpleCmd<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, post: Predicate<A>) : Predicate<A>
   {
     match sc
     case Skip => post
     case Assume(e) => 
       s => 
-        var postEval :- post(s); 
-        var eEval :- ExprEvalBoolOpt(a, e, s); 
-        Some(eEval ==> postEval)
+        var eEval := ExprEvalBoolOpt(a, e, s); 
+        /* We make sure that if e evaluates to false, then the weakest precondition is always true.
+           An alternative would be to evaluate to None if the postcondition evaluates to None.
+           One reason for choosing to evaluate to true is that in an operational semantics, the part
+           after the assume command would never be evaluated. Also one obtains more direct 
+           equalities such as the Wps of if(b) { thn } else { els } being pointwise equal to 
+           If(*) {Assume(guard);thn} else { Assume(!guard), els }.
+        */
+           
+        if eEval == None then
+          None
+        else if eEval == Some(false) then
+          Some(true)
+        else 
+          var postEval :- post(s); 
+          Some(postEval)
     case Assert(e) =>
       s => 
-        var postEval :- post(s); 
-        var eEval :- ExprEvalBoolOpt(a, e, s); 
-        Some(eEval && postEval) 
+        /* If e evaluates to false, then the Wp is directly false reflecting 
+        that if an assertion fails, then the remainder of the program is irrelevant
+        (in particular, if the remainder is not well-typed does not matter),
+        which is analogous to how we treat Assume(false). */ 
+        var eEval := ExprEvalBoolOpt(a, e, s); 
+        if eEval == None then
+          None
+        else if eEval == Some(false) then
+          Some(false)
+        else 
+          var postEval :- post(s); 
+          Some(postEval) 
     case Havoc(varDecls) =>
       ForallVarDeclsShallow(a, varDecls, post)
     case Assign(x, t, e) => 
@@ -139,7 +166,7 @@ module BoogieSemantics {
         var eEval :- EvalExpr(a, e, s); 
         post(s[x := eEval])
     case SeqSimple(sc1, sc2) =>
-      s => WpShallowSimpleCmd(a, sc1, WpShallowSimpleCmd(a, sc2, post))(s)
+      WpShallowSimpleCmd(a, sc1, WpShallowSimpleCmd(a, sc2, post))
   }
 
   function WpShallowSimpleCmdSeq<A(!new)>(a: absval_interp<A>, simpleCmds: seq<SimpleCmd>, post: Predicate<A>) : Predicate<A>
