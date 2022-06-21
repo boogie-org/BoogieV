@@ -155,7 +155,6 @@ module AstToCfgCorrectness
       match c {
         case SimpleCmd(sc) => 
         case Seq(c1, c2) =>
-          assume false; //TODO: remove (just used to speed up verification of if-proof development)
           var (cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
           var exit1 := exitOpt1.value;
           
@@ -217,8 +216,56 @@ module AstToCfgCorrectness
             }
           }         
         case Scope(optLabel, varDecls, body) =>
+          /*
+              var updatedScopes := 
+                if optLabel.Some? then 
+                  post.scopes[optLabel.value := post.normal]
+                else post.scopes;
+              var unquantifiedBody := 
+                assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
+                var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
+                prevState => 
+                  WpShallow(a, body, ResetVarsPost(a, varDecls, post', prevState));
+                  
+              s => ForallVarDeclsShallow(a, varDecls, unquantifiedBody(s))(s)
+          */
+          assert varDecls == []; 
+          var (bodyCfg, nextVersion', exitOpt) := AstToCfgAux(body, nextVersion);
+          var exit := exitOpt.value;
+          var cover := CoveringSet(nextVersion, nextVersion', exit);
+
+          /** In this simplified setting without breaks, adjusting the scope postconditions 
+          is not required. However, if one does not adjust the scope postconditions, then one
+          needs to prove that this results in the same semantics as with breaks. Here 
+          we just update the scopes to match the reference semantics. */
+
+          var updatedScopes := 
+            if optLabel.Some? then 
+              post.scopes[optLabel.value := post.normal]
+            else post.scopes;
+
+          assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
+          var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
+          var unquantifiedBody := 
+            WpShallow(a, body, ResetVarsPost(a, varDecls, post', s));
+
+          calc {
+            WpShallow(a, c, post)(s);
+            ForallVarDeclsShallow(a, varDecls, unquantifiedBody)(s);
+            { //scoped variable declarations have been compiled away
+              assert varDecls == []; 
+            }
+            unquantifiedBody(s);
+            WpShallow(a, body, ResetVarsPost(a, [], post', s))(s);
+            { 
+              WpShallowPointwise(a, body, ResetVarsPost(a, [], post', s), post', s);
+            }
+            WpShallow(a, body, post')(s);
+            { AstToCfgAcyclic2(body, nextVersion);
+              AstToCfgSemanticsPreservation(a, body, nextVersion, post', s); }
+            WpCfg(a, bodyCfg, bodyCfg.entry, post.normal, cover)(s);
+          }
         case If(optCond, thn, els) =>
-          assume false;
           /** CFG thn branch */
           var (entry, entryBlock) := (nextVersion, Skip);
           var (cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entry+1);
@@ -405,4 +452,3 @@ module AstToCfgCorrectness
   }
 
 }
-

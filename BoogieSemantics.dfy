@@ -227,7 +227,7 @@ module BoogieSemantics {
 
   function ForallVarDeclsShallow<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
   {
-    if |varDecls| == 0 then (s => p(s))
+    if |varDecls| == 0 then p
     else var (x,t) := varDecls[0]; 
          s => 
             if (forall v: Val<A> :: TypeOfVal(a, v) == t ==> ForallVarDeclsShallow(a, varDecls[1..], p)(s[x := v]) == Some(true)) then
@@ -262,6 +262,18 @@ module BoogieSemantics {
   {
     s' => p(ResetVarsState(a, varDecls, s', s))
   }
+
+  lemma ResetVarsPredNoVars<A(!new)>(a: absval_interp<A>, p: Predicate<A>)
+    ensures forall origState, s' :: ResetVarsPred(a, [], p, origState)(s') == p(s')
+  { }
+
+  lemma ResetVarsPostNoVars<A(!new)>(a: absval_interp<A>, p: WpPostShallow<A>, origState: state<A>)
+    requires 
+      var q := ResetVarsPost(a, [], p, origState);
+      && (forall s' :: p.normal(s') == q.normal(s'))
+      && (forall s' :: p.currentScope(s') == q.currentScope(s'))
+      && (forall lbl, s' :: lbl in p.scopes.Keys && lbl in q.scopes.Keys ==> p.scopes[lbl](s') == q.scopes[lbl](s'))
+  { }
 
   lemma ResetVarsPredPointwise<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, p: Predicate<A>, q: Predicate<A>, resetState: state<A>, s: state<A>) 
     requires forall s :: p(s) == q(s)
