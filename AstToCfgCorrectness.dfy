@@ -136,7 +136,7 @@ module AstToCfgCorrectness
   }
   
   
-  lemma {:induction false} {:verify false} AstToCfgSemanticsPreservation<A(!new)>(
+  lemma {:induction false} AstToCfgSemanticsPreservation<A(!new)>(
     a: absval_interp<A>,
     c: Cmd, 
     nextVersion: BlockId,

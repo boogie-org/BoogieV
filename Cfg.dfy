@@ -77,7 +77,7 @@ module BoogieCfg {
       s => None
   }
 
-  lemma {:verify false} WpCfgConjunctionPointwise<A(!new)>(a: absval_interp<A>, g: Cfg, ns: seq<BlockId>, post1: Predicate<A>, post2: Predicate<A>, cover: set<BlockId>, s: state<A>) 
+  lemma WpCfgConjunctionPointwise<A(!new)>(a: absval_interp<A>, g: Cfg, ns: seq<BlockId>, post1: Predicate<A>, post2: Predicate<A>, cover: set<BlockId>, s: state<A>) 
     requires g.successors.Keys <= g.blocks.Keys //not being in the domain of the successor relation is the same as not having any successors
     //requires IsAcyclicSeq(g.successors, ns, cover)
     requires (forall s :: post1(s) == post2(s))
@@ -91,7 +91,7 @@ module BoogieCfg {
     }
   }
 
-  lemma {:verify false} WpCfgPointwise<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, post1: Predicate<A>, post2: Predicate<A>, cover: set<BlockId>, s: state<A>)
+  lemma WpCfgPointwise<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, post1: Predicate<A>, post2: Predicate<A>, cover: set<BlockId>, s: state<A>)
     requires g.successors.Keys <= g.blocks.Keys //not being in the domain of the successor relation is the same as not having any successors
     //requires IsAcyclic(g.successors, n, cover)
     requires (forall s :: post1(s) == post2(s))
@@ -119,7 +119,7 @@ module BoogieCfg {
     }
   }
 
-  lemma {:verify false} WpCfgConjunctionEntryIndep<A(!new)>(a: absval_interp<A>, cfg: Cfg, entryOther: BlockId, ns: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgConjunctionEntryIndep<A(!new)>(a: absval_interp<A>, cfg: Cfg, entryOther: BlockId, ns: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>)
     requires |ns| > 0
     requires cfg.successors.Keys <= cfg.blocks.Keys
     ensures WpCfgConjunction(a, cfg, ns, post, cover) == WpCfgConjunction(a, Cfg(entryOther, cfg.blocks, cfg.successors), ns, post, cover)
@@ -128,7 +128,7 @@ module BoogieCfg {
     WpCfgEntryIndep(a, cfg, entryOther, ns[0], post, cover);
   }
   
-  lemma {:verify false} WpCfgEntryIndep<A(!new)>(a: absval_interp<A>, cfg: Cfg, entryOther: BlockId, n: BlockId, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgEntryIndep<A(!new)>(a: absval_interp<A>, cfg: Cfg, entryOther: BlockId, n: BlockId, post: Predicate<A>, cover: set<BlockId>)
     requires cfg.successors.Keys <= cfg.blocks.Keys
     ensures WpCfg(a, cfg, n, post, cover) == WpCfg(a, Cfg(entryOther, cfg.blocks, cfg.successors), n, post, cover)
     decreases cover, 0
@@ -142,20 +142,20 @@ module BoogieCfg {
     }  
   }
 
-  /*======================Acyclicity lemma {:verify false}s ===================================*/
+  /*======================Acyclicity lemmas ===================================*/
 
-  lemma {:verify false} IsAcyclicSeqForall(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicSeqForall(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
     requires IsAcyclicSeq(r, ns, cover)
     ensures forall n :: n in ns ==> IsAcyclic(r, n, cover)
   { }
 
-  lemma {:verify false} IsAcyclicElem(r: SuccessorRel, ns: seq<BlockId>, nSucc: BlockId, cover: set<BlockId>)
+  lemma IsAcyclicElem(r: SuccessorRel, ns: seq<BlockId>, nSucc: BlockId, cover: set<BlockId>)
     requires IsAcyclicSeq(r, ns, cover)
     requires nSucc in ns
     ensures IsAcyclic(r, nSucc, cover)
   { }
 
-  lemma {:verify false} IsAcyclicSeqLargerCover(r: SuccessorRel, ns: seq<BlockId>, cover1: set<BlockId>, cover2: set<BlockId>)
+  lemma IsAcyclicSeqLargerCover(r: SuccessorRel, ns: seq<BlockId>, cover1: set<BlockId>, cover2: set<BlockId>)
     requires cover1 <= cover2 && IsAcyclicSeq(r, ns, cover1)
     ensures IsAcyclicSeq(r, ns, cover2)
     decreases cover1, 1, ns
@@ -166,7 +166,7 @@ module BoogieCfg {
     }
   }
 
-  lemma {:verify false} IsAcyclicLargerCover(r: SuccessorRel, n: BlockId, cover1: set<BlockId>, cover2: set<BlockId>)
+  lemma IsAcyclicLargerCover(r: SuccessorRel, n: BlockId, cover1: set<BlockId>, cover2: set<BlockId>)
     requires cover1 <= cover2 && IsAcyclic(r, n, cover1)
     ensures IsAcyclic(r, n, cover2)
     decreases cover1, 0
@@ -176,7 +176,7 @@ module BoogieCfg {
     }
   }
 
-  lemma {:verify false} IsAcyclicSeqMerge(
+  lemma IsAcyclicSeqMerge(
     r1: SuccessorRel, 
     r2: SuccessorRel, 
     ns1: seq<BlockId>,
@@ -215,7 +215,7 @@ module BoogieCfg {
     }
   }
 
-  lemma {:verify false} IsAcyclicMerge(
+  lemma IsAcyclicMerge(
     r1: SuccessorRel, 
     r2: SuccessorRel, 
     n1Entry: BlockId,
@@ -255,7 +255,7 @@ module BoogieCfg {
     }
   }
 
-  lemma {:verify false} WpCfgConjunctionMerge<A(!new)>(
+  lemma WpCfgConjunctionMerge<A(!new)>(
     a: absval_interp<A>, 
     g1: Cfg,
     g2: Cfg,
@@ -302,7 +302,7 @@ module BoogieCfg {
     WpCfgMerge(a, g1, g2, ns[0], exit1, post, cover1, cover2);
   }
 
-  lemma {:verify false} WpCfgMerge<A(!new)>(
+  lemma WpCfgMerge<A(!new)>(
     a: absval_interp<A>, 
     g1: Cfg,
     g2: Cfg,
@@ -393,7 +393,7 @@ module BoogieCfg {
     }
 
   
-  lemma {:verify false} WpCfgConjunctionLargerCover<A(!new)>(
+  lemma WpCfgConjunctionLargerCover<A(!new)>(
     a: absval_interp<A>, 
     g: Cfg,
     ns: seq<BlockId>,
@@ -410,7 +410,7 @@ module BoogieCfg {
     WpCfgLargerCover(a, g, ns[0], post, cover1, cover2);
   }
 
-  lemma {:verify false} WpCfgLargerCover<A(!new)>(
+  lemma WpCfgLargerCover<A(!new)>(
     a: absval_interp<A>, 
     g: Cfg,
     n: BlockId,
@@ -432,7 +432,7 @@ module BoogieCfg {
     }
   }
 
-  lemma {:verify false} WpCfgConjunctionExtend<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg2: Cfg, b1: map<BlockId, BasicBlock>, r1: SuccessorRel, ns: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgConjunctionExtend<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg2: Cfg, b1: map<BlockId, BasicBlock>, r1: SuccessorRel, ns: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>)
     requires 
       var r2 := cfg2.successors;
       && |ns| >= 1
@@ -453,7 +453,7 @@ module BoogieCfg {
     WpCfgExtend(a, cfgMerged, cfg2, b1, r1, ns[0], post, cover);
   }
 
-  lemma {:verify false} WpCfgExtend2<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg1: Cfg, b2: map<BlockId, BasicBlock>, r2: SuccessorRel, n1Entry: BlockId, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgExtend2<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg1: Cfg, b2: map<BlockId, BasicBlock>, r2: SuccessorRel, n1Entry: BlockId, post: Predicate<A>, cover: set<BlockId>)
     requires 
       var r1 := cfg1.successors;
       && cfgMerged.successors == r1 + r2
@@ -474,7 +474,7 @@ module BoogieCfg {
     WpCfgExtend(a, cfgMerged, cfg1, b2, r2, n1Entry, post, cover);
   }
   
-  lemma {:verify false} WpCfgExtend<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg2: Cfg, b1: map<BlockId, BasicBlock>, r1: SuccessorRel, n2Entry: BlockId, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgExtend<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg2: Cfg, b1: map<BlockId, BasicBlock>, r1: SuccessorRel, n2Entry: BlockId, post: Predicate<A>, cover: set<BlockId>)
     requires 
       var r2 := cfg2.successors;
       && cfgMerged.successors == r1 + r2
@@ -517,7 +517,7 @@ module BoogieCfg {
     } 
   }
   /*
-  lemma {:verify false} IsAcyclicUpdate(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicUpdate(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
     requires IsAcyclic(r, entry, cover)
     requires !(n in r.Keys)
     requires entry != n;
@@ -527,7 +527,7 @@ module BoogieCfg {
     ensures IsAcyclic(r[n := m], entry, cover)
   */
 
-  lemma {:verify false} WpCfgUpdate<A(!new)>(a: absval_interp<A>, cfg: Cfg, n: BlockId, source: (BlockId, SimpleCmd), target: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgUpdate<A(!new)>(a: absval_interp<A>, cfg: Cfg, n: BlockId, source: (BlockId, SimpleCmd), target: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>)
     requires IsAcyclic(cfg.successors, n, cover)
     requires cfg.successors.Keys <= cfg.blocks.Keys
     requires source.0 !in cfg.blocks.Keys
@@ -548,14 +548,14 @@ module BoogieCfg {
 
   /*
 
-  lemma {:verify false} IsAcyclicUpdate2(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicUpdate2(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
     requires IsAcyclic(r, entry, cover)
     requires !(n in r.Keys)
     requires (forall i :: 0 <= i < |m| ==> ! (m[i] in r.Keys) && !(m[i] ==n))
     ensures IsAcyclic(r[n := m], entry, cover + {n})
   */
 
-  lemma {:verify true} WpCfgConjunctionUpdate2<A(!new)>(a: absval_interp<A>, cfg: Cfg, ns: seq<BlockId>, source: BlockId, target: BlockId, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgConjunctionUpdate2<A(!new)>(a: absval_interp<A>, cfg: Cfg, ns: seq<BlockId>, source: BlockId, target: BlockId, post: Predicate<A>, cover: set<BlockId>)
     requires IsAcyclicSeq(cfg.successors, ns, cover)
     requires |ns| > 0
     requires cfg.successors.Keys <= cfg.blocks.Keys
@@ -570,7 +570,7 @@ module BoogieCfg {
       WpCfgUpdate2(a, cfg, ns[0], source, target, post, cover);
     }
 
-  lemma {:verify true} WpCfgUpdate2<A(!new)>(a: absval_interp<A>, cfg: Cfg, n: BlockId, source: BlockId, target: BlockId, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgUpdate2<A(!new)>(a: absval_interp<A>, cfg: Cfg, n: BlockId, source: BlockId, target: BlockId, post: Predicate<A>, cover: set<BlockId>)
     requires IsAcyclic(cfg.successors, n, cover)
     requires cfg.successors.Keys <= cfg.blocks.Keys
     requires source in cfg.blocks.Keys
@@ -613,7 +613,7 @@ module BoogieCfg {
     }
   }
 
-  lemma {:verify false} IsAcyclicExtendSeq(r1: SuccessorRel, r2: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicExtendSeq(r1: SuccessorRel, r2: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
     requires IsAcyclicSeq(r2, ns, cover)
     requires (forall i :: 0 <= i < |ns| ==> !(ns[i] in r1.Keys))
     requires 
@@ -628,7 +628,7 @@ module BoogieCfg {
     }
   }
  
-  lemma {:verify false} IsAcyclicExtend(r1: SuccessorRel, r2: SuccessorRel, n2Entry: BlockId, cover: set<BlockId>)
+  lemma IsAcyclicExtend(r1: SuccessorRel, r2: SuccessorRel, n2Entry: BlockId, cover: set<BlockId>)
     requires IsAcyclic(r2, n2Entry, cover)
     requires !(n2Entry in r1.Keys)
     requires 
@@ -646,7 +646,7 @@ module BoogieCfg {
     }
   }
 
-  lemma {:verify false} IsAcyclicExtend2(r1: SuccessorRel, r2: SuccessorRel, n1Entry: BlockId, cover: set<BlockId>)
+  lemma IsAcyclicExtend2(r1: SuccessorRel, r2: SuccessorRel, n1Entry: BlockId, cover: set<BlockId>)
     requires IsAcyclic(r1, n1Entry, cover)
     requires !(n1Entry in r2.Keys)
     requires 
@@ -659,7 +659,7 @@ module BoogieCfg {
     assert r2 + r1 == r1 + r2;
   }
 
-  lemma {:verify false} IsAcyclicUpdate(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicUpdate(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
     requires IsAcyclic(r, entry, cover)
     requires !(n in r.Keys)
     requires entry != n;
@@ -672,13 +672,13 @@ module BoogieCfg {
     assert r+map[n := m] == r[n := m];
   }
 
-  lemma {:verify false} IsAcyclicSeqOneStep(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicSeqOneStep(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
     requires (forall i :: 0 <= i < |ns| ==> ! (ns[i] in r.Keys))
     ensures IsAcyclicSeq(r, ns, cover)
   {
   }
 
-  lemma {:verify false} IsAcyclicSeqUpdate2(r: SuccessorRel, ns: seq<BlockId>, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicSeqUpdate2(r: SuccessorRel, ns: seq<BlockId>, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
     requires IsAcyclicSeq(r, ns, cover)
     requires (forall i :: 0 <= i < |m| ==> ! (m[i] in r.Keys) && !(m[i] == n))
     ensures IsAcyclicSeq(r[n := m], ns, cover + {n})
@@ -690,7 +690,7 @@ module BoogieCfg {
     }
   }
 
-  lemma {:verify false} IsAcyclicUpdate2(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicUpdate2(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
     requires IsAcyclic(r, entry, cover)
     requires (forall i :: 0 <= i < |m| ==> ! (m[i] in r.Keys) && !(m[i] ==n))
     ensures IsAcyclic(r[n := m], entry, cover + {n})
