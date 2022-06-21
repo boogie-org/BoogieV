@@ -126,7 +126,7 @@ module AstToCfg {
         (cfg, nextVersion2, exitOptResult)
   }
 
-  lemma {:verify true} AstToCfgAcyclic(
+  lemma AstToCfgAcyclic(
     c: Cmd, 
     nextVersion: BlockId)
     requires NoBreaksScopedVarsLoops(c)

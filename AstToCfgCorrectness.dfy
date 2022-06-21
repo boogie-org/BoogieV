@@ -30,7 +30,7 @@ module AstToCfgCorrectness
     requires IsAcyclic(cfg.successors, n, cover2)
     ensures WpCfg(a, cfg, n, post, cover1) == WpCfg(a, cfg, n, post, cover2)
 
-  lemma {:verify false} LiftWpFromBranchToFull<A(!new)>(a: absval_interp<A>, entry: BlockId, branchTarget: seq<BlockId>, cfgThn: Cfg, cfgEls: Cfg, thnExit: BlockId, elsExit: BlockId, joinId: BlockId, post: Predicate<A>, cover: set<BlockId>, cover': set<BlockId>)
+  lemma  LiftWpFromBranchToFull<A(!new)>(a: absval_interp<A>, entry: BlockId, branchTarget: seq<BlockId>, cfgThn: Cfg, cfgEls: Cfg, thnExit: BlockId, elsExit: BlockId, joinId: BlockId, post: Predicate<A>, cover: set<BlockId>, cover': set<BlockId>)
   requires IsAcyclic(cfgThn.successors, cfgThn.entry, cover)
   requires cover + {thnExit} + {elsExit} <= cover'
   requires cfgThn.successors.Keys <= cfgThn.blocks.Keys
@@ -111,7 +111,7 @@ module AstToCfgCorrectness
     }
   }
 
-  lemma {:verify false} CoveringSetAux(nextVersion0: nat, nextVersion1: nat, nextVersion2: nat, nextVersion3: nat, exclude1: nat, exclude2: nat, exclude3: nat)
+  lemma  CoveringSetAux(nextVersion0: nat, nextVersion1: nat, nextVersion2: nat, nextVersion3: nat, exclude1: nat, exclude2: nat, exclude3: nat)
     requires nextVersion0 < nextVersion1 < nextVersion2 <= nextVersion3;
     requires nextVersion0 < exclude1 < nextVersion3
     requires nextVersion0 < exclude2 < nextVersion3
@@ -136,7 +136,7 @@ module AstToCfgCorrectness
   }
   
   
-  lemma {:verify true} {:induction false} AstToCfgSemanticsPreservation<A(!new)>(
+  lemma {:induction false} {:verify false} AstToCfgSemanticsPreservation<A(!new)>(
     a: absval_interp<A>,
     c: Cmd, 
     nextVersion: BlockId,
@@ -151,304 +151,290 @@ module AstToCfgCorrectness
 
       IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', exitOpt.value)) ==> 
         WpShallow(a, c, post)(s) == WpCfg(a, cfg, cfg.entry, post.normal, cover')(s);
-    {
-      match c {
-        case SimpleCmd(sc) => 
-        case Seq(c1, c2) =>
-          var (cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
-          var exit1 := exitOpt1.value;
-          
-          var (cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
-          var exit2 := exitOpt2.value; 
+  {
+    match c {
+      case SimpleCmd(sc) => 
+      case Seq(c1, c2) =>
+        var (cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
+        var exit1 := exitOpt1.value;
+        
+        var (cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
+        var exit2 := exitOpt2.value; 
 
-          var cover1 := CoveringSet(nextVersion, nextVersion1, exitOpt1.value);
-          var cover2 := CoveringSet(nextVersion1, nextVersion2, exitOpt2.value);
-          var cover3 := CoveringSet(nextVersion, nextVersion2, exitOpt2.value);
-          assert cover1 + cover2 <= cover3 by {
-            reveal CoveringSet();
-          }
+        var cover1 := CoveringSet(nextVersion, nextVersion1, exitOpt1.value);
+        var cover2 := CoveringSet(nextVersion1, nextVersion2, exitOpt2.value);
+        var cover3 := CoveringSet(nextVersion, nextVersion2, exitOpt2.value);
+        assert cover1 + cover2 <= cover3 by {
+          reveal CoveringSet();
+        }
 
-          var successors := (cfg1.successors + cfg2.successors)[exitOpt1.value := [cfg2.entry]];
+        var successors := (cfg1.successors + cfg2.successors)[exitOpt1.value := [cfg2.entry]];
 
-          assert successors == (cfg1.successors[exitOpt1.value := [cfg2.entry]] + cfg2.successors);
+        assert successors == (cfg1.successors[exitOpt1.value := [cfg2.entry]] + cfg2.successors);
 
-          var cfg1' := Cfg(cfg1.entry, cfg1.blocks, cfg1.successors[exitOpt1.value := [cfg2.entry]]);
+        var cfg1' := Cfg(cfg1.entry, cfg1.blocks, cfg1.successors[exitOpt1.value := [cfg2.entry]]);
 
-          var cfg' := Cfg(cfg1.entry, cfg1.blocks + cfg2.blocks, successors);
-          
-          AstToCfgAcyclic(c1, nextVersion);
-          AstToCfgAcyclic(c2, nextVersion1);
+        var cfg' := Cfg(cfg1.entry, cfg1.blocks + cfg2.blocks, successors);
+        
+        AstToCfgAcyclic(c1, nextVersion);
+        AstToCfgAcyclic(c2, nextVersion1);
 
-          if IsAcyclic(cfg'.successors, cfg1.entry, cover3)
-          {
-            calc {
-              WpShallow(a, c, post)(s);
-              WpShallow(a, Seq(c1,c2), post)(s); //normal definition
-              WpShallow(a, c1, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes))(s); //IH
-              {
-                AstToCfgSemanticsPreservation(a, c1, nextVersion, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes), s);
-              }
-              WpCfg(a, cfg1, cfg1.entry, WpShallow(a, c2, post), cover1)(s); //IH + pointwise
-              {
-                forall s' | true
-                ensures WpShallow(a, c2, post)(s') == WpCfg(a, cfg2, cfg2.entry, post.normal, cover2)(s')
-                { 
-                  AstToCfgSemanticsPreservation(a, c2, nextVersion1, post, s');
-                }
-                WpCfgPointwise(a, cfg1, cfg1.entry, WpShallow(a, c2, post), WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1, s);
-              }
-              WpCfg(a, cfg1, cfg1.entry, WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1)(s); 
-                { 
-                  reveal CoveringSet();
-
-                  assert cfg1.blocks.Keys == cfg1.successors.Keys + {exitOpt1.value};
-                  assert cfg2.blocks.Keys == cfg2.successors.Keys + {exitOpt2.value};
-                  assert cfg1.successors.Keys <= CoveringSet(nextVersion, nextVersion1, exit1); 
-                  assert cfg2.successors.Keys <= CoveringSet(nextVersion1, nextVersion2, exit1); 
-                  //assert CoveringSet(nextVersion, nextVersion1, {}) !! CoveringSet(nextVersion1, nextVersion2, {}); 
-                  assert cover3 == cover1+cover2+{exit1};
-                  
-                  assert cfg1.blocks.Keys !! cover2;
-
-                  WpCfgMerge(a, cfg1, cfg2, cfg1.entry, exit1, post.normal, cover1, cover2);
-                }
-              WpCfg(a, cfg', cfg1.entry, post.normal, cover3)(s);
-            }
-          }         
-        case Scope(optLabel, varDecls, body) =>
-          /*
-              var updatedScopes := 
-                if optLabel.Some? then 
-                  post.scopes[optLabel.value := post.normal]
-                else post.scopes;
-              var unquantifiedBody := 
-                assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
-                var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
-                prevState => 
-                  WpShallow(a, body, ResetVarsPost(a, varDecls, post', prevState));
-                  
-              s => ForallVarDeclsShallow(a, varDecls, unquantifiedBody(s))(s)
-          */
-          assert varDecls == []; 
-          var (bodyCfg, nextVersion', exitOpt) := AstToCfgAux(body, nextVersion);
-          var exit := exitOpt.value;
-          var cover := CoveringSet(nextVersion, nextVersion', exit);
-
-          /** In this simplified setting without breaks, adjusting the scope postconditions 
-          is not required. However, if one does not adjust the scope postconditions, then one
-          needs to prove that this results in the same semantics as with breaks. Here 
-          we just update the scopes to match the reference semantics. */
-
-          var updatedScopes := 
-            if optLabel.Some? then 
-              post.scopes[optLabel.value := post.normal]
-            else post.scopes;
-
-          assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
-          var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
-          var unquantifiedBody := 
-            WpShallow(a, body, ResetVarsPost(a, varDecls, post', s));
-
+        if IsAcyclic(cfg'.successors, cfg1.entry, cover3)
+        {
           calc {
             WpShallow(a, c, post)(s);
-            ForallVarDeclsShallow(a, varDecls, unquantifiedBody)(s);
-            { //scoped variable declarations have been compiled away
-              assert varDecls == []; 
+            WpShallow(a, Seq(c1,c2), post)(s); //normal definition
+            WpShallow(a, c1, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes))(s); //IH
+            {
+              AstToCfgSemanticsPreservation(a, c1, nextVersion, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes), s);
             }
-            unquantifiedBody(s);
-            WpShallow(a, body, ResetVarsPost(a, [], post', s))(s);
-            { 
-              WpShallowPointwise(a, body, ResetVarsPost(a, [], post', s), post', s);
+            WpCfg(a, cfg1, cfg1.entry, WpShallow(a, c2, post), cover1)(s); //IH + pointwise
+            {
+              forall s' | true
+              ensures WpShallow(a, c2, post)(s') == WpCfg(a, cfg2, cfg2.entry, post.normal, cover2)(s')
+              { 
+                AstToCfgSemanticsPreservation(a, c2, nextVersion1, post, s');
+              }
+              WpCfgPointwise(a, cfg1, cfg1.entry, WpShallow(a, c2, post), WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1, s);
             }
-            WpShallow(a, body, post')(s);
-            { AstToCfgAcyclic2(body, nextVersion);
-              AstToCfgSemanticsPreservation(a, body, nextVersion, post', s); }
-            WpCfg(a, bodyCfg, bodyCfg.entry, post.normal, cover)(s);
+            WpCfg(a, cfg1, cfg1.entry, WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1)(s); 
+              { 
+                reveal CoveringSet();
+
+                assert cfg1.blocks.Keys == cfg1.successors.Keys + {exitOpt1.value};
+                assert cfg2.blocks.Keys == cfg2.successors.Keys + {exitOpt2.value};
+                assert cfg1.successors.Keys <= CoveringSet(nextVersion, nextVersion1, exit1); 
+                assert cfg2.successors.Keys <= CoveringSet(nextVersion1, nextVersion2, exit1); 
+                //assert CoveringSet(nextVersion, nextVersion1, {}) !! CoveringSet(nextVersion1, nextVersion2, {}); 
+                assert cover3 == cover1+cover2+{exit1};
+                
+                assert cfg1.blocks.Keys !! cover2;
+
+                WpCfgMerge(a, cfg1, cfg2, cfg1.entry, exit1, post.normal, cover1, cover2);
+              }
+            WpCfg(a, cfg', cfg1.entry, post.normal, cover3)(s);
           }
-        case If(optCond, thn, els) =>
-          /** CFG thn branch */
-          var (entry, entryBlock) := (nextVersion, Skip);
-          var (cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entry+1);
+        }         
+      case Scope(optLabel, varDecls, body) =>
+        assert varDecls == []; 
+        var (bodyCfg, nextVersion', exitOpt) := AstToCfgAux(body, nextVersion);
+        var exit := exitOpt.value;
+        var cover := CoveringSet(nextVersion, nextVersion', exit);
+
+        /** In this simplified setting without breaks, adjusting the scope postconditions 
+        is not required. However, if one does not adjust the scope postconditions, then one
+        needs to prove that this results in the same semantics as with breaks. Here 
+        we just update the scopes to match the reference semantics. */
+
+        var updatedScopes := 
+          if optLabel.Some? then 
+            post.scopes[optLabel.value := post.normal]
+          else post.scopes;
+
+        assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
+        var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
+        var unquantifiedBody := 
+          WpShallow(a, body, ResetVarsPost(a, varDecls, post', s));
+
+        calc {
+          WpShallow(a, c, post)(s);
+          ForallVarDeclsShallow(a, varDecls, unquantifiedBody)(s);
+          { //scoped variable declarations have been compiled away
+            assert varDecls == []; 
+          }
+          unquantifiedBody(s);
+          WpShallow(a, body, ResetVarsPost(a, [], post', s))(s);
+          { 
+            WpShallowPointwise(a, body, ResetVarsPost(a, [], post', s), post', s);
+          }
+          WpShallow(a, body, post')(s);
+          { AstToCfgAcyclic2(body, nextVersion);
+            AstToCfgSemanticsPreservation(a, body, nextVersion, post', s); }
+          WpCfg(a, bodyCfg, bodyCfg.entry, post.normal, cover)(s);
+        }
+      case If(optCond, thn, els) =>
+        /** CFG thn branch */
+        var (entry, entryBlock) := (nextVersion, Skip);
+        var (cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entry+1);
 
 
-          /** CFG els branch */
-          var (cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
+        /** CFG els branch */
+        var (cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
 
-          var (thnEntry, thnS) := (cfgThn.entry, cfgThn.successors);
-          var thnExit := exitOpt1.value;
+        var (thnEntry, thnS) := (cfgThn.entry, cfgThn.successors);
+        var thnExit := exitOpt1.value;
 
-          var cover1 := CoveringSet(nextVersion+1, nextVersion1, thnExit);
-          AstToCfgAcyclic(thn, entry+1);
-          assert IsAcyclic(thnS, thnEntry, cover1);
+        var cover1 := CoveringSet(nextVersion+1, nextVersion1, thnExit);
+        AstToCfgAcyclic(thn, entry+1);
+        assert IsAcyclic(thnS, thnEntry, cover1);
 
-          var (elsEntry, elsS) := (cfgEls.entry, cfgEls.successors);
-          var elsExit := exitOpt2.value;
+        var (elsEntry, elsS) := (cfgEls.entry, cfgEls.successors);
+        var elsExit := exitOpt2.value;
 
-          var cover2 := CoveringSet(nextVersion1, nextVersion2, elsExit);
-          AstToCfgAcyclic(els, nextVersion1);
-          assert IsAcyclic(elsS, elsEntry, cover2);
+        var cover2 := CoveringSet(nextVersion1, nextVersion2, elsExit);
+        AstToCfgAcyclic(els, nextVersion1);
+        assert IsAcyclic(elsS, elsEntry, cover2);
 
-          var (joinId, joinBlock) := (nextVersion2, Skip);
+        var (joinId, joinBlock) := (nextVersion2, Skip);
 
-          /** result cfg */
-          var successorsBeforeJoin := (cfgThn.successors + cfgEls.successors)[entry := [cfgThn.entry, cfgEls.entry]];
-          var blocksBeforeJoin := (cfgThn.blocks + cfgEls.blocks)[entry := Skip];
-          var blocks := blocksBeforeJoin[joinId := joinBlock];
-          var successors := successorsBeforeJoin[thnExit := [joinId]][elsExit := [joinId]];
-          //var cfg' := Cfg(entry, blocks, successors);
+        /** result cfg */
+        var successorsBeforeJoin := (cfgThn.successors + cfgEls.successors)[entry := [cfgThn.entry, cfgEls.entry]];
+        var blocksBeforeJoin := (cfgThn.blocks + cfgEls.blocks)[entry := Skip];
+        var blocks := blocksBeforeJoin[joinId := joinBlock];
+        var successors := successorsBeforeJoin[thnExit := [joinId]][elsExit := [joinId]];
+        //var cfg' := Cfg(entry, blocks, successors);
 
-          var cfgThn' := 
-            if optCond.Some? then
-              Cfg(cfgThn.entry, cfgThn.blocks[cfgThn.entry := SeqSimple(Assume(optCond.value), cfgThn.blocks[cfgThn.entry])], cfgThn.successors)
-            else
-              cfgThn;
+        var cfgThn' := 
+          if optCond.Some? then
+            Cfg(cfgThn.entry, cfgThn.blocks[cfgThn.entry := SeqSimple(Assume(optCond.value), cfgThn.blocks[cfgThn.entry])], cfgThn.successors)
+          else
+            cfgThn;
 
-          var cfgEls' := 
-            if optCond.Some? then
-              Cfg(cfgEls.entry, cfgEls.blocks[cfgEls.entry := SeqSimple(Assume(UnOp(Not, optCond.value)), cfgEls.blocks[cfgEls.entry])], cfgEls.successors)
-            else
-              cfgEls;
+        var cfgEls' := 
+          if optCond.Some? then
+            Cfg(cfgEls.entry, cfgEls.blocks[cfgEls.entry := SeqSimple(Assume(UnOp(Not, optCond.value)), cfgEls.blocks[cfgEls.entry])], cfgEls.successors)
+          else
+            cfgEls;
 
-          var cfg' := CfgForIf(entry, cfgThn', thnExit, cfgEls', elsExit, joinId);
-          var cover3 := CoveringSet(nextVersion, nextVersion2+1, joinId);
-          
-          /* we lift the WP of the then-branch-CFG (resp. else-branch-CFG) to the entire Cfg 
-            without the guard condition in the then "else-branch-CFG" (resp then-branch-CFG).
-            This way we can apply the induction hypothesis to relate the then-AST-command 
-            (resp. else-AST-command) with the then-branch-CFG (resp. else-branch-CFG) */
+        var cfg' := CfgForIf(entry, cfgThn', thnExit, cfgEls', elsExit, joinId);
+        var cover3 := CoveringSet(nextVersion, nextVersion2+1, joinId);
+        
+        /* we lift the WP of the then-branch-CFG (resp. else-branch-CFG) to the entire Cfg 
+          without the guard condition in the then "else-branch-CFG" (resp then-branch-CFG).
+          This way we can apply the induction hypothesis to relate the then-AST-command 
+          (resp. else-AST-command) with the then-branch-CFG (resp. else-branch-CFG) */
 
-          var cfgThnInter := CfgForIf(entry, cfgThn, thnExit, cfgEls', elsExit, joinId);
-          var cfgElsInter := CfgForIf(entry, cfgThn', thnExit, cfgEls, elsExit, joinId);
+        var cfgThnInter := CfgForIf(entry, cfgThn, thnExit, cfgEls', elsExit, joinId);
+        var cfgElsInter := CfgForIf(entry, cfgThn', thnExit, cfgEls, elsExit, joinId);
 
-          /** Lift then-branch-CFG WP */
+        /** Lift then-branch-CFG WP */
 
-          forall s' | true 
-            ensures WpShallow(a, thn, post)(s') == WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry})(s');
-          {           
-            calc {
-              WpShallow(a, thn, post)(s');
-                {
-                  AstToCfgSemanticsPreservation(a, thn, entry+1, post, s'); //TODO: very slow, speed up
+        forall s' | true 
+          ensures WpShallow(a, thn, post)(s') == WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry})(s');
+        {           
+          calc {
+            WpShallow(a, thn, post)(s');
+              {
+                AstToCfgSemanticsPreservation(a, thn, entry+1, post, s'); //TODO: very slow, speed up
+              }
+            WpCfg(a, cfgThn, cfgThn.entry, post.normal, cover1)(s');
+              { 
+                assert cover1 + {thnExit} + {elsExit} <= cover3-{entry} by {
+                  CoveringSetAux(nextVersion, nextVersion+1, nextVersion1, nextVersion2+1, thnExit, elsExit, joinId);
                 }
-              WpCfg(a, cfgThn, cfgThn.entry, post.normal, cover1)(s');
-                { 
-                  assert cover1 + {thnExit} + {elsExit} <= cover3-{entry} by {
-                    CoveringSetAux(nextVersion, nextVersion+1, nextVersion1, nextVersion2+1, thnExit, elsExit, joinId);
-                  }
-                  LiftWpFromBranchToFull(a, entry, [cfgThn.entry, cfgEls.entry], cfgThn, cfgEls', thnExit, elsExit, joinId, post.normal, cover1, cover3-{entry}); 
+                LiftWpFromBranchToFull(a, entry, [cfgThn.entry, cfgEls.entry], cfgThn, cfgEls', thnExit, elsExit, joinId, post.normal, cover1, cover3-{entry}); 
+              }
+            WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry})(s');
+          } 
+        }
+
+        /** Lift els-branch-CFG WP */
+        forall s' | true
+          ensures WpShallow(a, els, post)(s') == WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry})(s');
+        {
+          calc {
+            WpShallow(a, els, post)(s');
+              { AstToCfgSemanticsPreservation(a, els, nextVersion1, post, s'); }
+            WpCfg(a, cfgEls, cfgEls.entry, post.normal, cover2)(s');
+              { 
+                assert cover2 + {elsExit} + {thnExit} <= cover3-{entry} by {
+                  CoveringSetAux(nextVersion, nextVersion1, nextVersion2, nextVersion2+1, elsExit, thnExit, joinId);
                 }
-              WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry})(s');
-            } 
+                
+                LiftWpFromBranchToFull(a, entry, [cfgThn'.entry, cfgEls.entry], cfgEls, cfgThn', elsExit, thnExit, joinId, post.normal, cover2, cover3-{entry}); 
+                assert cfgEls.blocks + cfgThn'.blocks == cfgThn'.blocks + cfgEls.blocks;
+                assert cfgEls.successors + cfgThn'.successors == cfgThn'.successors + cfgEls.successors;
+                assert successors == successorsBeforeJoin[elsExit := [joinId]][thnExit := [joinId]];
+                /** to speed up the proof */
+                var blocksBeforeJoin'' := (cfgEls.blocks + cfgThn'.blocks)[entry := Skip];
+                var successorsBeforeJoin'' := (cfgEls.successors + cfgThn'.successors)[entry := [cfgThn'.entry, cfgEls.entry]];
+                var blocks'' := blocksBeforeJoin''[joinId := Skip];
+                var successors'' := successorsBeforeJoin''[elsExit := [joinId]][thnExit := [joinId]];
+                var cfg'' := Cfg(entry, blocks'', successors'');
+                assert
+                  WpCfg(a, cfgEls, cfgEls.entry, post.normal, cover2) ==
+                  WpCfg(a, cfg'', cfgEls.entry, post.normal, cover3-{entry}); 
+              }
+            WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry})(s');
+          }
+        }
+
+        if IsAcyclic(cfg'.successors, cfg'.entry, cover3) {
+          calc {
+            WpCfg(a, cfg', cfg'.entry, post.normal, cover3)(s);
+              { assert cfg'.blocks[entry] == Skip;
+                assert cfg'.successors[entry] ==  [cfgThn.entry, cfgEls.entry];
+              }
+            WpShallowSimpleCmd(a, Skip, WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry}))(s);
+            WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry})(s);
+            Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
           }
 
-          /** Lift els-branch-CFG WP */
-          forall s' | true
-            ensures WpShallow(a, els, post)(s') == WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry})(s');
-          {
+          if(optCond == None) {
             calc {
-              WpShallow(a, els, post)(s');
-                { AstToCfgSemanticsPreservation(a, els, nextVersion1, post, s'); }
-              WpCfg(a, cfgEls, cfgEls.entry, post.normal, cover2)(s');
-                { 
-                  assert cover2 + {elsExit} + {thnExit} <= cover3-{entry} by {
-                    CoveringSetAux(nextVersion, nextVersion1, nextVersion2, nextVersion2+1, elsExit, thnExit, joinId);
-                  }
-                  
-                  LiftWpFromBranchToFull(a, entry, [cfgThn'.entry, cfgEls.entry], cfgEls, cfgThn', elsExit, thnExit, joinId, post.normal, cover2, cover3-{entry}); 
-                  assert cfgEls.blocks + cfgThn'.blocks == cfgThn'.blocks + cfgEls.blocks;
-                  assert cfgEls.successors + cfgThn'.successors == cfgThn'.successors + cfgEls.successors;
-                  assert successors == successorsBeforeJoin[elsExit := [joinId]][thnExit := [joinId]];
-                  /** to speed up the proof */
-                  var blocksBeforeJoin'' := (cfgEls.blocks + cfgThn'.blocks)[entry := Skip];
-                  var successorsBeforeJoin'' := (cfgEls.successors + cfgThn'.successors)[entry := [cfgThn'.entry, cfgEls.entry]];
-                  var blocks'' := blocksBeforeJoin''[joinId := Skip];
-                  var successors'' := successorsBeforeJoin''[elsExit := [joinId]][thnExit := [joinId]];
-                  var cfg'' := Cfg(entry, blocks'', successors'');
-                  assert
-                    WpCfg(a, cfgEls, cfgEls.entry, post.normal, cover2) ==
-                    WpCfg(a, cfg'', cfgEls.entry, post.normal, cover3-{entry}); 
-                }
-              WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry})(s');
-            }
-          }
-
-          if IsAcyclic(cfg'.successors, cfg'.entry, cover3) {
-            calc {
-              WpCfg(a, cfg', cfg'.entry, post.normal, cover3)(s);
-                { assert cfg'.blocks[entry] == Skip;
-                  assert cfg'.successors[entry] ==  [cfgThn.entry, cfgEls.entry];
-                }
-              WpShallowSimpleCmd(a, Skip, WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry}))(s);
-              WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry})(s);
               Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
+              Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
+              Util.AndOpt(WpShallow(a, thn, post)(s), WpShallow(a, els, post)(s));
+              WpShallow(a, c, post)(s);
+            }
+          } else {
+            var guard := optCond.value;
+
+            assert IsAcyclicSeq(cfg'.successors, [cfgThn.entry, cfgEls.entry], cover3-{entry});
+            assert && IsAcyclic(cfg'.successors, cfgThn.entry, cover3-{entry})
+                    && IsAcyclicSeq(cfg'.successors, [cfgEls.entry], cover3-{entry});
+            assert IsAcyclic(cfg'.successors, cfgEls.entry, cover3-{entry});
+
+            //relate then-branch-CFG with then-branch AST
+            calc {
+              WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s);
+              { 
+                var thnOrigBlock := cfgThn.blocks[cfgThn.entry];
+                var cfgTemp := Cfg(cfg'.entry, cfg'.blocks[cfgThn.entry := thnOrigBlock], cfg'.successors);
+                WpCfgEntrySplit(a, cfg', cfgThn.entry, Assume(guard), thnOrigBlock, post.normal, cover3-{entry});
+                assert cfgTemp == cfgThnInter;
+              }
+              WpShallowSimpleCmd(a, Assume(guard), WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry}))(s);
+              { 
+                WpShallowSimpleCmdPointwise(a, Assume(guard), WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry}), WpShallow(a, thn, post), s);
+              } 
+              WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s);
             }
 
-            if(optCond == None) {
-              calc {
-                Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
-                Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
-                Util.AndOpt(WpShallow(a, thn, post)(s), WpShallow(a, els, post)(s));
-                WpShallow(a, c, post)(s);
+            //relate else-branch-CFG with else-branch AST
+            calc {
+              WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s);
+              {  /** This proof step relies on acyclicity currently (since WpCfgEntrySplit relies on acyclicity).
+                      It should be possible to not have to rely on acyclicity here. */
+                var elsOrigBlock := cfgEls.blocks[cfgEls.entry];
+                var cfgTemp := Cfg(cfg'.entry, cfg'.blocks[cfgEls.entry := elsOrigBlock], cfg'.successors);
+                WpCfgEntrySplit(a, cfg', cfgEls.entry, Assume(UnOp(Not, guard)), elsOrigBlock, post.normal, cover3-{entry});
+                assert cfgTemp == cfgElsInter;
               }
-            } else {
-              var guard := optCond.value;
-
-              assert IsAcyclicSeq(cfg'.successors, [cfgThn.entry, cfgEls.entry], cover3-{entry});
-              assert && IsAcyclic(cfg'.successors, cfgThn.entry, cover3-{entry})
-                     && IsAcyclicSeq(cfg'.successors, [cfgEls.entry], cover3-{entry});
-              assert IsAcyclic(cfg'.successors, cfgEls.entry, cover3-{entry});
-
-              //relate then-branch-CFG with then-branch AST
-              calc {
-                WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s);
-                { 
-                  var thnOrigBlock := cfgThn.blocks[cfgThn.entry];
-                  var cfgTemp := Cfg(cfg'.entry, cfg'.blocks[cfgThn.entry := thnOrigBlock], cfg'.successors);
-                  WpCfgEntrySplit(a, cfg', cfgThn.entry, Assume(guard), thnOrigBlock, post.normal, cover3-{entry});
-                  assert cfgTemp == cfgThnInter;
-                }
-                WpShallowSimpleCmd(a, Assume(guard), WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry}))(s);
-                { 
-                  WpShallowSimpleCmdPointwise(a, Assume(guard), WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry}), WpShallow(a, thn, post), s);
-                } 
-                WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s);
+              WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry}))(s);
+              { 
+                WpShallowSimpleCmdPointwise(a, Assume(guard), WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry}), WpShallow(a, els, post), s);
               }
+              WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpShallow(a, els, post))(s);
+            }
 
-              //relate else-branch-CFG with else-branch AST
-              calc {
-                WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s);
-                {  /** This proof step relies on acyclicity currently (since WpCfgEntrySplit relies on acyclicity).
-                       It should be possible to not have to rely on acyclicity here. */
-                  var elsOrigBlock := cfgEls.blocks[cfgEls.entry];
-                  var cfgTemp := Cfg(cfg'.entry, cfg'.blocks[cfgEls.entry := elsOrigBlock], cfg'.successors);
-                  WpCfgEntrySplit(a, cfg', cfgEls.entry, Assume(UnOp(Not, guard)), elsOrigBlock, post.normal, cover3-{entry});
-                  assert cfgTemp == cfgElsInter;
-                }
-                WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry}))(s);
-                { 
-                  WpShallowSimpleCmdPointwise(a, Assume(guard), WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry}), WpShallow(a, els, post), s);
-                }
-                WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpShallow(a, els, post))(s);
-              }
-
-              //final result
-              calc {
-                WpShallow(a, c, post)(s);
-                { WpShallowIfEquiv2(a, guard, thn, els, post, s); }
-                Util.AndOpt(
-                  WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s),
-                  WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpShallow(a, els, post))(s)
-                );
-                Util.AndOpt(
-                  WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), 
-                  WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s)
-                );
-              }
-            } 
-          
-          //TODO: proving postcondition takes long, find way to reduce time
+            //final result
+            calc {
+              WpShallow(a, c, post)(s);
+              { WpShallowIfEquiv2(a, guard, thn, els, post, s); }
+              Util.AndOpt(
+                WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s),
+                WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpShallow(a, els, post))(s)
+              );
+              Util.AndOpt(
+                WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), 
+                WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s)
+              );
+            }
+          } 
+        
+        //TODO: proving postcondition takes long, find way to reduce time
         } 
     }
   }
-
 }
