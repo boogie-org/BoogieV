@@ -196,8 +196,6 @@ module BoogieSemantics {
         var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
         prevState => 
           WpShallow(a, body, ResetVarsPost(a, varDecls, post', prevState));
-        /* note that this is correct only if scopes do not share variables (otherwise it could happen that the forall 
-          quantifier binds variables of the same beyond the current scope) */
       
       s => ForallVarDeclsShallow(a, varDecls, unquantifiedBody(s))(s)
     case If(optCond, thn, els) =>

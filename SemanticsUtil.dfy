@@ -122,9 +122,10 @@ module SemanticsUtil {
   requires cfg.successors.Keys <= cfg.blocks.Keys
   requires entry in cfg.blocks
   requires cfg.blocks[entry] == SeqSimple(prefix, suffix)
+  requires IsAcyclic(cfg.successors, entry, cover)
   ensures 
     var cfg' := Cfg(cfg.entry, cfg.blocks[entry := suffix], cfg.successors);
-    IsAcyclic(cfg.successors, entry, cover) ==> WpCfg(a, cfg, entry, p, cover) == WpShallowSimpleCmd(a, prefix, WpCfg(a, cfg', entry, p, cover))
+    WpCfg(a, cfg, entry, p, cover) == WpShallowSimpleCmd(a, prefix, WpCfg(a, cfg', entry, p, cover))
   {
     if IsAcyclic(cfg.successors, entry, cover) {
       var cfg' := Cfg(cfg.entry, cfg.blocks[entry := suffix], cfg.successors);

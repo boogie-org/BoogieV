@@ -12,15 +12,15 @@ module AstToCfg {
   import opened BoogieCfg
   import Math
 
-  predicate NoBreaksScopesLoops(c: Cmd)
+  predicate NoBreaksScopedVarsLoops(c: Cmd)
   {
     match c
     case SimpleCmd(_) => true
     case Break(optLbl) => false
-    case Seq(thn, els) => NoBreaksScopesLoops(thn) && NoBreaksScopesLoops(els)
+    case Seq(thn, els) => NoBreaksScopedVarsLoops(thn) && NoBreaksScopedVarsLoops(els)
     case Loop(_,_) => false
-    case Scope(_,_,_) => false
-    case If(_, thn, els) => NoBreaksScopesLoops(thn) && NoBreaksScopesLoops(els)
+    case Scope(_, varDecls, body) => varDecls == [] && NoBreaksScopedVarsLoops(body)
+    case If(_, thn, els) => NoBreaksScopedVarsLoops(thn) && NoBreaksScopedVarsLoops(els)
   }
 
   function {:opaque} CoveringSet(oldVersion: nat, newVersion: nat, exclude: nat) : set<nat>
@@ -39,7 +39,7 @@ module AstToCfg {
   */
   function method AstToCfgAux(c: Cmd, nextVersion: BlockId) : (Cfg, BlockId, Option<BlockId>) 
     //Option for exit block needed once break statements are taken into account
-    requires NoBreaksScopesLoops(c)
+    requires NoBreaksScopedVarsLoops(c)
     ensures  var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
                 exitOpt != None  &&
                 var exit := exitOpt.value;
@@ -47,7 +47,6 @@ module AstToCfg {
                 && nextVersion < nextVersion' 
                 && (nextVersion <= exit < nextVersion')
                 && (forall n :: n in cfg.blocks.Keys ==> nextVersion <= n < nextVersion')
-                //&& cfg.successors.Keys <= CoveringSet(nextVersion, nextVersion', {exit})
                 && cfg.entry in cfg.blocks.Keys
                 && exit in cfg.blocks.Keys
                    //exit block is the only sink block (note that exit block is not in successors.Keys)
@@ -64,19 +63,20 @@ module AstToCfg {
       else 
         var (cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
 
-        //merge cfgs
-        /*
-        var cover1 := CoveringSet(nextVersion, nextVersion1, {exitOpt1.value});
-        var cover2 := CoveringSet(nextVersion1, nextVersion2, {exitOpt2.value});
-        var cover3 := CoveringSet(nextVersion, nextVersion2, {exitOpt2.value});
-        assert cover1 + cover2 <= cover3 by {
-          reveal CoveringSet();
-        }
-        */
         var blocks := cfg1.blocks + cfg2.blocks;
         var successors := (cfg1.successors + cfg2.successors)[exitOpt1.value := [cfg2.entry]];
   
         (Cfg(cfg1.entry, cfg1.blocks + cfg2.blocks, successors), nextVersion2, exitOpt2)
+    case Scope(_, varDecls, body) =>
+      // scoped variable declarations have been compiled away
+      assert varDecls == [];
+
+      /* since our precondition ensures that there are no breaks, we need not 
+      worry about jumps out of this scope and can just return the result for the 
+      body (TODO: lift the precondition) */
+
+      AstToCfgAux(body, nextVersion)
+
     case If(optCond, thn, els) => 
       /** CFG thn branch */
       var (entryId, entryBlock) := (nextVersion, Skip);
@@ -126,10 +126,10 @@ module AstToCfg {
         (cfg, nextVersion2, exitOptResult)
   }
 
-  lemma AstToCfgAcyclic(
+  lemma {:verify true} AstToCfgAcyclic(
     c: Cmd, 
     nextVersion: BlockId)
-    requires NoBreaksScopesLoops(c)
+    requires NoBreaksScopedVarsLoops(c)
     ensures  
       var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
 
@@ -186,6 +186,7 @@ module AstToCfg {
           reveal CoveringSet();
         }
         IsAcyclicLargerCover(successors, cfg1.entry, (cover1 + {exit1}) + cover2, cover3);
+      case Scope(_, varDecls, body) => 
       case If(optCond, thn, els) => 
         /** CFG thn branch */
         var (entryId, entryBlock) := (nextVersion, Skip);
