@@ -133,6 +133,19 @@ module BoogieLang {
       }
     }
 
+    function method FreeVars(): set<var_name>
+    {
+      match this {
+        case Var(x) => {x}
+        case ELit(lit) => {}
+        case UnOp(uop, e) => e.FreeVars()
+        case BinOp(e1, bop, e2) => e1.FreeVars() + e2.FreeVars()
+        case Old(e) => {}
+        case Binder(binderKind, x, t, e) => 
+          e.FreeVars() - {x}
+      }
+    }
+
     static const TrueExpr: Expr := ELit(LitBool(true));
 
     static const FalseExpr: Expr := ELit(LitBool(false));
