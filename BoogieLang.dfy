@@ -1,9 +1,12 @@
 include "dafny-libraries/src/Wrappers.dfy"
 include "Util.dfy"
+include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
 
 module BoogieLang {
   import opened Wrappers 
   import opened Util
+  import Sequences = Seq
+
 
   datatype Lit = LitInt(int) | LitBool(bool)
   {
@@ -57,7 +60,7 @@ module BoogieLang {
   type proc_name = string
   type lbl_name = string
   type tcon_name = string
-  type fun_name = string
+  type fun_name = string 
 
   datatype PrimTy = TBool | TInt
   {
@@ -88,6 +91,8 @@ module BoogieLang {
     case LitInt(_) => TInt
     case LitBool(_) => TBool
   }
+
+  type VarDecl = (var_name, Ty)
 
   datatype BinderKind = ForallQ | ExistsQ
   {
@@ -156,7 +161,7 @@ module BoogieLang {
     | Assert(Expr)
     | Assume(Expr)
     | Assign(var_name, Ty, Expr) 
-    | Havoc(seq<(var_name, Ty)>)
+    | Havoc(seq<VarDecl>)
     | SeqSimple(SimpleCmd, SimpleCmd) 
     /* The reason for adding a separate sequential composition for simple commands is to be able to transform the AST
        into a form that more directly represents the desired CFG block structure.
@@ -188,6 +193,17 @@ module BoogieLang {
         case SeqSimple(sc1, sc2) => return "TODO";
       }
     }
+
+    predicate WellFormedVars(xs: set<var_name>)
+    {
+      match this
+      case Skip => true
+      case Assert(e) => e.FreeVars() <= xs
+      case Assume(e) => e.FreeVars() <= xs
+      case Assign(x, t, e) => x in xs && e.FreeVars() <= xs
+      case Havoc(varDecls) => GetVarNames(varDecls) <= xs
+      case SeqSimple(sc1, sc2) => sc1.WellFormedVars(xs) && sc2.WellFormedVars(xs)
+    }
   }
 
 /** TODO: add return */
@@ -195,15 +211,35 @@ module BoogieLang {
     | SimpleCmd(SimpleCmd)
     | Break(Option<lbl_name>)
     | Seq(Cmd, Cmd)
-    | Scope(labelName: Option<lbl_name>, varDecls: seq<(var_name,Ty)>, body: Cmd)
+    | Scope(labelName: Option<lbl_name>, varDecls: seq<VarDecl>, body: Cmd)
     | Loop(invariants: seq<Expr>, body: Cmd) 
     //cond = None represents a non-deterministic if-statement (if(*) {...} else {...})
-    | If(Option<Expr>, thn: Cmd, els: Cmd)
+    | If(guard: Option<Expr>, thn: Cmd, els: Cmd)
   
   /*
     | ProcCall(proc_name, seq<Expr>, seq<var_name>)
   */
   {
+    predicate WellFormedVars(xs: set<var_name>)
+    {
+      match this
+      case SimpleCmd(sc) => sc.WellFormedVars(xs)
+      case Break(_) => true
+      case Scope(_, varDecls, body) =>
+        && Sequences.HasNoDuplicates(varDecls)
+        && body.WellFormedVars(xs+GetVarNames(varDecls))
+      case If(optCond, thn, els) =>
+        && (optCond.Some? ==> optCond.value.FreeVars() <= xs)
+        && thn.WellFormedVars(xs)
+        && els.WellFormedVars(xs)
+      case Loop(invs, body) =>
+        && (forall inv | inv in invs :: inv.FreeVars() <= xs)
+        && body.WellFormedVars(xs)
+      case Seq(c1, c2) =>
+        && c1.WellFormedVars(xs)
+        && c2.WellFormedVars(xs)
+    }
+
     method ToString(indent: nat) returns (s: string) {
       match this {
         case SimpleCmd(simpleC) => s := simpleC.ToString(indent); return s;
@@ -275,6 +311,11 @@ module BoogieLang {
     case AbsV(abs_val) => TCon(a(abs_val))
   }
 
+  function TypeOfValues<A>(a: absval_interp<A>, vs: seq<Val<A>>) : seq<Ty>
+  {
+    seq(|vs|, i requires 0 <= i < |vs| => TypeOfVal(a, vs[i]))
+  }
+
   type state<A> = map<var_name, Val<A>>
 
   //while loop without break in body
@@ -316,7 +357,23 @@ module BoogieLang {
 
   function method GetVarNames(vs: seq<(var_name,Ty)>):set<var_name>
   {
-    if |vs| == 0 then {} else {vs[0].0} + GetVarNames(vs[1..])
+    //if |vs| == 0 then {} else {vs[0].0} + GetVarNames(vs[1..])
+    set varDecl | varDecl in vs :: varDecl.0
+  }
+
+  function method GetVarNamesSeq(vs: seq<(var_name,Ty)>):seq<var_name>
+  {
+    seq(|vs|, i requires 0 <= i < |vs| => vs[i].0)
+  }
+
+  lemma GetVarNamesContainedSeq(v: var_name, vs: seq<(var_name,Ty)>)
+    requires v in GetVarNames(vs)  
+    ensures v in GetVarNamesSeq(vs)
+  {
+    var varDecl :| varDecl in vs && varDecl.0 == v;
+    var i :| 0 <= i < |vs| && varDecl == vs[i];
+
+    assert GetVarNamesSeq(vs)[i] == vs[i].0;
   }
 
   function ModifiedVars(c: Cmd): seq<(var_name, Ty)>

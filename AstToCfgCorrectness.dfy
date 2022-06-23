@@ -153,7 +153,7 @@ module AstToCfgCorrectness
         WpShallow(a, c, post)(s) == WpCfg(a, cfg, cfg.entry, post.normal, cover')(s);
   {
     match c {
-      case SimpleCmd(sc) => 
+      case SimpleCmd(sc) => reveal WpShallow();
       case Seq(c1, c2) =>
         var (cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
         var exit1 := exitOpt1.value;
@@ -183,7 +183,9 @@ module AstToCfgCorrectness
         {
           calc {
             WpShallow(a, c, post)(s);
+            { reveal WpShallow(); }
             WpShallow(a, Seq(c1,c2), post)(s); //normal definition
+            { reveal WpShallow(); }
             WpShallow(a, c1, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes))(s); //IH
             {
               AstToCfgSemanticsPreservation(a, c1, nextVersion, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes), s);
@@ -234,18 +236,20 @@ module AstToCfgCorrectness
         assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
         var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
         var unquantifiedBody := 
-          WpShallow(a, body, ResetVarsPost(a, varDecls, post', s));
+          WpShallow(a, body, ResetVarsPost(varDecls, post', s));
 
         calc {
           WpShallow(a, c, post)(s);
+          { reveal WpShallow(); }
           ForallVarDeclsShallow(a, varDecls, unquantifiedBody)(s);
           { //scoped variable declarations have been compiled away
+            reveal ForallVarDeclsShallow();
             assert varDecls == []; 
           }
           unquantifiedBody(s);
-          WpShallow(a, body, ResetVarsPost(a, [], post', s))(s);
+          WpShallow(a, body, ResetVarsPost([], post', s))(s);
           { 
-            WpShallowPointwise(a, body, ResetVarsPost(a, [], post', s), post', s);
+            WpShallowPointwise(a, body, ResetVarsPost([], post', s), post', s);
           }
           WpShallow(a, body, post')(s);
           { AstToCfgAcyclic2(body, nextVersion);
@@ -375,6 +379,7 @@ module AstToCfgCorrectness
               Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
               Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
               Util.AndOpt(WpShallow(a, thn, post)(s), WpShallow(a, els, post)(s));
+              { reveal WpShallow(); }
               WpShallow(a, c, post)(s);
             }
           } else {

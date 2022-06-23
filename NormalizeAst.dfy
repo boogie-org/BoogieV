@@ -84,6 +84,8 @@ module NormalizeAst {
       WpShallow(a, SeqSimpleOptCmd(precedingSimple, c), post)(s) == 
       WpShallow(a, SeqCmdSimpleOpt(cOpt', scExitOpt), post)(s)
   {
+    reveal WpShallow();
+
     var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
 
     match c
@@ -131,7 +133,7 @@ module NormalizeAst {
       var updatedScopes := if optLabel.Some? then post.scopes[optLabel.value := post.normal] else post.scopes;
 
       var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
-      var updatedPost := prevState => ResetVarsPost(a, varDecls, post', prevState);
+      var updatedPost := prevState => ResetVarsPost(varDecls, post', prevState);
 
       assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
 

@@ -30,12 +30,11 @@ function EliminateLoops(c: Cmd) : Cmd {
     case _ => c
 }
 
-/** Shallow WP */
-
 lemma EliminateLoopsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPostShallow)
 requires LabelsWellDefAux(c, post.scopes.Keys) && LabelsWellDefAux(EliminateLoops(c), post.scopes.Keys)
 ensures  WpShallow(a, EliminateLoops(c), post)(s) == WpShallow(a, c, post)(s)
 {
+    reveal WpShallow();
     match c
     case Seq(c1, c2) => 
         var c2Post := WpShallow(a, c2, post);
@@ -59,7 +58,7 @@ ensures  WpShallow(a, EliminateLoops(c), post)(s) == WpShallow(a, c, post)(s)
       var updatedScopes := if optLabel.Some? then post.scopes[optLabel.value := post.normal] else post.scopes;
       assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
 
-      var bodyPost := ResetVarsPost(a, varDecls, WpPostShallow(post.normal, post.normal, updatedScopes), s);
+      var bodyPost := ResetVarsPost(varDecls, WpPostShallow(post.normal, post.normal, updatedScopes), s);
 
       forall s: state<A> | true 
         ensures WpShallow(a, EliminateLoops(body), bodyPost)(s) == 
