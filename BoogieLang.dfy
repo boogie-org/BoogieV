@@ -188,6 +188,17 @@ module BoogieLang {
         case SeqSimple(sc1, sc2) => return "TODO";
       }
     }
+
+    predicate WellFormedVars(xs: set<var_name>)
+    {
+      match this
+      case Skip => true
+      case Assert(e) => e.FreeVars() <= xs
+      case Assume(e) => e.FreeVars() <= xs
+      case Assign(x, t, e) => x in xs && e.FreeVars() <= xs
+      case Havoc(varDecls) => GetVarNames(varDecls) <= xs
+      case SeqSimple(sc1, sc2) => sc1.WellFormedVars(xs) && sc2.WellFormedVars(xs)
+    }
   }
 
 /** TODO: add return */
@@ -204,6 +215,25 @@ module BoogieLang {
     | ProcCall(proc_name, seq<Expr>, seq<var_name>)
   */
   {
+    predicate WellFormedVars(xs: set<var_name>)
+    {
+      match this
+      case SimpleCmd(sc) => sc.WellFormedVars(xs)
+      case Break(_) => true
+      case Scope(_, varDecls, body) =>
+        body.WellFormedVars(xs+GetVarNames(varDecls))
+      case If(optCond, thn, els) =>
+        && (optCond.Some? ==> optCond.value.FreeVars() <= xs)
+        && thn.WellFormedVars(xs)
+        && els.WellFormedVars(xs)
+      case Loop(invs, body) =>
+        && (forall inv | inv in invs :: inv.FreeVars() <= xs)
+        && body.WellFormedVars(xs)
+      case Seq(c1, c2) =>
+        && c1.WellFormedVars(xs)
+        && c2.WellFormedVars(xs)
+    }
+
     method ToString(indent: nat) returns (s: string) {
       match this {
         case SimpleCmd(simpleC) => s := simpleC.ToString(indent); return s;
