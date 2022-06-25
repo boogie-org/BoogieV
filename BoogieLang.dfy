@@ -209,7 +209,7 @@ module BoogieLang {
     | Scope(labelName: Option<lbl_name>, varDecls: seq<(var_name,Ty)>, body: Cmd)
     | Loop(invariants: seq<Expr>, body: Cmd) 
     //cond = None represents a non-deterministic if-statement (if(*) {...} else {...})
-    | If(Option<Expr>, thn: Cmd, els: Cmd)
+    | If(guard: Option<Expr>, thn: Cmd, els: Cmd)
   
   /*
     | ProcCall(proc_name, seq<Expr>, seq<var_name>)
@@ -346,7 +346,8 @@ module BoogieLang {
 
   function method GetVarNames(vs: seq<(var_name,Ty)>):set<var_name>
   {
-    if |vs| == 0 then {} else {vs[0].0} + GetVarNames(vs[1..])
+    //if |vs| == 0 then {} else {vs[0].0} + GetVarNames(vs[1..])
+    set varDecl | varDecl in vs :: varDecl.0
   }
 
   function ModifiedVars(c: Cmd): seq<(var_name, Ty)>

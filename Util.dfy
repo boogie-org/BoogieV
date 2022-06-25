@@ -3,7 +3,7 @@ include "dafny-libraries/src/Wrappers.dfy"
 module Util {
 
   import opened Wrappers
-  
+
   function RemoveDuplicates<T>(s: seq<T>): seq<T>
   {
     RemoveDuplicatesAux(s, {})
@@ -41,6 +41,18 @@ module Util {
     }
   }
 
+  function method IntToString2(i: int) : string {
+    if i < 0 then "-"+NatToString(-i) else NatToString(i)
+  }
+
+  function method NatToString(n: nat) : string {
+    if n == 0 then "0"
+    else 
+      var digit := n % 10;
+      var digitString := ['0' + digit as char];
+      digitString + NatToString(n/10)
+  }
+
   function method BoolToString(b: bool) : string {
     if b then "true" else "false"
   }
@@ -52,4 +64,12 @@ module Util {
   function AndOpt(b1Opt: Option<bool>, b2Opt: Option<bool>) : Option<bool> {
     if b1Opt.Some? && b2Opt.Some? then Some(b1Opt.value && b2Opt.value) else None
   }
+
+  //the first occurrence for a key k in the sequence is relevant for the map
+  function method {:opaque} SequenceToMap<K,V>(s: seq<(K,V)>) : map<K,V>
+  {
+    if |s| == 0 then map[]
+    else SequenceToMap(s[1..])[s[0].0 := s[0].1]
+  }
+
 }
