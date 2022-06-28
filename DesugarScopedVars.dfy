@@ -16,7 +16,7 @@ module DesugarScopedVars {
     (forall k | k in m.Keys :: Maps.Get(s1, k) == Maps.Get(s2, m[k]))
   }
 
- lemma {:verify false} RelStateEmpty<V>(s1: map<var_name, V> , s2: map<var_name, V>)
+ lemma RelStateEmpty<V>(s1: map<var_name, V> , s2: map<var_name, V>)
   ensures RelState(map[], s1, s2)
  { reveal RelState(); }
 
@@ -35,13 +35,13 @@ module DesugarScopedVars {
 
   function method MultiSubstExpr(e: Expr, varMapping: map<var_name, var_name>): Expr
 
- lemma {:verify false} MultiSubstExprSpec<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
+ lemma MultiSubstExprSpec<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
     requires forall x | x in e.FreeVars() :: 
       && (x in varMapping.Keys ==> Maps.Get(s1, x) == Maps.Get(s2, varMapping[x]))
       && (x !in varMapping.Keys ==> Maps.Get(s1, x) == Maps.Get(s2, x))
     ensures EvalExpr(a, e, s1) == EvalExpr(a, MultiSubstExpr(e, varMapping), s2)
   
- lemma {:verify false} MultiSubstExprSpec2<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
+ lemma MultiSubstExprSpec2<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
     requires RelState(varMapping, s1, s2)
     requires e.FreeVars() <= varMapping.Keys
     ensures EvalExpr(a, e, s1) == EvalExpr(a, MultiSubstExpr(e, varMapping), s2)
@@ -69,7 +69,7 @@ module DesugarScopedVars {
       SeqSimple(SubstSimpleCmd(c1, varMapping), SubstSimpleCmd(c2, varMapping))
   }
 
- lemma {:verify false} {:induction false} ForallVarDeclsRel<A(!new)>(
+ lemma {:induction false} ForallVarDeclsRel<A(!new)>(
     a: absval_interp<A>, 
     varDecls: seq<(var_name, Ty)>, 
     varMapping: map<var_name, var_name>, 
@@ -103,7 +103,7 @@ module DesugarScopedVars {
         ensures ForallVarDeclsShallow(a, varDecls[1..], p1)(s1[x := v]) == ForallVarDeclsShallow(a, varDecls'[1..], p2)(s2[x' := v])
       {
         assert RelState(varMapping, s1[x := v], s2[x' := v]) by {
-          RelStatePreserve(varMapping, s1, s2, x, v);
+          RelStateUpdPreserve(varMapping, s1, s2, x, v);
         }
         ForallVarDeclsRel(a, varDecls[1..], varMapping, p1, p2);
         reveal RelPred();
@@ -115,7 +115,7 @@ module DesugarScopedVars {
     }
   }
 
- lemma {:verify false} ForallVarDeclsRel2<A(!new)>(
+ lemma ForallVarDeclsRel2<A(!new)>(
     a: absval_interp<A>, 
     varDecls: seq<(var_name, Ty)>, 
     varMapping: map<var_name, var_name>, 
@@ -137,7 +137,7 @@ module DesugarScopedVars {
     reveal RelPred();
   }
 
- lemma {:verify false} RelStatePreserve<V>(varMapping: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, x: var_name, v: V)
+ lemma RelStateUpdPreserve<V>(varMapping: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, x: var_name, v: V)
  requires RelState(varMapping, s1, s2)
  requires Maps.Injective(varMapping)
  requires x in varMapping.Keys
@@ -161,7 +161,31 @@ module DesugarScopedVars {
   }
  }
 
- lemma {:verify false} {:induction false} SubstSimpleCmdCorrect<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, varMapping: map<var_name, var_name>, 
+ lemma {:verify true} RelStateRemovePreserve<V>(varMapping: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, x: var_name)
+ requires RelState(varMapping, s1, s2)
+ requires Maps.Injective(varMapping)
+ requires x in varMapping.Keys
+ ensures RelState(varMapping, s1-{x}, s2-{varMapping[x]})
+ {
+  reveal RelState();
+  var x' := varMapping[x];
+  forall k | k in varMapping.Keys 
+  ensures Maps.Get(s1-{x}, k) == Maps.Get(s2-{x'}, varMapping[k])
+  {
+    var k' := varMapping[k];
+    if k != x {
+      calc {
+        Maps.Get(s1-{x}, k);
+        Maps.Get(s1, k);
+        Maps.Get(s2, k');
+        { reveal Maps.Injective(); }
+        Maps.Get(s2-{x'}, k');
+      }
+    }
+  }
+ }
+
+ lemma {:induction false} SubstSimpleCmdCorrect<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, varMapping: map<var_name, var_name>, 
     post1: Predicate<A>, post2: Predicate<A>)
     requires RelPred(varMapping, post1, post2)
     requires sc.WellFormedVars(varMapping.Keys)
@@ -197,7 +221,7 @@ module DesugarScopedVars {
             var x' := varMapping[x];
 
             assert RelState(varMapping, s1[x := v], s2[x' := v]) by {
-              RelStatePreserve(varMapping, s1, s2, x, v);
+              RelStateUpdPreserve(varMapping, s1, s2, x, v);
             }
           }
         case Havoc(vDecls) => 
@@ -226,7 +250,7 @@ module DesugarScopedVars {
             WpShallowSimpleCmd(a, SeqSimple(sc1, sc2), post1)(s1);
             WpShallowSimpleCmd(a, sc1, post1')(s1);
             { 
-              assert RelPred(varMapping, post1', post2') by{
+              assert RelPred(varMapping, post1', post2') by {
                 SubstSimpleCmdCorrect(a, sc2, varMapping, post1, post2);
               }
               SubstSimpleCmdCorrect(a, sc1, varMapping, post1', post2'); 
@@ -238,7 +262,6 @@ module DesugarScopedVars {
     }
   }
 
-
   function method CreateUniqueName(names: set<var_name>): var_name
     ensures CreateUniqueName(names) !in names
   
@@ -246,7 +269,106 @@ module DesugarScopedVars {
 
   function method VersionedName(name: string, n: nat) : string
   {
-    name + Util.NatToString(n) + SEP
+    name + SEP + Util.NatToString(n)
+  }
+
+  lemma SuffixDiffSameLength(prefix1: string, prefix2: string, suffix1:string, suffix2: string)
+    requires |suffix1| == |suffix2|
+    requires suffix1 != suffix2
+    ensures prefix1+suffix1 != prefix1+suffix2
+  {
+    var i :| 0 <= i < |suffix1| && suffix1[i] != suffix2[i];
+
+    var j := |suffix1|-i-1;
+
+    calc {
+      Sequences.Reverse(suffix1)[j];
+      suffix1[i];
+    !=
+      suffix2[i];
+      Sequences.Reverse(suffix2)[j];
+    }
+
+    assert Sequences.Reverse(prefix1+suffix1)[j] == Sequences.Reverse(suffix1)[j];
+    assert Sequences.Reverse(prefix2+suffix2)[j] == Sequences.Reverse(suffix2)[j];
+
+    assert Sequences.Reverse(prefix1+suffix1) != Sequences.Reverse(prefix2+suffix2) by {
+      calc {
+        Sequences.Reverse(prefix1+suffix1)[j];
+        Sequences.Reverse(suffix1)[j];
+      !=
+        Sequences.Reverse(suffix2)[j];
+        Sequences.Reverse(prefix2+suffix2)[j];
+      }
+    }
+  }
+
+  lemma {:verify true} VersionedNameInjective(prefix1: string, prefix2: string, i1: nat, i2: nat)
+  requires i1 != i2
+  ensures VersionedName(prefix1, i1) != VersionedName(prefix2, i2)
+  {
+    Util.NatToStringInjective(i1, i2);
+
+    var i1S := Util.NatToString(i1);
+    var i2S := Util.NatToString(i2);
+
+    var s1 := prefix1 + SEP + i1S;
+    var s2 := prefix2 + SEP + i2S;
+
+    if |i1S| == |i2S| {
+      assert s1 != s2 by {
+        SuffixDiffSameLength(prefix1+SEP, prefix2+SEP, i1S, i2S);
+      }
+    } else {
+      if |i1S| < |i2S| {
+        var suffix1 := SEP+i1S;
+
+        var prefix2 := prefix2 + SEP + i2S[0..|i2S|-|i1S|-1];
+        var suffix2 := i2S[|i2S|-|i1S|-1..];
+
+        assert suffix1[0] != suffix2[0] by {
+          Util.HashTagNotInNatString(i2);
+        }
+
+        SuffixDiffSameLength(prefix1, prefix2 + SEP + i2S[0..|i2S|-|i1S|-1], SEP + i1S, i2S[|i2S|-|i1S|-1..]);
+
+        assert prefix1+(SEP+i1S) == prefix1+SEP+i1S;
+        assert (prefix2+SEP+i2S[0..|i2S|-|i1S|-1])+i2S[|i2S|-|i1S|-1..] == prefix2+SEP+i2S;
+      } else {
+        //symmetric to other case
+        var suffix2 := SEP+i2S;
+
+        var prefix1' := prefix1 + SEP + i1S[0..|i1S|-|i2S|-1];
+        var suffix1 := i1S[|i1S|-|i2S|-1..];
+
+        assert suffix1[0] != suffix2[0] by {
+          Util.HashTagNotInNatString(i1);
+        }
+
+        SuffixDiffSameLength(prefix1', prefix2, suffix1, suffix2);
+
+        assert (prefix1+SEP+i1S[0..|i1S|-|i2S|-1])+i1S[|i1S|-|i2S|-1..] == prefix1+SEP+i1S;
+        assert prefix2+(SEP+i2S) == prefix2+SEP+i2S;
+      }
+    }
+  }
+
+  function {:opaque} VarNameSet(names: set<string>, i0: nat, i1: nat) : set<string>
+  {
+    set prefix, i | prefix in names && i0 <= i < i1 :: VersionedName(prefix, i)
+  }
+
+  lemma VarNameSetDisjoint(names: set<string>, i0: nat, i1: nat, i2: nat, i3: nat)
+    requires i0 <= i1 <= i2 <= i3
+    ensures VarNameSet(names, i0, i1) !! VarNameSet(names, i2, i3)
+  {
+    forall i,j,name1,name2 | i != j
+    ensures VersionedName(name1, i) != VersionedName(name2, j)
+    {
+      VersionedNameInjective(name1, name2, i, j);
+    }
+
+    reveal VarNameSet();
   }
 
   function method CreateUniqueVarDecls(varDecls: seq<(var_name, Ty)>, usedNames: set<var_name>, counter: nat) : seq<(var_name,Ty)>
@@ -254,33 +376,17 @@ module DesugarScopedVars {
       var res := CreateUniqueVarDecls(varDecls, usedNames, counter);
       |varDecls| == |res|
   {
-    /*
-    var f := (varDecl:(var_name, Ty), res: seq<(var_name, Ty)>) => (
-      var (x, t) := varDecl;
-
-      var allUsedNames := usedNames + GetVarNames(res);
-      var xFresh := if x !in allUsedNames then x else CreateUniqueName(allUsedNames);
-      ([(xFresh, t)]+res)
-    );
-
-    var inv := (xs: seq<(var_name,Ty)>, ys: seq<(var_name,Ty)>) => |xs| == |ys|;
-    var step := (a: (var_name,Ty), b: seq<(var_name, Ty)>, c: seq<(var_name, Ty)>) => |c| == |b|+1;
-
-    Sequences.LemmaInvFoldRight(inv, step, f, [], varDecls);
-
-    var res := Sequences.FoldRight(f, varDecls, []);
-    */
-
     /** TODO
       Currently, a suffix is added to every variable even if there are no clashes. 
       This makes it harder to read the target output. It would be nice if one could 
       reuse a name if it does not clash with anything else that has been so far. 
       Doing this would require a fold to avoid updating the counter if a name is 
-      reused.
+      reused. Such a change would require restructuring the proof of the transformation
+      making the names unique. 
+      Alternatively, one could apply such a transformation later to remove the counters
+      from names that don't require them. 
      */
-
-    // DISCUSS
-    seq(|varDecls|, i => (VersionedName(varDecls[i].0, counter+i), varDecls[i].1))
+    seq(|varDecls|, i requires 0 <= i < |varDecls| => (VersionedName(varDecls[i].0, counter+i), varDecls[i].1))
   }
 
   function method ConvertVDeclsToSubstMap(varDecls: seq<(var_name, Ty)>, varDecls': seq<(var_name, Ty)>) : map<var_name, var_name>
@@ -319,7 +425,7 @@ module DesugarScopedVars {
       var varDecls' := CreateUniqueVarDecls(varDecls, usedVars.0, usedVars.1);
       var usedVars' := (usedVars.0 + GetVarNames(varDecls'), usedVars.1 + |varDecls'|);
       var substMap' := substMap + ConvertVDeclsToSubstMap(varDecls, varDecls');
-      var (body'', usedVars'') := DesugarScopedVars(body, substMap, usedVars', seqSubstMap);
+      var (body'', usedVars'') := DesugarScopedVars(body, substMap', usedVars', seqSubstMap);
       (Scope(optLabel, varDecls', body''), usedVars'')
     case If(None, thn, els) => 
       //TODO: make sure If(Some(...)) has been desugared
@@ -327,103 +433,97 @@ module DesugarScopedVars {
       var (els', usedVars'') := DesugarScopedVars(els, substMap, usedVars', seqSubstMap);
       (If(None, thn', els'), usedVars'')
     case _ => (c, usedVars) //TODO (precondition should eliminate this case)
-  }
+  }  
 
-  function method RemoveScopedVars(c: Cmd): (Cmd, (seq<(var_name, Ty)>))
-    /*requires substMap.Values <= set c,x | x in substMap.Keys && 0 < c < usedVars.1 :: VersionedName(x, c)
-    requires forall x | x in substMap.Keys :: exists c : nat :: c <= usedVars.1 && substMap[x] == VersionedName(x, c)
-    ensures 
-      forall x | x in substMap.Keys :: exists c : nat :: c <= usedVars.1 && substMap[x] == VersionedName(x, c)*/
+  lemma ResetVarsStateRel<A(!new)>(
+    varMapping: map<var_name, var_name>, 
+    vDecls1: seq<(var_name, Ty)>, 
+    vDecls2: seq<(var_name, Ty)>, 
+    sOrig1: state<A>,
+    sOrig2: state<A>,
+    s1: state<A>,
+    s2: state<A>)
+  requires Maps.Injective(varMapping)
+  requires RelState(varMapping, sOrig1, sOrig2)
+  requires RelState(varMapping, s1, s2)
+  requires |vDecls1| == |vDecls2|
+  requires (forall i | 0 <= i < |vDecls1| :: var (x,t) := vDecls1[i]; 
+    x in varMapping.Keys && vDecls2[i].0 == varMapping[x] && vDecls2[i].1 == t)
+  ensures RelState(varMapping, ResetVarsState(vDecls1, s1, sOrig1), ResetVarsState(vDecls2, s2, sOrig2))
   {
-    match c
-    case SimpleCmd(sc) => (c, [])
-    case Break(_) => (c, [])
-    case Seq(c1, c2) => 
-      var (c1', decls1) := RemoveScopedVars(c1);
-      var (c2', decls2) := RemoveScopedVars(c2);
-      (Seq(c1', c2'), decls1 + decls2)
-    case Scope(optLabel, varDecls, body) =>
-      var (body', declsBody) := RemoveScopedVars(body);
-      (Scope(optLabel, [], body'), varDecls + declsBody)
-    case If(None, thn, els) => 
-      //TODO: make sure If(Some(...)) has been desugared
-      var (thn', declsThn) := RemoveScopedVars(thn);
-      var (els', declsEls) := RemoveScopedVars(els);
-      (If(None, thn', els'), declsThn + declsEls)
-    case _ => (c, []) //TODO (precondition should eliminate this case)
-  }
+    if |vDecls1| == 0 {
 
-  lemma RemoveScopedVarsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, post: WpPostShallow<A>)
-    requires 
-      var (c', decls) := RemoveScopedVars(c);
-      LabelsWellDefAux(c, post.scopes.Keys) && LabelsWellDefAux(c', post.scopes.Keys)
-    ensures 
-      var (c', decls) := RemoveScopedVars(c);
-      forall s :: WpShallow(a, c, post)(s) == ForallVarDeclsShallow(a, decls, WpShallow(a, c', ResetVarsPost(a, decls, post, s)))(s)
-  
-  /*
-  lemma ScopeNoneSemantics<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, body: Cmd, post: WpPostShallow<A>)
-      requires LabelsWellDefAux(body, post.scopes.Keys)
-    ensures
-      forall s : state<A> :: 
-        WpShallow(a, Scope(None, varDecls, body), post)(s) ==
-        ForallVarDeclsShallow(a, varDecls, WpShallow(a, body, ResetVarsPost(a, varDecls, WpPostShallow(post.normal, post.normal, post.scopes), s)))(s)
-    { 
-      assume false;
+    } else {
+      var (x,t) := vDecls1[0];
+      var (x',_) := vDecls2[0];
+      assert varMapping[x] == x';
+
+      var s1' := ResetVarsState(vDecls1[1..], s1, sOrig1);
+      var s2' := ResetVarsState(vDecls2[1..], s2, sOrig2);
+
+
+      assert x in sOrig1.Keys <==> x' in sOrig2.Keys by {
+        reveal RelState();
+      }
+
+      assert RelState(varMapping, s1', s2') by {
+        ResetVarsStateRel(varMapping, vDecls1[1..], vDecls2[1..], sOrig1, sOrig2, s1, s2);
+      }
+
+      if x in sOrig1.Keys {
+        assert sOrig1[x] == sOrig2[x'] by {
+          reveal RelState();
+        }
+
+        assert RelState(varMapping, s1'[x := sOrig1[x]], s2'[x' := sOrig2[x']]) by {
+          RelStateUpdPreserve(varMapping, s1', s2', x, sOrig1[x]);
+        }
+      } else {
+        assert RelState(varMapping, s1'-{x}, s2'-{x'}) by {
+          RelStateRemovePreserve(varMapping, s1', s2', x);
+        }
+      }
     }
-  */
+  }
 
-  lemma ScopeSemantics<A(!new)>(a: absval_interp<A>, optLabel: Option<lbl_name>, varDecls: seq<(var_name, Ty)>, body: Cmd, post: WpPostShallow<A>, s: state<A>)
-    requires LabelsWellDefAux(Scope(optLabel, varDecls, body), post.scopes.Keys)
-    ensures
-        WpShallow(a, Scope(optLabel, varDecls, body), post)(s) ==
-        ForallVarDeclsShallow(a, varDecls, WpShallow(a, Scope(optLabel, [], body), ResetVarsPost(a, varDecls, post, s)))(s)
+  lemma ResetVarsPredRel<A(!new)>(
+    a: absval_interp<A>, 
+    varMapping: map<var_name, var_name>, 
+    vDecls1: seq<(var_name, Ty)>, 
+    vDecls2: seq<(var_name, Ty)>, 
+    p1: Predicate<A>, 
+    p2: Predicate<A>,
+    s1: state<A>,
+    s2: state<A>)
+  requires Maps.Injective(varMapping)
+  requires RelPred(varMapping, p1, p2)
+  requires RelState(varMapping, s1, s2)
+  requires |vDecls1| == |vDecls2|
+  requires (forall i | 0 <= i < |vDecls1| :: var (x,t) := vDecls1[i]; 
+    x in varMapping.Keys && vDecls2[i].0 == varMapping[x] && vDecls2[i].1 == t)
+  ensures RelPred(varMapping, ResetVarsPred(a, vDecls1, p1, s1), ResetVarsPred(a, vDecls2, p2, s2))
   {
-      var updatedScopes := 
-        if optLabel.Some? then 
-          post.scopes[optLabel.value := post.normal]
-        else post.scopes;
+    if |vDecls1| == 0 {
+      reveal RelPred();
+    } else {
+      forall s, s' | RelState(varMapping, s, s')
+      ensures ResetVarsPred(a, vDecls1, p1, s1)(s) == ResetVarsPred(a, vDecls2, p2, s2)(s')
+      { 
+        calc {
+          ResetVarsPred(a, vDecls1, p1, s1)(s);
+          p1(ResetVarsState(vDecls1, s, s1));
+          { ResetVarsStateRel(varMapping, vDecls1, vDecls2, s1, s2, s, s'); 
+            reveal RelPred(); }
+          p2(ResetVarsState(vDecls2, s', s2));
+          ResetVarsPred(a, vDecls2, p2, s2)(s');
+        }
+      }
 
-    assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
-    var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
-    calc {
-      WpShallow(a, Scope(optLabel, varDecls, body), post)(s);
-      ForallVarDeclsShallow(a, varDecls, WpShallow(a, body, ResetVarsPost(a, varDecls, post', s)))(s);
-      { assert ResetVarsPost(a, [], ResetVarsPost(a, varDecls, post', s), s) == ResetVarsPost(a, varDecls, post', s); }
-      ForallVarDeclsShallow(a, varDecls, WpShallow(a, body, ResetVarsPost(a, [], ResetVarsPost(a, varDecls, post', s), s)))(s);
-      ForallVarDeclsShallow(a, varDecls, WpShallow(a, Scope(optLabel, [], body), ResetVarsPost(a, varDecls, post, s)))(s);
+      reveal RelPred();
     }
   }
    
-
-  function RenameVarsState<V>(m: map<var_name, var_name>, s: map<var_name, V>) : map<var_name, V>
-    ensures 
-      var s' := RenameVarsState(m, s);
-      && (forall v :: v in s.Keys && v !in m.Keys ==> s'[v] == s[v])
-      && (forall v :: v in m.Keys && m[v] in s.Keys ==> s'[v] == s[m[v]])
-      && (forall v :: v in m.Keys && m[v] !in s.Keys ==> v !in s'.Keys)
-  {
-    var renamedState := 
-      map v | v in m.Keys && m[v] in s.Keys :: 
-        s[m[v]];
-    
-    var renamedVarsWithNoTarget := set v | v in m.Keys && m[v] !in s.Keys;
-
-    (s - renamedVarsWithNoTarget) + renamedState
-  }
-
-  function RenameVarsPred<A>(m: map<var_name, var_name>, p: Predicate<A>) : Predicate<A> 
-  {
-    s => p(RenameVarsState(m, s))
-  }
-
-  function RenameVarsPost<A>(m: map<var_name, var_name>, post: WpPostShallow<A>) : WpPostShallow<A>
-  {
-    var newScopes := map lbl | lbl in post.scopes.Keys :: RenameVarsPred(m, post.scopes[lbl]);
-    WpPostShallow(RenameVarsPred(m, post.normal), RenameVarsPred(m, post.currentScope), newScopes)
-  }
-
- lemma {:verify true} DesugarScopedVarsCorrect<A(!new)>(
+ lemma DesugarScopedVarsCorrect<A(!new)>(
     a: absval_interp<A>,
     c: Cmd, 
     substMap: map<var_name, var_name>, 
@@ -469,11 +569,98 @@ module DesugarScopedVars {
       assert RelPred(substMap, WpShallow(a, c1, post1'), WpShallow(a, c1', post2')) by {
         DesugarScopedVarsCorrect(a, c1, substMap, usedVars, seqSubstMap, post1', post2');
       }
-    case Scope(labelName, varDecls, body) => assume false;
+    case Scope(optLabel, varDecls, body) => 
+      /* Goal: RelPred(substMap, WpShallow(a, c, post1), WpShallow(a, c', post2)) */
+      /*
+      var updatedScopes := 
+        if optLabel.Some? then 
+          post.scopes[optLabel.value := post.normal]
+        else post.scopes;
+      var unquantifiedBody := 
+        assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
+        var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
+        prevState => 
+          WpShallow(a, body, ResetVarsPost(a, varDecls, post', prevState));
+      
+      s => ForallVarDeclsShallow(a, varDecls, unquantifiedBody(s))(s)
+      */
+      var varDecls' := CreateUniqueVarDecls(varDecls, usedVars.0, usedVars.1);
+      var usedVars' := (usedVars.0 + GetVarNames(varDecls'), usedVars.1 + |varDecls'|);
+      var substMap' := substMap + ConvertVDeclsToSubstMap(varDecls, varDecls');
+      var (body'', usedVars'') := DesugarScopedVars(body, substMap', usedVars', seqSubstMap);
+      //(Scope(optLabel, varDecls', body''), usedVars'')
+      var c' := Scope(optLabel, varDecls', body'');
+
+      var updatedScopes1 := 
+        if optLabel.Some? then 
+          post1.scopes[optLabel.value := post1.normal]
+        else post1.scopes;
+
+      var unquantifiedBody1 := 
+        assert updatedScopes1.Keys == if optLabel.Some? then {optLabel.value} + post1.scopes.Keys else post1.scopes.Keys;
+        var post1' := WpPostShallow(post1.normal, post1.normal, updatedScopes1);
+        prevState => 
+          WpShallow(a, body, ResetVarsPost(a, varDecls, post1', prevState));
+
+      var updatedScopes2 := 
+        if optLabel.Some? then 
+          post1.scopes[optLabel.value := post1.normal]
+        else post1.scopes;
+
+      var unquantifiedBody2 := 
+        assert updatedScopes2.Keys == if optLabel.Some? then {optLabel.value} + post1.scopes.Keys else post1.scopes.Keys;
+        var post1' := WpPostShallow(post1.normal, post1.normal, updatedScopes2);
+        prevState => 
+          WpShallow(a, body'', ResetVarsPost(a, varDecls', post1', prevState));
+      
+      forall s, s' | RelState(substMap, s,s')
+      ensures WpShallow(a, c, post1)(s) == WpShallow(a, c', post2)(s)
+      {
+        calc {
+
+        }
+      }
+
+      assume false;
     case If(guard, thn, els) => assume false;
     case Loop(invariants, body) => assume false;
    }
  }
 
+function method RemoveScopedVars(c: Cmd): (Cmd, (seq<(var_name, Ty)>))
+  /*requires substMap.Values <= set c,x | x in substMap.Keys && 0 < c < usedVars.1 :: VersionedName(x, c)
+  requires forall x | x in substMap.Keys :: exists c : nat :: c <= usedVars.1 && substMap[x] == VersionedName(x, c)
+  ensures 
+    forall x | x in substMap.Keys :: exists c : nat :: c <= usedVars.1 && substMap[x] == VersionedName(x, c)*/
+{
+  match c
+  case SimpleCmd(sc) => (c, [])
+  case Break(_) => (c, [])
+  case Seq(c1, c2) => 
+    var (c1', decls1) := RemoveScopedVars(c1);
+    var (c2', decls2) := RemoveScopedVars(c2);
+    (Seq(c1', c2'), decls1 + decls2)
+  case Scope(optLabel, varDecls, body) =>
+    var (body', declsBody) := RemoveScopedVars(body);
+    (Scope(optLabel, [], body'), varDecls + declsBody)
+  case If(None, thn, els) => 
+    //TODO: make sure If(Some(...)) has been desugared
+    var (thn', declsThn) := RemoveScopedVars(thn);
+    var (els', declsEls) := RemoveScopedVars(els);
+    (If(None, thn', els'), declsThn + declsEls)
+  case _ => (c, []) //TODO (precondition should eliminate this case)
+}
+
+lemma RelStateRemoveScopedVarsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, post: WpPostShallow<A>)
+  requires 
+    var (c', decls) := RemoveScopedVars(c);
+    LabelsWellDefAux(c, post.scopes.Keys) && LabelsWellDefAux(c', post.scopes.Keys)
+  ensures 
+    var (c', decls) := RemoveScopedVars(c);
+    forall s :: WpShallow(a, c, post)(s) == ForallVarDeclsShallow(a, decls, WpShallow(a, c', ResetVarsPost(a, decls, post, s)))(s)
+  /* almost the same as Scope(None, decls, body)
+     Main difference is that currentScope is not updated.
+     If show that body has no direct breaks, then it would be the same
+  */
 
 }
