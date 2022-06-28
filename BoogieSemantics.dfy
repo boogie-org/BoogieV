@@ -36,7 +36,15 @@ module BoogieSemantics {
 
   function ExprEvalBoolOpt<A(!new)>(a: absval_interp<A>, e: Expr, s: state<A>) : Option<bool>
   {
+    //TODO: use ValBoolOpt
     match EvalExpr(a, e, s)
+    case Some(LitV(LitBool(b))) => Some(b)
+    case _ => None
+  }
+
+  function ValBoolOpt<A(!new)>(v: Option<Val<A>>) : Option<bool>
+  {
+    match v    
     case Some(LitV(LitBool(b))) => Some(b)
     case _ => None
   }
@@ -225,18 +233,15 @@ module BoogieSemantics {
       WpShallow(a, SeqToCmd(body'), post)
   }
 
-  function ForallVarDeclsShallow<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
+  function {:opaque} ForallVarDeclsShallow<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
   {
     if |varDecls| == 0 then p
     else var (x,t) := varDecls[0]; 
          s => 
-            if (forall v: Val<A> :: TypeOfVal(a, v) == t ==> ForallVarDeclsShallow(a, varDecls[1..], p)(s[x := v]) == Some(true)) then
-              Some(true)
-            else if (exists v: Val<A> :: TypeOfVal(a, v) == t &&
-                        ForallVarDeclsShallow(a, varDecls[1..], p)(s[x := v]) == None) then
-              None
-            else
-              Some(false)
+          if (forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsShallow(a, varDecls[1..], p)(s[x := v]).Some?) then
+            Some((forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsShallow(a, varDecls[1..], p)(s[x := v]) == Some(true)))
+          else
+            None
   }
 
   function ResetVarsPost<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, p: WpPostShallow<A>, s: state<A>) : WpPostShallow<A>
@@ -246,21 +251,24 @@ module BoogieSemantics {
     WpPostShallow(ResetVarsPred(a, varDecls, p.normal, s), ResetVarsPred(a, varDecls, p.currentScope, s), newScopes)
   }
 
-  function ResetVarsState<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, s: state<A>, sOrig: state<A>) : state<A>
+  function ResetVarsState<A(!new)>(varDecls: seq<(var_name,Ty)>, s: state<A>, sOrig: state<A>) : state<A>
   {
     if |varDecls| == 0 then 
       s
     else
       var x := varDecls[0].0;
+      var s' := ResetVarsState(varDecls[1..], s, sOrig);
       if x in sOrig.Keys then
-        s[x := sOrig[x]]
+        s'[x := sOrig[x]]
       else
-        s-{x}
+        s'-{x}
   }
 
   function ResetVarsPred<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, p: Predicate<A>, s: state<A>) : Predicate<A>
   {
-    s' => p(ResetVarsState(a, varDecls, s', s))
+    /* if condition to keep the exact same predicate in the empty case (the else branch would work for the empty case,
+       but then one only gets pointwise equality to p) */
+    if |varDecls| == 0 then p else s' => p(ResetVarsState(varDecls, s', s))
   }
 
   lemma ResetVarsPredNoVars<A(!new)>(a: absval_interp<A>, p: Predicate<A>)
@@ -318,6 +326,7 @@ module BoogieSemantics {
   requires forall s: state<A> :: P(s) == Q(s)
   ensures ForallVarDeclsShallow(a, varDecls, P)(s) == ForallVarDeclsShallow(a, varDecls, Q)(s)
   {
+      reveal ForallVarDeclsShallow();
       if |varDecls| == 0 {
           //trivial from precondition P(s) == Q(s)
       } else {
@@ -344,6 +353,17 @@ module BoogieSemantics {
         WpShallowSimpleCmdPointwise(a, sc2, P ,Q, s');
       }
     case _ => 
+  }
+
+  lemma WpShallowSimpleCmdPointwise2<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, P: Predicate<A>, Q: Predicate<A>)
+  requires (forall s' :: P(s') == Q(s'))
+  ensures forall s :: WpShallowSimpleCmd(a, sc, P)(s) == WpShallowSimpleCmd(a, sc, Q)(s)
+  {
+    forall s | true 
+    ensures WpShallowSimpleCmd(a, sc, P)(s) == WpShallowSimpleCmd(a, sc, Q)(s)
+    {
+      WpShallowSimpleCmdPointwise(a, sc, P, Q, s);
+    }
   }
 
   lemma WpShallowPointwise<A(!new)>(a: absval_interp<A>, c: Cmd, P: WpPostShallow, Q: WpPostShallow, s: state<A>)

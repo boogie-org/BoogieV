@@ -16,13 +16,40 @@ module DesugarScopedVars {
     (forall k | k in m.Keys :: Maps.Get(s1, k) == Maps.Get(s2, m[k]))
   }
 
- lemma RelStateEmpty<V>(s1: map<var_name, V> , s2: map<var_name, V>)
+  lemma RelStateLarger<V>(m: map<var_name, var_name>, m': map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>)
+  requires RelState(m', s1, s2)
+  requires MapGte(m', m)
+  ensures RelState(m, s1, s2)
+  {
+    reveal MapGte();
+    reveal RelState();
+  }
+
+ lemma {:verify false} RelStateEmpty<V>(s1: map<var_name, V> , s2: map<var_name, V>)
   ensures RelState(map[], s1, s2)
  { reveal RelState(); }
 
   predicate {:opaque} RelPred<A(!new)>(m: map<var_name, var_name>, post1: Predicate<A>, post2: Predicate<A>)
   {
     forall s, s' | RelState(m, s, s') :: post1(s) == post2(s')
+  }
+
+  predicate {:opaque} MapGte(m': map<var_name, var_name>, m: map<var_name, var_name>)
+  {
+    forall x | x in m.Keys :: x in m'.Keys && m[x] == m'[x]
+  }
+
+  lemma RelPredLarger<A(!new)>(m: map<var_name, var_name>, m': map<var_name, var_name>, post1: Predicate<A>, post2: Predicate<A>)
+  requires RelPred(m, post1, post2)
+  requires MapGte(m', m)
+  ensures RelPred(m', post1, post2)
+  {
+    reveal RelPred();
+    forall s1,s2: map<var_name, Val<A>> | RelState(m', s1, s2)
+    ensures post1(s1) == post2(s2)
+    {
+      RelStateLarger(m, m', s1, s2);
+    }
   }
 
   predicate {:opaque} RelPost<A(!new)>(m: map<var_name, var_name>, post1: WpPostShallow<A>, post2: WpPostShallow<A>)
@@ -35,13 +62,13 @@ module DesugarScopedVars {
 
   function method MultiSubstExpr(e: Expr, varMapping: map<var_name, var_name>): Expr
 
- lemma MultiSubstExprSpec<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
+ lemma {:verify false} MultiSubstExprSpec<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
     requires forall x | x in e.FreeVars() :: 
       && (x in varMapping.Keys ==> Maps.Get(s1, x) == Maps.Get(s2, varMapping[x]))
       && (x !in varMapping.Keys ==> Maps.Get(s1, x) == Maps.Get(s2, x))
     ensures EvalExpr(a, e, s1) == EvalExpr(a, MultiSubstExpr(e, varMapping), s2)
   
- lemma MultiSubstExprSpec2<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
+ lemma {:verify false} MultiSubstExprSpec2<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
     requires RelState(varMapping, s1, s2)
     requires e.FreeVars() <= varMapping.Keys
     ensures EvalExpr(a, e, s1) == EvalExpr(a, MultiSubstExpr(e, varMapping), s2)
@@ -69,7 +96,7 @@ module DesugarScopedVars {
       SeqSimple(SubstSimpleCmd(c1, varMapping), SubstSimpleCmd(c2, varMapping))
   }
 
- lemma {:induction false} ForallVarDeclsRel<A(!new)>(
+ lemma {:verify false} {:induction false} ForallVarDeclsRel<A(!new)>(
     a: absval_interp<A>, 
     varDecls: seq<(var_name, Ty)>, 
     varMapping: map<var_name, var_name>, 
@@ -115,7 +142,7 @@ module DesugarScopedVars {
     }
   }
 
- lemma ForallVarDeclsRel2<A(!new)>(
+ lemma {:verify false} ForallVarDeclsRel2<A(!new)>(
     a: absval_interp<A>, 
     varDecls: seq<(var_name, Ty)>, 
     varMapping: map<var_name, var_name>, 
@@ -137,7 +164,7 @@ module DesugarScopedVars {
     reveal RelPred();
   }
 
- lemma RelStateUpdPreserve<V>(varMapping: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, x: var_name, v: V)
+ lemma {:verify false} RelStateUpdPreserve<V>(varMapping: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, x: var_name, v: V)
  requires RelState(varMapping, s1, s2)
  requires Maps.Injective(varMapping)
  requires x in varMapping.Keys
@@ -161,7 +188,7 @@ module DesugarScopedVars {
   }
  }
 
- lemma {:verify true} RelStateRemovePreserve<V>(varMapping: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, x: var_name)
+ lemma {:verify false} {:verify true} RelStateRemovePreserve<V>(varMapping: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, x: var_name)
  requires RelState(varMapping, s1, s2)
  requires Maps.Injective(varMapping)
  requires x in varMapping.Keys
@@ -185,7 +212,7 @@ module DesugarScopedVars {
   }
  }
 
- lemma {:induction false} SubstSimpleCmdCorrect<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, varMapping: map<var_name, var_name>, 
+ lemma {:verify false} {:induction false} SubstSimpleCmdCorrect<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, varMapping: map<var_name, var_name>, 
     post1: Predicate<A>, post2: Predicate<A>)
     requires RelPred(varMapping, post1, post2)
     requires sc.WellFormedVars(varMapping.Keys)
@@ -272,7 +299,7 @@ module DesugarScopedVars {
     name + SEP + Util.NatToString(n)
   }
 
-  lemma SuffixDiffSameLength(prefix1: string, prefix2: string, suffix1:string, suffix2: string)
+  lemma {:verify false} SuffixDiffSameLength(prefix1: string, prefix2: string, suffix1:string, suffix2: string)
     requires |suffix1| == |suffix2|
     requires suffix1 != suffix2
     ensures prefix1+suffix1 != prefix1+suffix2
@@ -303,7 +330,7 @@ module DesugarScopedVars {
     }
   }
 
-  lemma {:verify true} VersionedNameInjective(prefix1: string, prefix2: string, i1: nat, i2: nat)
+  lemma VersionedNameInjective(prefix1: string, prefix2: string, i1: nat, i2: nat)
   requires i1 != i2
   ensures VersionedName(prefix1, i1) != VersionedName(prefix2, i2)
   {
@@ -358,7 +385,7 @@ module DesugarScopedVars {
     set prefix, i | prefix in names && i0 <= i < i1 :: VersionedName(prefix, i)
   }
 
-  lemma VarNameSetDisjoint(names: set<string>, i0: nat, i1: nat, i2: nat, i3: nat)
+  lemma {:verify false} VarNameSetDisjoint(names: set<string>, i0: nat, i1: nat, i2: nat, i3: nat)
     requires i0 <= i1 <= i2 <= i3
     ensures VarNameSet(names, i0, i1) !! VarNameSet(names, i2, i3)
   {
@@ -435,7 +462,8 @@ module DesugarScopedVars {
     case _ => (c, usedVars) //TODO (precondition should eliminate this case)
   }  
 
-  lemma ResetVarsStateRel<A(!new)>(
+
+  lemma {:verify false} ResetVarsStateRel<A(!new)>(
     varMapping: map<var_name, var_name>, 
     vDecls1: seq<(var_name, Ty)>, 
     vDecls2: seq<(var_name, Ty)>, 
@@ -486,7 +514,115 @@ module DesugarScopedVars {
     }
   }
 
-  lemma ResetVarsPredRel<A(!new)>(
+
+  lemma {:verify true} ResetVarsStateRel2<A(!new)>(
+    m: map<var_name, var_name>, 
+    m': map<var_name, var_name>, 
+    vDecls1: seq<(var_name, Ty)>, 
+    vDecls2: seq<(var_name, Ty)>, 
+    sOrig1: state<A>,
+    sOrig2: state<A>,
+    s1: state<A>,
+    s2: state<A>)
+  requires Maps.Injective(m)
+  requires RelState(m, sOrig1, sOrig2)
+  requires RelState(m', s1, s2)
+  requires |vDecls1| == |vDecls2|
+  requires (forall i | 0 <= i < |vDecls1| :: var (x,t) := vDecls1[i]; 
+    x in m.Keys && vDecls2[i].0 == m[x] && vDecls2[i].1 == t)
+  requires (forall x | x in m.Keys && x !in GetVarNames(vDecls1) :: x in m'.Keys && m'[x] == m[x])
+  ensures RelState(m, ResetVarsState(vDecls1, s1, sOrig1), ResetVarsState(vDecls2, s2, sOrig2))
+  {
+      if |vDecls1| == 0 {
+        assume false;
+
+      } else {
+        var (x,t) := vDecls1[0];
+        var (x',_) := vDecls2[0];
+        assert m[x] == x';
+
+        var s1' := ResetVarsState(vDecls1[1..], s1, sOrig1);
+        var s2' := ResetVarsState(vDecls2[1..], s2, sOrig2);
+
+
+        assert x in sOrig1.Keys <==> x' in sOrig2.Keys by {
+          reveal RelState();
+        }
+
+        assert RelState(m, s1', s2') by {
+          ResetVarsStateRel2(m, m', vDecls1[1..], vDecls2[1..], sOrig1, sOrig2, s1, s2);
+        }
+
+        if x in sOrig1.Keys {
+          assert sOrig1[x] == sOrig2[x'] by {
+            reveal RelState();
+          }
+
+          assert RelState(m, s1'[x := sOrig1[x]], s2'[x' := sOrig2[x']]) by {
+            RelStateUpdPreserve(m, s1', s2', x, sOrig1[x]);
+          }
+        } else {
+          assert RelState(m, s1'-{x}, s2'-{x'}) by {
+            RelStateRemovePreserve(m, s1', s2', x);
+          }
+        }
+      }
+    }
+
+  /** 
+  * The intuition of ResetVarsPredRel2 is that if we know RelPred(m, p1, p2), then we know that resetting
+  * the variables in p1 and p2 yields predicates that are related to any injective map m that agrees with m on all
+  * keys that are not reset. The variables that are reset are guaranteed to map to the same value in our setting.
+  */
+
+  lemma {:verify true} ResetVarsPredRel2<A(!new)>(
+    a: absval_interp<A>, 
+    m: map<var_name, var_name>, 
+    m': map<var_name, var_name>, 
+    vDecls1: seq<(var_name, Ty)>, 
+    vDecls2: seq<(var_name, Ty)>, 
+    p1: Predicate<A>, 
+    p2: Predicate<A>,
+    s1: state<A>,
+    s2: state<A>)
+  requires Maps.Injective(m)
+  requires RelPred(m, p1, p2)
+  requires RelState(m, s1, s2)
+  requires |vDecls1| == |vDecls2|
+  requires (forall i | 0 <= i < |vDecls1| :: var (x,t) := vDecls1[i]; 
+    x in m.Keys && vDecls2[i].0 == m[x] && vDecls2[i].1 == t)
+  requires (forall x | x in m.Keys && x !in GetVarNames(vDecls1) :: x in m'.Keys && m'[x] == m[x])
+  ensures RelPred(m', ResetVarsPred(a, vDecls1, p1, s1), ResetVarsPred(a, vDecls2, p2, s2))
+  {
+    if |vDecls1| == 0 {
+      assert ResetVarsPred(a, vDecls1, p1, s1) == p1;
+      assert ResetVarsPred(a, vDecls2, p2, s1) == p2;
+      //assume RelPred(m', p1, p2);
+      assert MapGte(m', m) by {
+        reveal MapGte();
+      }
+
+      RelPredLarger(m, m', p1, p2);
+    } else {
+      forall s, s' | RelState(m', s, s')
+      ensures ResetVarsPred(a, vDecls1, p1, s1)(s) == ResetVarsPred(a, vDecls2, p2, s2)(s')
+      { 
+        calc {
+          ResetVarsPred(a, vDecls1, p1, s1)(s);
+          p1(ResetVarsState(vDecls1, s, s1));
+          { ResetVarsStateRel2(m, m', vDecls1, vDecls2, s1, s2, s, s'); 
+            reveal RelPred(); }
+          p2(ResetVarsState(vDecls2, s', s2));
+          ResetVarsPred(a, vDecls2, p2, s2)(s');
+        }
+      }
+
+      reveal RelPred();
+    }
+  }
+
+
+  lemma {:verify false} ResetVarsPredRel<A(!new)>(
     a: absval_interp<A>, 
     varMapping: map<var_name, var_name>, 
     vDecls1: seq<(var_name, Ty)>, 
@@ -504,7 +640,6 @@ module DesugarScopedVars {
   ensures RelPred(varMapping, ResetVarsPred(a, vDecls1, p1, s1), ResetVarsPred(a, vDecls2, p2, s2))
   {
     if |vDecls1| == 0 {
-      reveal RelPred();
     } else {
       forall s, s' | RelState(varMapping, s, s')
       ensures ResetVarsPred(a, vDecls1, p1, s1)(s) == ResetVarsPred(a, vDecls2, p2, s2)(s')
@@ -523,7 +658,7 @@ module DesugarScopedVars {
     }
   }
    
- lemma DesugarScopedVarsCorrect<A(!new)>(
+ lemma {:verify false} DesugarScopedVarsCorrect<A(!new)>(
     a: absval_interp<A>,
     c: Cmd, 
     substMap: map<var_name, var_name>, 
@@ -651,7 +786,7 @@ function method RemoveScopedVars(c: Cmd): (Cmd, (seq<(var_name, Ty)>))
   case _ => (c, []) //TODO (precondition should eliminate this case)
 }
 
-lemma RelStateRemoveScopedVarsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, post: WpPostShallow<A>)
+lemma {:verify false} RelStateRemoveScopedVarsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, post: WpPostShallow<A>)
   requires 
     var (c', decls) := RemoveScopedVars(c);
     LabelsWellDefAux(c, post.scopes.Keys) && LabelsWellDefAux(c', post.scopes.Keys)
