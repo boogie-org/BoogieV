@@ -107,6 +107,14 @@ module BoogieLang {
     | Binder(BinderKind, var_name, Ty, Expr) //switch to DeBruijn?
   /** TODO 
     | FunCall(fun_name, List<Expr>)
+    /** 
+       forall x :: forall y :: P(x,y,z)
+
+        var z: int 0
+        DeBruijn: forall (forall P(1,0,2))
+
+        Locally Nameless: forall (forall P(1,0,z))
+     */
   */
   {
     method ToString() returns (s: string) {
@@ -303,6 +311,11 @@ module BoogieLang {
     match v
     case LitV(lit) => TPrim(TypeOfLit(lit))
     case AbsV(abs_val) => TCon(a(abs_val))
+  }
+
+  function TypeOfValues<A>(a: absval_interp<A>, vs: seq<Val<A>>) : seq<Ty>
+  {
+    seq(|vs|, i requires 0 <= i < |vs| => TypeOfVal(a, vs[i]))
   }
 
   type state<A> = map<var_name, Val<A>>

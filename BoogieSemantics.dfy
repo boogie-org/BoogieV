@@ -1,6 +1,7 @@
 include "BoogieLang.dfy"
 include "BoogieOp.dfy"
 include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "dafny-libraries/src/Collections/Maps/Maps.dfy"
 
 module BoogieSemantics {
   import opened BoogieLang
@@ -9,6 +10,7 @@ module BoogieSemantics {
   import opened BoogieOp
 
   import Sequences = Seq
+  import Maps
 
   function EvalExpr<A(!new)>(a: absval_interp<A>, e: Expr, s: state<A>) : Option<Val<A>>
   {
@@ -23,9 +25,10 @@ module BoogieSemantics {
       var v2 :- EvalExpr(a, e2, s);
       EvalBinop(v1, bop, v2)
     case Old(e) => None //TODO
-    case Binder(ForallQ, x, ty, e) =>  if forall v :: TypeOfVal(a,v) == ty ==> EvalExpr(a, e, s[x := v]) == Some(LitV(LitBool(true))) then 
+    case Binder(ForallQ, x, ty, e) =>  
+    if forall v :: TypeOfVal(a,v) == ty ==> EvalExpr(a, e, s[x := v]) == Some(LitV(LitBool(true))) then 
                                   Some(LitV(LitBool(true))) 
-                              else if forall v :: TypeOfVal(a,v) == ty ==> //TODO: Potential trigger issue (see Dafny warning)
+                              else if forall v {:trigger s[x := v]} :: TypeOfVal(a,v) == ty ==> //TODO: Potential trigger issue (see Dafny warning)
                                               var res := EvalExpr(a, e, s[x := v]); 
                                               res.Some? && TypeOfVal(a, res.value) == TPrim (TBool) then
                                   Some(LitV(LitBool(false)))
@@ -186,7 +189,7 @@ module BoogieSemantics {
         WpShallowSimpleCmd(a, simpleCmds[0], res2)(s)
   }
 
-  function WpShallow<A(!new)>(a: absval_interp<A>, c: Cmd, post: WpPostShallow<A>) : Predicate<A>
+  function {:opaque} WpShallow<A(!new)>(a: absval_interp<A>, c: Cmd, post: WpPostShallow<A>) : Predicate<A>
     requires LabelsWellDefAux(c, post.scopes.Keys)
     decreases NumScopesAndLoops(c), c
   {
@@ -199,13 +202,11 @@ module BoogieSemantics {
         if optLabel.Some? then 
           post.scopes[optLabel.value := post.normal]
         else post.scopes;
-      var unquantifiedBody := 
-        assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
-        var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
-        prevState => 
-          WpShallow(a, body, ResetVarsPost(a, varDecls, post', prevState));
+
+      assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
+      var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
       
-      s => ForallVarDeclsShallow(a, varDecls, unquantifiedBody(s))(s)
+      s => ForallVarDeclsShallow( a, varDecls, WpShallow(a, body, ResetVarsPost(varDecls, post', s)) )(s)
     case If(optCond, thn, els) =>
       match optCond {
         case Some(cond) => 
@@ -236,6 +237,17 @@ module BoogieSemantics {
   function {:opaque} ForallVarDeclsShallow<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
   {
     if |varDecls| == 0 then p
+    else 
+      s => 
+        if forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)).Some? then
+          Some(forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)) == Some(true))
+        else
+          None
+  }
+
+  function {:opaque} ForallVarDeclsShallowOld<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
+  {
+    if |varDecls| == 0 then p
     else var (x,t) := varDecls[0]; 
          s => 
           if (forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsShallow(a, varDecls[1..], p)(s[x := v]).Some?) then
@@ -244,11 +256,69 @@ module BoogieSemantics {
             None
   }
 
-  function ResetVarsPost<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, p: WpPostShallow<A>, s: state<A>) : WpPostShallow<A>
-    ensures p.scopes.Keys == ResetVarsPost(a, varDecls, p, s).scopes.Keys
+  predicate ValuesRespectDecls<A>(a: absval_interp<A>, vs: seq<Val<A>>, varDecls: seq<(var_name, Ty)>)
   {
-    var newScopes := map lbl | lbl in p.scopes.Keys :: ResetVarsPred(a, varDecls, p.scopes[lbl], s);
-    WpPostShallow(ResetVarsPred(a, varDecls, p.normal, s), ResetVarsPred(a, varDecls, p.currentScope, s), newScopes)
+    TypeOfValues(a, vs) == seq(|varDecls|, i requires 0 <= i < |varDecls| => varDecls[i].1)
+  }
+
+  function StateUpdVarDecls<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>) : state<A>
+    requires |varDecls| == |vs|
+  {
+    if |varDecls| == 0 then s
+    else 
+      StateUpdVarDecls(s, varDecls[1..], vs[1..])[varDecls[0].0 := vs[0]]
+  }
+
+  /*
+  predicate StateUpdVarDecls2<A>(s: state<A>, s': state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>)
+    requires |varDecls| == |vs|
+  {
+    && (forall i | 0 <= i < |varDecls| :: varDecls[i].0 in s'.Keys && s'[varDecls[i].0] == vs[i])
+    && (forall k | k !in GetVarNames(varDecls) :: Maps.Get(s, k) == Maps.Get(s', k))
+  }
+
+  lemma {:verify true} StateUpdVarDeclsEquiv<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>)
+  requires |varDecls| == |vs|
+  requires Sequences.HasNoDuplicates(varDecls)
+  ensures StateUpdVarDecls2(s, StateUpdVarDecls(s, varDecls, vs), varDecls, vs)
+  {
+    if (|varDecls| == 0) {
+
+    } else {
+      var s' := StateUpdVarDecls(s, varDecls[1..], vs[1..]);
+
+      assert StateUpdVarDecls2()
+    }
+  }
+  */
+
+  lemma SomeForallVarDeclsShallow<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
+    requires ForallVarDeclsShallow(a, varDecls, p)(s) != None
+    requires |varDecls| > 0
+    ensures 
+      var (x,t) := varDecls[0];
+      ForallVarDeclsShallow(a, varDecls, p)(s) ==
+      Some(forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)) == Some(true))
+  {
+    reveal ForallVarDeclsShallow();
+  }
+
+  lemma SomeForallVarDeclsShallow2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>,
+    vs: seq<Val<A>>)
+    requires ForallVarDeclsShallow(a, varDecls, p)(s) != None
+    requires ValuesRespectDecls(a, vs, varDecls)
+    requires |varDecls| > 0
+    ensures 
+      p(StateUpdVarDecls(s, varDecls, vs)).Some?
+  {
+    reveal ForallVarDeclsShallow();
+  }
+
+  function ResetVarsPost<A(!new)>(varDecls: seq<(var_name,Ty)>, p: WpPostShallow<A>, s: state<A>) : WpPostShallow<A>
+    ensures p.scopes.Keys == ResetVarsPost(varDecls, p, s).scopes.Keys
+  {
+    var newScopes := map lbl | lbl in p.scopes.Keys :: ResetVarsPred(varDecls, p.scopes[lbl], s);
+    WpPostShallow(ResetVarsPred(varDecls, p.normal, s), ResetVarsPred(varDecls, p.currentScope, s), newScopes)
   }
 
   function ResetVarsState<A(!new)>(varDecls: seq<(var_name,Ty)>, s: state<A>, sOrig: state<A>) : state<A>
@@ -264,20 +334,32 @@ module BoogieSemantics {
         s'-{x}
   }
 
-  function ResetVarsPred<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, p: Predicate<A>, s: state<A>) : Predicate<A>
+  function ResetVarsPred<A(!new)>(varDecls: seq<(var_name,Ty)>, p: Predicate<A>, s: state<A>) : Predicate<A>
   {
     /* if condition to keep the exact same predicate in the empty case (the else branch would work for the empty case,
        but then one only gets pointwise equality to p) */
     if |varDecls| == 0 then p else s' => p(ResetVarsState(varDecls, s', s))
   }
 
+  //earlier resets override later resets
+  lemma ResetVarsPredOverwrite<A(!new)>(x: var_name, t: Ty, sOrig1: state<A>, sOrig2: state<A>, sNew: state<A>, pred: Predicate<A>)
+    requires forall s' :: Maps.Get(s', x) == Maps.Get(sOrig1, x) ==> pred(s') == Some(true)
+    ensures ResetVarsPred([(x,t)], ResetVarsPred([(x,t)], pred, sOrig1), sOrig2)(sNew) == Some(true)
+  {
+    calc {
+      ResetVarsPred([(x,t)], ResetVarsPred([(x,t)], pred, sOrig1), sOrig2)(sNew);
+      ResetVarsPred([(x,t)], pred, sOrig1)(ResetVarsState([(x,t)], sNew, sOrig2));
+      pred(ResetVarsState([(x,t)], ResetVarsState([(x,t)], sNew, sOrig2), sOrig1));
+    }
+  }
+
   lemma ResetVarsPredNoVars<A(!new)>(a: absval_interp<A>, p: Predicate<A>)
-    ensures forall origState, s' :: ResetVarsPred(a, [], p, origState)(s') == p(s')
+    ensures forall origState, s' :: ResetVarsPred([], p, origState)(s') == p(s')
   { }
 
   lemma ResetVarsPostNoVars<A(!new)>(a: absval_interp<A>, p: WpPostShallow<A>, origState: state<A>)
     requires 
-      var q := ResetVarsPost(a, [], p, origState);
+      var q := ResetVarsPost([], p, origState);
       && (forall s' :: p.normal(s') == q.normal(s'))
       && (forall s' :: p.currentScope(s') == q.currentScope(s'))
       && (forall lbl, s' :: lbl in p.scopes.Keys && lbl in q.scopes.Keys ==> p.scopes[lbl](s') == q.scopes[lbl](s'))
@@ -285,7 +367,7 @@ module BoogieSemantics {
 
   lemma ResetVarsPredPointwise<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, p: Predicate<A>, q: Predicate<A>, resetState: state<A>, s: state<A>) 
     requires forall s :: p(s) == q(s)
-    ensures forall s :: ResetVarsPred(a, varDecls, p, resetState)(s) == ResetVarsPred(a, varDecls, q, resetState)(s)
+    ensures forall s :: ResetVarsPred(varDecls, p, resetState)(s) == ResetVarsPred(varDecls, q, resetState)(s)
   { }
 
   lemma ResetVarsPostPointwise<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, post1: WpPostShallow<A>, post2: WpPostShallow<A>, resetState: state<A>, s: state<A>) 
@@ -293,14 +375,14 @@ module BoogieSemantics {
     requires forall s :: post1.currentScope(s) == post2.currentScope(s)
     requires forall s, lbl :: lbl in post1.scopes.Keys && lbl in post2.scopes.Keys ==> post1.scopes[lbl](s) == post2.scopes[lbl](s)
     ensures 
-      var post1' := ResetVarsPost(a, varDecls, post1, resetState);
-      var post2' := ResetVarsPost(a, varDecls, post2, resetState);
+      var post1' := ResetVarsPost(varDecls, post1, resetState);
+      var post2' := ResetVarsPost(varDecls, post2, resetState);
       && (forall s :: post1'.normal(s) == post2'.normal(s))
       && (forall s :: post1'.currentScope(s) == post2'.currentScope(s))
       && (forall s, lbl :: lbl in post1'.scopes.Keys && lbl in post2'.scopes.Keys ==> post1'.scopes[lbl](s) == post2'.scopes[lbl](s))
   { 
-    var post1' := ResetVarsPost(a, varDecls, post1, resetState);
-    var post2' := ResetVarsPost(a, varDecls, post2, resetState);
+    var post1' := ResetVarsPost(varDecls, post1, resetState);
+    var post2' := ResetVarsPost(varDecls, post2, resetState);
     forall s | true 
     ensures post1'.normal(s) == post2'.normal(s)
     {
@@ -322,10 +404,12 @@ module BoogieSemantics {
     }
   }
 
-  lemma ForallVarDeclsPointwise<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, P: Predicate<A>, Q: Predicate<A>, s: state<A>)
+  lemma {:verify true} ForallVarDeclsPointwise<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, P: Predicate<A>, Q: Predicate<A>, s: state<A>)
   requires forall s: state<A> :: P(s) == Q(s)
   ensures ForallVarDeclsShallow(a, varDecls, P)(s) == ForallVarDeclsShallow(a, varDecls, Q)(s)
   {
+    reveal ForallVarDeclsShallow();
+      /* proof below needed when using the recursive version of ForallVarDeclsShallow
       reveal ForallVarDeclsShallow();
       if |varDecls| == 0 {
           //trivial from precondition P(s) == Q(s)
@@ -337,6 +421,7 @@ module BoogieSemantics {
               ForallVarDeclsPointwise(a, varDecls[1..], P, Q, s[x := v]);
           }
       }
+      */
   }
 
   lemma WpShallowSimpleCmdPointwise<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, P: Predicate<A>, Q: Predicate<A>, s: state<A>)
@@ -374,6 +459,7 @@ module BoogieSemantics {
   ensures WpShallow(a, c, P)(s) == WpShallow(a, c, Q)(s)
   decreases NumScopesAndLoops(c), c
   {
+      reveal WpShallow();
       match c
       case SimpleCmd(sc) => WpShallowSimpleCmdPointwise(a, sc, P.normal, Q. normal, s);
       case Seq(c1, c2) =>
@@ -392,8 +478,8 @@ module BoogieSemantics {
         var updatedScopesQ := if optLabel.Some? then Q.scopes[optLabel.value := Q.normal] else Q.scopes;
         assert updatedScopesQ.Keys == if optLabel.Some? then {optLabel.value} + Q.scopes.Keys else Q.scopes.Keys;
 
-        var P' := ResetVarsPost(a, varDecls, WpPostShallow(P.normal, P.normal, updatedScopesP), s);
-        var Q' := ResetVarsPost(a, varDecls, WpPostShallow(Q.normal, Q.normal, updatedScopesQ), s);
+        var P' := ResetVarsPost(varDecls, WpPostShallow(P.normal, P.normal, updatedScopesP), s);
+        var Q' := ResetVarsPost(varDecls, WpPostShallow(Q.normal, Q.normal, updatedScopesQ), s);
 
         forall s' | true
         ensures WpShallow(a, body, P')(s') == WpShallow(a, body, Q')(s')

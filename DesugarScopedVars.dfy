@@ -515,7 +515,7 @@ module DesugarScopedVars {
   }
 
 
-  lemma {:verify true} ResetVarsStateRel2<A(!new)>(
+  lemma {:verify false} ResetVarsStateRel2<A(!new)>(
     m: map<var_name, var_name>, 
     m': map<var_name, var_name>, 
     vDecls1: seq<(var_name, Ty)>, 
@@ -708,7 +708,7 @@ module DesugarScopedVars {
       /* Goal: RelPred(substMap, WpShallow(a, c, post1), WpShallow(a, c', post2)) */
       /*
       var updatedScopes := 
-        if optLabel.Some? then 
+      
           post.scopes[optLabel.value := post.normal]
         else post.scopes;
       var unquantifiedBody := 
