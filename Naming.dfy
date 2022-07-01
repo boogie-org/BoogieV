@@ -13,7 +13,7 @@ module Naming {
     name + SEP + Util.NatToString(n)
   }
 
-  lemma {:verify false} SuffixDiffSameLength(prefix1: string, prefix2: string, suffix1:string, suffix2: string)
+  lemma SuffixDiffSameLength(prefix1: string, prefix2: string, suffix1:string, suffix2: string)
     requires |suffix1| == |suffix2|
     requires suffix1 != suffix2
     ensures prefix1+suffix1 != prefix1+suffix2
@@ -118,4 +118,23 @@ module Naming {
   {
     reveal VarNameSet();
   }
+
+  lemma VarNameSetExtend2(names1: set<string>, names2: set<string>, start: nat, end1: nat, end2: nat)
+    requires end1 <= end2
+    ensures VarNameSet(names1, start, end1) <= VarNameSet(names1+names2, start, end2)
+  {
+    reveal VarNameSet();
+  }
+
+  lemma VarNameSetAppend(names1: set<string>, names2: set<string>, start1: nat, end1: nat, start2: nat, end2: nat)
+    requires 
+      && start1 <= start2
+      && end1 <= end2
+    ensures
+      VarNameSet(names1, start1, end1) + VarNameSet(names2, start2, end2) <= 
+      VarNameSet(names1+names2, start1, end2)
+  {
+    reveal VarNameSet();
+  }
+
 }

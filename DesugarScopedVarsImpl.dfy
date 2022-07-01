@@ -65,8 +65,15 @@ module DesugarScopedVarsImpl {
       Alternatively, one could apply such a transformation later to remove the counters
       from names that don't require them. 
      */
-    reveal VarNameSet();
-    seq(|varDecls|, i requires 0 <= i < |varDecls| => (VersionedName(varDecls[i].0, counter+i), varDecls[i].1))
+    var res := seq(|varDecls|, i requires 0 <= i < |varDecls| => (VersionedName(varDecls[i].0, counter+i), varDecls[i].1));
+    assert GetVarNames(res) <= VarNameSet(GetVarNames(varDecls), counter, counter + |varDecls|) by {
+      /** we reveal VarNameSet() inside this by clause, because if it's done outside by clause, then
+          VarNameSet() is revealed to all callers of this function (this behaviour is a bug, see 
+          https://github.com/dafny-lang/dafny/issues/1382) 
+      */
+      reveal VarNameSet();
+    }
+    res
   }
 
   function method ConvertVDeclsToSubstMap(varDecls: seq<(var_name, Ty)>, varDecls': seq<(var_name, Ty)>) : map<var_name, var_name>
