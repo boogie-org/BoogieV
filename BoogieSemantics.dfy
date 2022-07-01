@@ -234,6 +234,20 @@ module BoogieSemantics {
       WpShallow(a, SeqToCmd(body'), post)
   }
 
+
+  predicate ValuesRespectDecls<A>(a: absval_interp<A>, vs: seq<Val<A>>, varDecls: seq<(var_name, Ty)>)
+  {
+    TypeOfValues(a, vs) == seq(|varDecls|, i requires 0 <= i < |varDecls| => varDecls[i].1)
+  }
+
+  function StateUpdVarDecls<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>) : state<A>
+    requires |varDecls| == |vs|
+  {
+    if |varDecls| == 0 then s
+    else 
+      StateUpdVarDecls(s, varDecls[1..], vs[1..])[varDecls[0].0 := vs[0]]
+  }
+
   function {:opaque} ForallVarDeclsShallow<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
   {
     if |varDecls| == 0 then p
@@ -250,25 +264,11 @@ module BoogieSemantics {
     if |varDecls| == 0 then p
     else var (x,t) := varDecls[0]; 
          s => 
-          if (forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsShallow(a, varDecls[1..], p)(s[x := v]).Some?) then
-            Some((forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsShallow(a, varDecls[1..], p)(s[x := v]) == Some(true)))
+          if (forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsShallowOld(a, varDecls[1..], p)(s[x := v]).Some?) then
+            Some((forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsShallowOld(a, varDecls[1..], p)(s[x := v]) == Some(true)))
           else
             None
   }
-
-  predicate ValuesRespectDecls<A>(a: absval_interp<A>, vs: seq<Val<A>>, varDecls: seq<(var_name, Ty)>)
-  {
-    TypeOfValues(a, vs) == seq(|varDecls|, i requires 0 <= i < |varDecls| => varDecls[i].1)
-  }
-
-  function StateUpdVarDecls<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>) : state<A>
-    requires |varDecls| == |vs|
-  {
-    if |varDecls| == 0 then s
-    else 
-      StateUpdVarDecls(s, varDecls[1..], vs[1..])[varDecls[0].0 := vs[0]]
-  }
-
   /*
   predicate StateUpdVarDecls2<A>(s: state<A>, s': state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>)
     requires |varDecls| == |vs|

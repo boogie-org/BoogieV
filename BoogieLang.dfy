@@ -1,9 +1,12 @@
 include "dafny-libraries/src/Wrappers.dfy"
 include "Util.dfy"
+include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
 
 module BoogieLang {
   import opened Wrappers 
   import opened Util
+  import Sequences = Seq
+
 
   datatype Lit = LitInt(int) | LitBool(bool)
   {
@@ -57,7 +60,7 @@ module BoogieLang {
   type proc_name = string
   type lbl_name = string
   type tcon_name = string
-  type fun_name = string
+  type fun_name = string 
 
   datatype PrimTy = TBool | TInt
   {
@@ -88,6 +91,8 @@ module BoogieLang {
     case LitInt(_) => TInt
     case LitBool(_) => TBool
   }
+
+  type VarDecl = (var_name, Ty)
 
   datatype BinderKind = ForallQ | ExistsQ
   {
@@ -164,7 +169,7 @@ module BoogieLang {
     | Assert(Expr)
     | Assume(Expr)
     | Assign(var_name, Ty, Expr) 
-    | Havoc(seq<(var_name, Ty)>)
+    | Havoc(seq<VarDecl>)
     | SeqSimple(SimpleCmd, SimpleCmd) 
     /* The reason for adding a separate sequential composition for simple commands is to be able to transform the AST
        into a form that more directly represents the desired CFG block structure.
@@ -214,7 +219,7 @@ module BoogieLang {
     | SimpleCmd(SimpleCmd)
     | Break(Option<lbl_name>)
     | Seq(Cmd, Cmd)
-    | Scope(labelName: Option<lbl_name>, varDecls: seq<(var_name,Ty)>, body: Cmd)
+    | Scope(labelName: Option<lbl_name>, varDecls: seq<VarDecl>, body: Cmd)
     | Loop(invariants: seq<Expr>, body: Cmd) 
     //cond = None represents a non-deterministic if-statement (if(*) {...} else {...})
     | If(guard: Option<Expr>, thn: Cmd, els: Cmd)
@@ -229,7 +234,8 @@ module BoogieLang {
       case SimpleCmd(sc) => sc.WellFormedVars(xs)
       case Break(_) => true
       case Scope(_, varDecls, body) =>
-        body.WellFormedVars(xs+GetVarNames(varDecls))
+        && Sequences.HasNoDuplicates(varDecls)
+        && body.WellFormedVars(xs+GetVarNames(varDecls))
       case If(optCond, thn, els) =>
         && (optCond.Some? ==> optCond.value.FreeVars() <= xs)
         && thn.WellFormedVars(xs)
@@ -361,6 +367,11 @@ module BoogieLang {
   {
     //if |vs| == 0 then {} else {vs[0].0} + GetVarNames(vs[1..])
     set varDecl | varDecl in vs :: varDecl.0
+  }
+
+  function method GetVarNamesSeq(vs: seq<(var_name,Ty)>):seq<var_name>
+  {
+    seq(|vs|, i requires 0 <= i < |vs| => vs[i].0)
   }
 
   function ModifiedVars(c: Cmd): seq<(var_name, Ty)>

@@ -1,6 +1,6 @@
-include "BoogieSemantics.dfy"
-include "BoogieLang.dfy"
-include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../BoogieSemantics.dfy"
+include "../BoogieLang.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 
 module SemanticsTest {
   import opened BoogieLang
@@ -26,6 +26,21 @@ module SemanticsTest {
 
   const scopeOuter : Cmd := 
     Scope(None, [("x", TPrim (TInt))], outerBody);
+  
+  /** 
+    Scope {
+      var x: int;
+      assume x == 0;
+      Scope A {
+        var x: int;
+        Scope {
+          var x: int;
+          break A;
+        }
+      }
+      assert x == 0;
+    }
+   */
 
 
   function TruePred<A>() : Predicate<A> {
@@ -47,7 +62,7 @@ module SemanticsTest {
     }
   }
 
-  lemma {:verify true} ScopeOuterTest<A(!new)>(a: absval_interp<A>, s: state<A>)
+  lemma ScopeOuterTest<A(!new)>(a: absval_interp<A>, s: state<A>)
     requires LabelsWellDefAux(scopeOuter, TruePost<A>().scopes.Keys)
     requires WpShallow(a, scopeOuter, TruePost())(s) != None //"well-typed"
     ensures WpShallow(a, scopeOuter, TruePost())(s) == Some(true)
@@ -169,7 +184,7 @@ module SemanticsTest {
             calc {
               p3(s3);
               WpShallow(a, Break(Some("A")), ResetVarsPost(decls, postInner, s''))(s3);
-              { reveal WpShallow(); }
+              { reveal WpShallow(); } //TODO: slow, find way to speed up
               ResetVarsPost(decls, postInner, s'').scopes["A"](s3);
               ResetVarsPred(decls, postInner.scopes["A"], s'')(s3);
               ResetVarsPred(decls, postMiddle''.scopes["A"], s'')(s3);
