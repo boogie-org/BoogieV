@@ -44,7 +44,7 @@ module Naming {
     }
   }
 
-  lemma {:verify false} VersionedNameInjective(prefix1: string, prefix2: string, i1: nat, i2: nat)
+  lemma VersionedNameInjective(prefix1: string, prefix2: string, i1: nat, i2: nat)
   requires i1 != i2
   ensures VersionedName(prefix1, i1) != VersionedName(prefix2, i2)
   {

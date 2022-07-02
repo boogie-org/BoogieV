@@ -242,11 +242,21 @@ module BoogieSemantics {
 
   function StateUpdVarDecls<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>) : state<A>
     requires |varDecls| == |vs|
+    ensures StateUpdVarDecls(s, varDecls, vs).Keys == s.Keys + GetVarNames(varDecls)
   {
-    if |varDecls| == 0 then s
+    if |varDecls| == 0 then 
+      s
     else 
-      StateUpdVarDecls(s, varDecls[1..], vs[1..])[varDecls[0].0 := vs[0]]
+      var s' := StateUpdVarDecls(s, varDecls[1..], vs[1..]);
+      var res := s'[varDecls[0].0 := vs[0]];
+      res
   }
+
+  lemma StateUpdVarDeclsLookup1<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>, k: var_name)
+    requires |varDecls| == |vs|
+    requires k !in GetVarNames(varDecls)
+    ensures Maps.Get(StateUpdVarDecls(s, varDecls, vs), k) == Maps.Get(s, k)
+  { }
 
   function {:opaque} ForallVarDeclsShallow<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
   {
@@ -313,6 +323,39 @@ module BoogieSemantics {
   {
     reveal ForallVarDeclsShallow();
   }
+
+  lemma  ForallVarDeclsShallowEquiv<A(!new)>(
+      a: absval_interp<A>, 
+      varDecls: seq<VarDecl>, 
+      varDecls': seq<VarDecl>, 
+      p1: Predicate<A>, 
+      p2: Predicate<A>,
+      s1: state<A>,
+      s2: state<A>)
+    requires 
+      && |varDecls| == |varDecls'|
+      && (forall vs :: ValuesRespectDecls(a, vs, varDecls) == ValuesRespectDecls(a, vs, varDecls'))
+      && (forall vs | ValuesRespectDecls(a, vs, varDecls) :: 
+          p1(StateUpdVarDecls(s1, varDecls, vs)) == p2(StateUpdVarDecls(s2, varDecls', vs)))
+    ensures 
+      ForallVarDeclsShallow(a, varDecls, p1)(s1) == ForallVarDeclsShallow(a, varDecls', p2)(s2)
+    {
+      reveal ForallVarDeclsShallow();
+      if |varDecls| == 0 {
+        assert p1(s1) == p2(s2) by {
+          //need this for Dafny to trigger the quantifier
+          assert ValuesRespectDecls(a, [], []);  
+        }
+      }
+      /*
+      (if |varDecls| > 0 then
+        && (forall vs :: ValuesRespectDecls(a, vs, varDecls) == ValuesRespectDecls(a, vs, varDecls'))
+        && (forall vs | ValuesRespectDecls(a, vs, varDecls) :: 
+          p1(StateUpdVarDecls(s1, varDecls, vs)) == p2(StateUpdVarDecls(s2, varDecls', vs)))
+      else 
+        p1(s1) == p2(s2))
+        */
+    }
 
   function ResetVarsPost<A(!new)>(varDecls: seq<(var_name,Ty)>, p: WpPostShallow<A>, s: state<A>) : WpPostShallow<A>
     ensures p.scopes.Keys == ResetVarsPost(varDecls, p, s).scopes.Keys

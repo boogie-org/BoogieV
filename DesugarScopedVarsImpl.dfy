@@ -76,6 +76,27 @@ module DesugarScopedVarsImpl {
     res
   }
 
+  lemma CreateUniqueVarDeclsNoDup(varDecls: seq<(var_name, Ty)>, counter: nat)
+    ensures 
+      var varDecls' := CreateUniqueVarDecls(varDecls, counter);
+      Sequences.HasNoDuplicates(GetVarNamesSeq(varDecls'))
+  {
+    var varDecls' := CreateUniqueVarDecls(varDecls, counter);
+    var varNames' := GetVarNamesSeq(varDecls');
+    forall i, j | 0 <= i < |varNames'| && 0 <= j < |varNames'| && i != j
+    ensures varNames'[i] != varNames'[j]
+    {
+      calc {
+        varNames'[i];
+        VersionedName(varDecls[i].0, counter+i);
+      != { VersionedNameInjective(varDecls[i].0, varDecls[j].0, counter+i, counter+j); }
+        VersionedName(varDecls[j].0, counter+j);
+        varNames'[j];
+      }
+    }
+    reveal Sequences.HasNoDuplicates();
+  }
+
   function method ConvertVDeclsToSubstMap(varDecls: seq<(var_name, Ty)>, varDecls': seq<(var_name, Ty)>) : map<var_name, var_name>
     requires |varDecls| == |varDecls'|
     ensures 

@@ -374,6 +374,16 @@ module BoogieLang {
     seq(|vs|, i requires 0 <= i < |vs| => vs[i].0)
   }
 
+  lemma GetVarNamesContainedSeq(v: var_name, vs: seq<(var_name,Ty)>)
+    requires v in GetVarNames(vs)  
+    ensures v in GetVarNamesSeq(vs)
+  {
+    var varDecl :| varDecl in vs && varDecl.0 == v;
+    var i :| 0 <= i < |vs| && varDecl == vs[i];
+
+    assert GetVarNamesSeq(vs)[i] == vs[i].0;
+  }
+
   function ModifiedVars(c: Cmd): seq<(var_name, Ty)>
   {
     RemoveDuplicates(ModifiedVarsAux(c, {}))
