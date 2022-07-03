@@ -48,32 +48,6 @@ module MakeScopedVarsUniqueProof {
     }
   }
 
-  /**
-  Suppose 
-  Scope {
-    var x: int
-    ...
-    Scope {
-      var x: int
-      ...
-    }
-  } is desugared to
-  Scope {
-    var x1: int
-    ...
-    Scope {
-      var x2: int
-      ...
-    }
-  } 
-  When proving the relationship between outer scopes, in the proof, s2Orig is chosen to be
-  the empty map.
-  When proving the relationship between the inner scopes, s2Orig is chosen to be 
-  the singleton map where x1 maps to the value that x1 had right before executing the inner scope.
-  In the proof, s1 and s2 corresponds to states in the original and desugared program,
-  respectively. That is, in the proof, RelState makes explicit that all variables 
-  in the desugared program that are shadowed by more recent declarations cannot change.
-  */
   predicate {:opaque} RelState<V>(m: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, s2Orig: map<var_name, Option<V>>)
   {
     && (forall k | k in m.Keys :: Maps.Get(s1, k) == Maps.Get(s2, m[k]))
@@ -610,110 +584,135 @@ module MakeScopedVarsUniqueProof {
       ensures 
         ForallVarDeclsShallow(a, varDecls, p1)(s1) == 
         ForallVarDeclsShallow(a, varDecls', p2)(s2)
+  {
+    var s2OrigNewKeys := set x | x in GetVarNames(varDecls) && x in m.Keys :: m[x];
+    var s2Orig' := s2Orig + map x' | x' in s2OrigNewKeys :: Maps.Get(s2, x');
+    var m' := m + ConvertVDeclsToSubstMap(varDecls, varDecls');
+
+    forall vs | ValuesRespectDecls(a, vs, varDecls)
+    ensures p1(StateUpdVarDecls(s1, varDecls, vs)) == p2(StateUpdVarDecls(s2, varDecls', vs))
     {
-      var s2OrigNewKeys := set x | x in GetVarNames(varDecls) && x in m.Keys :: m[x];
-      var s2Orig' := s2Orig + map x' | x' in s2OrigNewKeys :: Maps.Get(s2, x');
-      var m' := m + ConvertVDeclsToSubstMap(varDecls, varDecls');
-
-        /*
-        Need to show that 
-        1) ValuesRespectDecls(a, vs, varDecls) iff ValuesRespectDecls(a, vs, varDecls')
-        --> holds because types are the same
-            
-        2) forall vs | ValuesRespectDecls(a, vs, varDecls)
-          ensures p(StateUpdVarDecls(s1, varDecls, vs)) == p(StateUpdVarDecls(s2, varDecls', vs))
-        
-          To show 2):
-            We know RelState(m, s1, s2, s2Orig) from this show that
-            RelState(m', StateUpdVarDecls(sA, varDecls, vs), StateUpdVarDecls(sB, varDecls', vs), s2Orig')
-            which means showing that
-            A) StateUpdVarDecls(sA, varDecls, vs) and StateUpdVarDecls(sB, varDecls', vs) map the same values w.r.t. m'
-            B) forall keys k in s2Orig' :: StateUpdVarDecls(s2, varDecls', vs)(k) = s2(k)
-                  --> B) holds trivially
-            C) m'.Values !! s2Orig'.Keys --> holds (need this also in other proofs, where it has been proved)
-        */
-        forall vs | ValuesRespectDecls(a, vs, varDecls)
-        ensures p1(StateUpdVarDecls(s1, varDecls, vs)) == p2(StateUpdVarDecls(s2, varDecls', vs))
+      var s1' := StateUpdVarDecls(s1, varDecls, vs);
+      var s2' := StateUpdVarDecls(s2, varDecls', vs);
+      assert RelState(m', s1', s2', s2Orig') by {
+        reveal RelState();
+        forall k | k in m'.Keys 
+        ensures Maps.Get(s1', k) == Maps.Get(s2', m'[k])
         {
-          var s1' := StateUpdVarDecls(s1, varDecls, vs);
-          var s2' := StateUpdVarDecls(s2, varDecls', vs);
-          assert RelState(m', s1', s2', s2Orig') by {
+          if k in GetVarNames(varDecls) {
+            StateUpdVarDeclsLookupAux(s1, s2, varDecls, varDecls', vs, k);
+          } else {
+            assert m[k] == m'[k];
+            calc {
+              Maps.Get(s1', k);
+              { StateUpdVarDeclsLookup1(s1, varDecls, vs, k); }
+              Maps.Get(s1, k);
+              Maps.Get(s2, m[k]);
+              {
+                assert m[k] !in GetVarNames(varDecls');
+                StateUpdVarDeclsLookup1(s2, varDecls', vs, m[k]);
+              }
+              Maps.Get(s2', m'[k]);
+            }
+          }
+        }
+
+        forall k | k in s2Orig'.Keys
+        ensures Maps.Get(s2', k) == s2Orig'[k]
+        {
+          reveal RelState();
+          assert k !in GetVarNames(varDecls');
+          calc {
+            Maps.Get(s2', k);
+            { StateUpdVarDeclsLookup1(s2, varDecls', vs, k); }
+            Maps.Get(s2, k);
+          }
+        }
+        
+        assert m'.Values !! s2Orig'.Keys by {
+          assert m.Values !! s2Orig.Keys by {
             reveal RelState();
-            forall k | k in m'.Keys 
-            ensures Maps.Get(s1', k) == Maps.Get(s2', m'[k])
+          }
+          assert m'.Values <= m.Values + GetVarNames(varDecls');
+
+          assert s2Orig'.Keys <= s2Orig.Keys + s2OrigNewKeys;
+
+          assert s2OrigNewKeys !! m'.Values by {
+            forall a, b | a in s2OrigNewKeys && b in m'.Values 
+            ensures a != b
             {
-              if k in GetVarNames(varDecls) {
-                StateUpdVarDeclsLookupAux(s1, s2, varDecls, varDecls', vs, k);
-              } else {
-                assert m[k] == m'[k];
+              var x :| x in GetVarNames(varDecls) && x in m.Keys && m[x] == a;
+              assert x in m.Keys;
+              assert m[x] == a;
+
+              assert m'[x] != m[x];
+
+              var y :| y in m'.Keys && m'[y] == b;
+
+              if y !in GetVarNames(varDecls) {
+                assert x != y;
                 calc {
-                  Maps.Get(s1', k);
-                  { StateUpdVarDeclsLookup1(s1, varDecls, vs, k); }
-                  Maps.Get(s1, k);
-                  Maps.Get(s2, m[k]);
-                  {
-                    assert m[k] !in GetVarNames(varDecls');
-                    StateUpdVarDeclsLookup1(s2, varDecls', vs, m[k]);
-                  }
-                  Maps.Get(s2', m'[k]);
+                  m'[y];
+                  m[y];
+                != { reveal Maps.Injective(); }
+                  m[x];
                 }
-              }
-            }
-
-            forall k | k in s2Orig'.Keys
-            ensures Maps.Get(s2', k) == s2Orig'[k]
-            {
-              reveal RelState();
-              assert k !in GetVarNames(varDecls');
-              calc {
-                Maps.Get(s2', k);
-                { StateUpdVarDeclsLookup1(s2, varDecls', vs, k); }
-                Maps.Get(s2, k);
-              }
-            }
-            
-            assert m'.Values !! s2Orig'.Keys by {
-              assert m.Values !! s2Orig.Keys by {
-                reveal RelState();
-              }
-              assert m'.Values <= m.Values + GetVarNames(varDecls');
-
-              assert s2Orig'.Keys <= s2Orig.Keys + s2OrigNewKeys;
-
-              assert s2OrigNewKeys !! m'.Values by {
-                forall a, b | a in s2OrigNewKeys && b in m'.Values 
-                ensures a != b
-                {
-                  var x :| x in GetVarNames(varDecls) && x in m.Keys && m[x] == a;
-                  assert x in m.Keys;
-                  assert m[x] == a;
-
-                  assert m'[x] != m[x];
-
-                  var y :| y in m'.Keys && m'[y] == b;
-
-                  if y !in GetVarNames(varDecls) {
-                    assert x != y;
-                    calc {
-                      m'[y];
-                      m[y];
-                    != { reveal Maps.Injective(); }
-                      m[x];
-                    }
-                  } else {
-                    assert m'[y] in GetVarNames(varDecls');
-                    assert m.Values !! GetVarNames(varDecls');
-                  }
-                }
+              } else {
+                assert m'[y] in GetVarNames(varDecls');
+                assert m.Values !! GetVarNames(varDecls');
               }
             }
           }
-          reveal RelPred();
         }
+      }
+      reveal RelPred();
+    }
 
-        ForallVarDeclsShallowEquiv(a, varDecls, varDecls', p1, p2, s1, s2);
+    ForallVarDeclsShallowEquiv(a, varDecls, varDecls', p1, p2, s1, s2);
+  } 
+
+  /** 
+   The lemma shows that if two postconditions post1 and post2 behave the same  
+   for states related via substMap (the mapping between active original variables
+   and their desugared counterparts), then the corresponding weakest preconditions
+   of the original and desugared programs must behave the same on related states.
+
+   The parameter s2Orig plays a key role in the proof of scopes.  Suppose 
+
+    Scope {
+      var x: int
+      ...
+      Scope {
+        var x: int
+        ...
+      }
+    } 
+    
+    is desugared to
+    
+    Scope {
+      var x1: int
+      ...
+      Scope {
+        var x2: int
+        ...
+      }
     } 
 
+  When proving the relationship between outer scopes, in the proof, s2Orig is chosen to be
+  the empty map.
+  When proving the relationship between the inner scopes, s2Orig is chosen to be 
+  the singleton map where x1 maps to the value that x1 had right before executing the inner scope.
+  In general, the domain of s2Orig is the set of desugared variables that are currently shadowed.
+
+  RelState(..., ..., s2, s2Orig) ensures that the state s2 in the desugared program coincides
+  with s2Orig on s2Orig's domain. That is, in the proof, it makes explicit that shadowed 
+  variables cannot be modified. This is essential in the scopes case, because if shadowed variables 
+  were modified, then one cannot prove that the programs after the scopes are related.
+  In terms of weakest preconditions, this means that we cannot use the fact that the 
+  given postconditions post1 and post2 are related, because this relationship holds only
+  if the shadowed variabels are not modified.  
+  */
   lemma {:induction false} MakeScopedVarsUniqueCorrect<A(!new)>(
         a: absval_interp<A>,
         c: Cmd, 
