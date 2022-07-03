@@ -118,31 +118,31 @@ module DesugarScopedVarsImpl {
   * substMap: active variables that are mapped
   * freshVars: all fresh variable declarations
   */
-  function method DesugarScopedVars(
+  function method MakeScopedVarsUnique(
     c: Cmd, 
     substMap: map<var_name, var_name>, 
     counter: nat): (Cmd, nat)
     ensures
-      var (_, counter') := DesugarScopedVars(c, substMap, counter);
+      var (_, counter') := MakeScopedVarsUnique(c, substMap, counter);
       counter <= counter'
   {
     match c
     case SimpleCmd(sc) => (SimpleCmd(SubstSimpleCmd(sc, substMap)), counter)
     case Break(_) => (c, counter)
     case Seq(c1, c2) => 
-      var (c1', counter1') := DesugarScopedVars(c1, substMap, counter);
-      var (c2', counter2') := DesugarScopedVars(c2, substMap, counter1');
+      var (c1', counter1') := MakeScopedVarsUnique(c1, substMap, counter);
+      var (c2', counter2') := MakeScopedVarsUnique(c2, substMap, counter1');
       (Seq(c1', c2'), counter2')
     case Scope(optLabel, varDecls, body) =>
       var varDecls' := CreateUniqueVarDecls(varDecls, counter);
       var counter' := counter + |varDecls'|;
       var substMap' := substMap + ConvertVDeclsToSubstMap(varDecls, varDecls');
-      var (body'', counter'') := DesugarScopedVars(body, substMap', counter');
+      var (body'', counter'') := MakeScopedVarsUnique(body, substMap', counter');
       (Scope(optLabel, varDecls', body''), counter'')
     case If(None, thn, els) => 
       //TODO: make sure If(Some(...)) has been desugared
-      var (thn', counter') := DesugarScopedVars(thn, substMap, counter);
-      var (els', counter'') := DesugarScopedVars(els, substMap, counter');
+      var (thn', counter') := MakeScopedVarsUnique(thn, substMap, counter);
+      var (els', counter'') := MakeScopedVarsUnique(els, substMap, counter');
       (If(None, thn', els'), counter'')
     case _ => (c, counter) //TODO (precondition should eliminate this case)
   }  

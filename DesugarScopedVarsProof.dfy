@@ -4,7 +4,7 @@ include "Naming.dfy"
 include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
 include "dafny-libraries/src/Collections/Maps/Maps.dfy"
 
-module DesugarScopedVarsProof {
+module MakeScopedVarsUniqueProof {
 
   import opened BoogieLang
   import opened BoogieSemantics
@@ -48,7 +48,33 @@ module DesugarScopedVarsProof {
     }
   }
 
-  predicate {:opaque} RelState2<V>(m: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, s2Orig: map<var_name, Option<V>>)
+  /**
+  Suppose 
+  Scope {
+    var x: int
+    ...
+    Scope {
+      var x: int
+      ...
+    }
+  } is desugared to
+  Scope {
+    var x1: int
+    ...
+    Scope {
+      var x2: int
+      ...
+    }
+  } 
+  When proving the relationship between outer scopes, in the proof, s2Orig is chosen to be
+  the empty map.
+  When proving the relationship between the inner scopes, s2Orig is chosen to be 
+  the singleton map where x1 maps to the value that x1 had right before executing the inner scope.
+  In the proof, s1 and s2 corresponds to states in the original and desugared program,
+  respectively. That is, in the proof, RelState makes explicit that all variables 
+  in the desugared program that are shadowed by more recent declarations cannot change.
+  */
+  predicate {:opaque} RelState<V>(m: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, s2Orig: map<var_name, Option<V>>)
   {
     && (forall k | k in m.Keys :: Maps.Get(s1, k) == Maps.Get(s2, m[k]))
     && (forall k | k in s2Orig.Keys :: Maps.Get(s2, k) == s2Orig[k])
@@ -57,16 +83,16 @@ module DesugarScopedVarsProof {
 
   predicate {:opaque} RelPred<A(!new)>(m: map<var_name, var_name>, post1: Predicate<A>, post2: Predicate<A>, s2Orig: MapOrig<Val<A>>)
   {
-    forall s, s' | RelState2(m, s, s', s2Orig) :: post1(s) == post2(s')
+    forall s, s' | RelState(m, s, s', s2Orig) :: post1(s) == post2(s')
   }
 
-  lemma RelState2UpdPreserve<V>(varMapping: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, s2Orig: MapOrig<V>, x: var_name, v: V)
-  requires RelState2(varMapping, s1, s2, s2Orig)
+  lemma RelStateUpdPreserve<V>(varMapping: map<var_name, var_name>, s1: map<var_name, V>, s2: map<var_name, V>, s2Orig: MapOrig<V>, x: var_name, v: V)
+  requires RelState(varMapping, s1, s2, s2Orig)
   requires Maps.Injective(varMapping)
   requires x in varMapping.Keys
-  ensures RelState2(varMapping, s1[x := v], s2[varMapping[x] := v], s2Orig)
+  ensures RelState(varMapping, s1[x := v], s2[varMapping[x] := v], s2Orig)
   {
-    reveal RelState2();
+    reveal RelState();
     var x' := varMapping[x];
     forall k | k in varMapping.Keys 
     ensures Maps.Get(s1[x := v], k) == Maps.Get(s2[varMapping[x] := v], varMapping[k])
@@ -84,7 +110,7 @@ module DesugarScopedVarsProof {
     }
   }
 
-  lemma RelState2UpdVarDeclsPreserve<A>(
+  lemma RelStateUpdVarDeclsPreserve<A>(
       varMapping: map<var_name, var_name>, 
       s1: state<A>,
       s2: state<A>, 
@@ -92,26 +118,26 @@ module DesugarScopedVarsProof {
       varDecls: seq<VarDecl>, 
       varDecls': seq<VarDecl>,
       vs: seq<Val<A>>)
-  requires RelState2(varMapping, s1, s2, s2Orig)
+  requires RelState(varMapping, s1, s2, s2Orig)
   requires Maps.Injective(varMapping)
   requires GetVarNames(varDecls) <= varMapping.Keys
   requires |vs| == |varDecls| == |varDecls'|
   requires (forall i | 0 <= i < |varDecls| :: varDecls'[i].0 == varMapping[varDecls[i].0])
-  ensures RelState2(varMapping, StateUpdVarDecls(s1, varDecls, vs), StateUpdVarDecls(s2, varDecls', vs), s2Orig)
+  ensures RelState(varMapping, StateUpdVarDecls(s1, varDecls, vs), StateUpdVarDecls(s2, varDecls', vs), s2Orig)
   {
     if |varDecls| > 0 {       
         var s1' := StateUpdVarDecls(s1, varDecls[1..], vs[1..]);
         var s2' := StateUpdVarDecls(s2, varDecls'[1..], vs[1..]);
 
-        assert RelState2(varMapping, s1', s2', s2Orig) by {
-          RelState2UpdVarDeclsPreserve(varMapping, s1, s2, s2Orig, varDecls[1..], varDecls'[1..], vs[1..]);
+        assert RelState(varMapping, s1', s2', s2Orig) by {
+          RelStateUpdVarDeclsPreserve(varMapping, s1, s2, s2Orig, varDecls[1..], varDecls'[1..], vs[1..]);
         }
 
-        RelState2UpdPreserve(varMapping, s1', s2', s2Orig, varDecls[0].0, vs[0]);
+        RelStateUpdPreserve(varMapping, s1', s2', s2Orig, varDecls[0].0, vs[0]);
     }
   }
 
-  lemma ForallVarDeclsRelNew<A(!new)>(
+  lemma ForallVarDeclRel<A(!new)>(
       a: absval_interp<A>, 
       varDecls: seq<(var_name, Ty)>, 
       varMapping: map<var_name, var_name>, 
@@ -142,7 +168,7 @@ module DesugarScopedVarsProof {
             if vDecl.0 in varMapping.Keys then (varMapping[vDecl.0], vDecl.1) else vDecl;
         var varDecls' := Sequences.Map(f, varDecls);
 
-        forall s1, s2 | RelState2(varMapping, s1, s2, s2Orig)
+        forall s1, s2 | RelState(varMapping, s1, s2, s2Orig)
         ensures ForallVarDeclsShallow(a, varDecls, p1)(s1) == ForallVarDeclsShallow(a, varDecls', p2)(s2)
         {
           forall vs | ValuesRespectDecls(a, vs, varDecls)
@@ -150,8 +176,8 @@ module DesugarScopedVarsProof {
           {
             var s1' := StateUpdVarDecls(s1, varDecls, vs);
             var s2' := StateUpdVarDecls(s2, varDecls', vs);
-            assert RelState2(varMapping, s1', s2', s2Orig) by {
-              RelState2UpdVarDeclsPreserve(varMapping, s1, s2, s2Orig, varDecls, varDecls', vs);
+            assert RelState(varMapping, s1', s2', s2Orig) by {
+              RelStateUpdVarDeclsPreserve(varMapping, s1, s2, s2Orig, varDecls, varDecls', vs);
             }
             reveal RelPred();
           }
@@ -161,7 +187,8 @@ module DesugarScopedVarsProof {
         reveal RelPred();
       }
     }
-  lemma ForallVarDeclsRelNew2<A(!new)>(
+
+  lemma ForallVarDeclRel2<A(!new)>(
       a: absval_interp<A>, 
       varDecls: seq<(var_name, Ty)>, 
       varMapping: map<var_name, var_name>, 
@@ -171,7 +198,7 @@ module DesugarScopedVarsProof {
       s2: state<A>,
       sOrig: MapOrig<Val<A>>)
       requires RelPred(varMapping, p1, p2, sOrig)
-      requires RelState2(varMapping, s1, s2, sOrig)
+      requires RelState(varMapping, s1, s2, sOrig)
       requires GetVarNames(varDecls) <= varMapping.Keys
       requires Maps.Injective(varMapping)
       ensures 
@@ -180,7 +207,7 @@ module DesugarScopedVarsProof {
         var varDecls' := Sequences.Map(f, varDecls);
         ForallVarDeclsShallow(a, varDecls, p1)(s1) ==  ForallVarDeclsShallow(a, varDecls', p2)(s2)
     {
-      ForallVarDeclsRelNew(a, varDecls, varMapping, p1, p2, sOrig);
+      ForallVarDeclRel(a, varDecls, varMapping, p1, p2, sOrig);
       reveal RelPred();
     }
 
@@ -196,17 +223,17 @@ module DesugarScopedVarsProof {
       var sc' := SubstSimpleCmd(sc, varMapping);
       var pre1 := WpShallowSimpleCmd(a, sc, post1);
       var pre2 := WpShallowSimpleCmd(a, sc', post2);
-      forall s1:map<var_name, Val<A>>, s2 | RelState2(varMapping, s1, s2, s2Orig)
+      forall s1:map<var_name, Val<A>>, s2 | RelState(varMapping, s1, s2, s2Orig)
         ensures pre1(s1) == pre2(s2)
       {
         reveal RelPred();
         match sc {
           case Skip => 
           case Assume(e) => 
-            reveal RelState2();
+            reveal RelState();
             MultiSubstExprSpec2(a, varMapping, e, s1, s2);
           case Assert(e) => 
-            reveal RelState2();
+            reveal RelState();
             reveal RelPred();
             MultiSubstExprSpec2(a, varMapping, e, s1, s2);
           case Assign(x, t, e) =>
@@ -214,7 +241,7 @@ module DesugarScopedVarsProof {
             var v1Opt := EvalExpr(a, e, s1);
             var v2Opt := EvalExpr(a, e', s2);
             assert v1Opt == v2Opt by {
-              reveal RelState2();
+              reveal RelState();
               MultiSubstExprSpec2(a, varMapping, e, s1, s2);
             }
 
@@ -222,8 +249,8 @@ module DesugarScopedVarsProof {
               var v := v1Opt.value;
               var x' := varMapping[x];
 
-              assert RelState2(varMapping, s1[x := v], s2[x' := v], s2Orig) by {
-                RelState2UpdPreserve(varMapping, s1, s2, s2Orig, x, v);
+              assert RelState(varMapping, s1[x := v], s2[x' := v], s2Orig) by {
+                RelStateUpdPreserve(varMapping, s1, s2, s2Orig, x, v);
               }
             }
           case Havoc(vDecls) => 
@@ -235,7 +262,7 @@ module DesugarScopedVarsProof {
             calc {
               WpShallowSimpleCmd(a, Havoc(vDecls), post1)(s1);
               ForallVarDeclsShallow(a, vDecls, post1)(s1);
-              { ForallVarDeclsRelNew2(a, vDecls, varMapping, post1, post2, s1, s2, s2Orig); }
+              { ForallVarDeclRel2(a, vDecls, varMapping, post1, post2, s1, s2, s2Orig); }
               ForallVarDeclsShallow(a, vDecls', post2)(s2);
               WpShallowSimpleCmd(a, Havoc(vDecls'), post2)(s2);
               WpShallowSimpleCmd(a, SubstSimpleCmd(Havoc(vDecls), varMapping), post2)(s2);
@@ -298,13 +325,13 @@ module DesugarScopedVarsProof {
       var s2OrigNewKeys := set x | x in GetVarNames(varDecls) && x in m.Keys :: m[x];
       var s2Orig' := s2Orig + map x' | x' in s2OrigNewKeys :: Maps.Get(s2, x');
       var m' := m + ConvertVDeclsToSubstMap(varDecls, varDecls');
-      && RelState2(m', sA, sB, s2Orig')
-      && RelState2(m, s1, s2, s2Orig)
+      && RelState(m', sA, sB, s2Orig')
+      && RelState(m, s1, s2, s2Orig)
     requires |varDecls| == |varDecls'|
     ensures 
-      RelState2(m, ResetVarsState(varDecls, sA, s1), ResetVarsState(varDecls', sB, s2), s2Orig)
+      RelState(m, ResetVarsState(varDecls, sA, s1), ResetVarsState(varDecls', sB, s2), s2Orig)
     {
-      reveal RelState2();
+      reveal RelState();
 
       var s2OrigNewKeys := set x | x in GetVarNames(varDecls) && x in m.Keys :: m[x];
       var s2Orig' := s2Orig + map x' | x' in s2OrigNewKeys :: Maps.Get(s2, x');
@@ -387,7 +414,7 @@ module DesugarScopedVarsProof {
     && |varDecls| == |varDecls'|
     && m.Values !! GetVarNames(varDecls')
     && s2Orig.Keys !! GetVarNames(varDecls')
-    && RelState2(m, s1, s2, s2Orig)
+    && RelState(m, s1, s2, s2Orig)
   ensures 
     var s2OrigNewKeys := set x | x in GetVarNames(varDecls) && x in m.Keys :: m[x];
     var s2Orig' := s2Orig + map x' | x' in s2OrigNewKeys :: Maps.Get(s2, x');
@@ -398,14 +425,14 @@ module DesugarScopedVarsProof {
     var s2Orig' := s2Orig + map x' | x' in s2OrigNewKeys :: Maps.Get(s2, x');
     var m' := m + ConvertVDeclsToSubstMap(varDecls, varDecls');
 
-    forall sA, sB : state<A> | RelState2(m', sA, sB, s2Orig')
+    forall sA, sB : state<A> | RelState(m', sA, sB, s2Orig')
     ensures ResetVarsPred(varDecls, p, s1)(sA) == ResetVarsPred(varDecls', q, s2)(sB)
     {
       var sA' := ResetVarsState(varDecls, sA, s1);
       var sB' := ResetVarsState(varDecls', sB, s2);
 
       assert p(sA') == q(sB') by {
-        assert RelState2(m, sA', sB', s2Orig) by {
+        assert RelState(m, sA', sB', s2Orig) by {
           RelStateSwitch(m, varDecls, varDecls', sA, sB, s1, s2, s2Orig);
         }
         reveal RelPred();
@@ -429,7 +456,7 @@ module DesugarScopedVarsProof {
     && |varDecls| == |varDecls'|
     && m.Values !! GetVarNames(varDecls')
     && s2Orig.Keys !! GetVarNames(varDecls')
-    && RelState2(m, s1, s2, s2Orig)
+    && RelState(m, s1, s2, s2Orig)
   ensures 
     var s2OrigNewKeys := set x | x in GetVarNames(varDecls) && x in m.Keys :: m[x];
     var s2Orig' := s2Orig + map x' | x' in s2OrigNewKeys :: Maps.Get(s2, x');
@@ -576,7 +603,7 @@ module DesugarScopedVarsProof {
         && m.Values !! GetVarNames(varDecls')
         && Sequences.HasNoDuplicates(GetVarNamesSeq(varDecls'))
         && RelPred(m', p1, p2, s2Orig')
-        && RelState2(m, s1, s2, s2Orig)
+        && RelState(m, s1, s2, s2Orig)
         && s2Orig.Keys !! GetVarNames(varDecls')
         //&& m'.Values !! s2Orig'.Keys
       requires Maps.Injective(m)
@@ -597,8 +624,8 @@ module DesugarScopedVarsProof {
           ensures p(StateUpdVarDecls(s1, varDecls, vs)) == p(StateUpdVarDecls(s2, varDecls', vs))
         
           To show 2):
-            We know RelState2(m, s1, s2, s2Orig) from this show that
-            RelState2(m', StateUpdVarDecls(sA, varDecls, vs), StateUpdVarDecls(sB, varDecls', vs), s2Orig')
+            We know RelState(m, s1, s2, s2Orig) from this show that
+            RelState(m', StateUpdVarDecls(sA, varDecls, vs), StateUpdVarDecls(sB, varDecls', vs), s2Orig')
             which means showing that
             A) StateUpdVarDecls(sA, varDecls, vs) and StateUpdVarDecls(sB, varDecls', vs) map the same values w.r.t. m'
             B) forall keys k in s2Orig' :: StateUpdVarDecls(s2, varDecls', vs)(k) = s2(k)
@@ -610,8 +637,8 @@ module DesugarScopedVarsProof {
         {
           var s1' := StateUpdVarDecls(s1, varDecls, vs);
           var s2' := StateUpdVarDecls(s2, varDecls', vs);
-          assert RelState2(m', s1', s2', s2Orig') by {
-            reveal RelState2();
+          assert RelState(m', s1', s2', s2Orig') by {
+            reveal RelState();
             forall k | k in m'.Keys 
             ensures Maps.Get(s1', k) == Maps.Get(s2', m'[k])
             {
@@ -636,7 +663,7 @@ module DesugarScopedVarsProof {
             forall k | k in s2Orig'.Keys
             ensures Maps.Get(s2', k) == s2Orig'[k]
             {
-              reveal RelState2();
+              reveal RelState();
               assert k !in GetVarNames(varDecls');
               calc {
                 Maps.Get(s2', k);
@@ -647,7 +674,7 @@ module DesugarScopedVarsProof {
             
             assert m'.Values !! s2Orig'.Keys by {
               assert m.Values !! s2Orig.Keys by {
-                reveal RelState2();
+                reveal RelState();
               }
               assert m'.Values <= m.Values + GetVarNames(varDecls');
 
@@ -687,8 +714,7 @@ module DesugarScopedVarsProof {
         ForallVarDeclsShallowEquiv(a, varDecls, varDecls', p1, p2, s1, s2);
     } 
 
-
-  lemma {:induction false} DesugarScopedVarsCorrect<A(!new)>(
+  lemma {:induction false} MakeScopedVarsUniqueCorrect<A(!new)>(
         a: absval_interp<A>,
         c: Cmd, 
         substMap: map<var_name, var_name>, 
@@ -700,7 +726,7 @@ module DesugarScopedVarsProof {
       requires c.WellFormedVars(substMap.Keys)
       requires Maps.Injective(substMap)
       requires 
-        var (c', counter') := DesugarScopedVars(c, substMap, counter);
+        var (c', counter') := MakeScopedVarsUnique(c, substMap, counter);
         && LabelsWellDefAux(c, post1.scopes.Keys) 
         && LabelsWellDefAux(c', post2.scopes.Keys)
         && RelPost(substMap, post1, post2, s2Orig)
@@ -708,11 +734,8 @@ module DesugarScopedVarsProof {
         && substMap.Values <= VarNameSet(names, 0, counter) 
       //requires forall vDecl | vDecls in seqSubstMap :: substMap(vDecl.) == sequSubstMap
       ensures 
-        var (c', counter') := DesugarScopedVars(c, substMap, counter);
+        var (c', counter') := MakeScopedVarsUnique(c, substMap, counter);
         RelPred(substMap, WpShallow(a, c, post1), WpShallow(a, c', post2), s2Orig)
-      /** proof sketch notes:  
-        for scopes case, will have to show that the updated substMap remains injective 
-      */
     {
       reveal RelPost();
       match c {
@@ -721,8 +744,8 @@ module DesugarScopedVarsProof {
           SubstSimpleCmdCorrect(a, sc, substMap, post1.normal, post2.normal, s2Orig);
         case Break(_) => reveal WpShallow();
         case Seq(c1, c2) => 
-          var (c1', counter1') := DesugarScopedVars(c1, substMap, counter);
-          var (c2', counter2') := DesugarScopedVars(c2, substMap, counter1');
+          var (c1', counter1') := MakeScopedVarsUnique(c1, substMap, counter);
+          var (c2', counter2') := MakeScopedVarsUnique(c2, substMap, counter1');
 
           var post1' := WpPostShallow(WpShallow(a, c2, post1), post1.currentScope, post1.scopes);
           var post2' := WpPostShallow(WpShallow(a, c2', post2), post2.currentScope, post2.scopes);
@@ -730,12 +753,12 @@ module DesugarScopedVarsProof {
           assert RelPost(substMap, post1', post2', s2Orig) by {
             assert RelPred(substMap, WpShallow(a, c2, post1), WpShallow(a, c2', post2), s2Orig) by {
               VarNameSetExtend(names, 0, counter, counter1');
-              DesugarScopedVarsCorrect(a, c2, substMap, counter1', post1, post2, s2Orig, names);
+              MakeScopedVarsUniqueCorrect(a, c2, substMap, counter1', post1, post2, s2Orig, names);
             }
           }
 
           assert RelPred(substMap, WpShallow(a, c1, post1'), WpShallow(a, c1', post2'), s2Orig) by {
-            DesugarScopedVarsCorrect(a, c1, substMap, counter, post1', post2', s2Orig, names);
+            MakeScopedVarsUniqueCorrect(a, c1, substMap, counter, post1', post2', s2Orig, names);
           }
 
           reveal WpShallow();
@@ -750,7 +773,7 @@ module DesugarScopedVarsProof {
           var counter' := counter + |varDecls'|;
           var substMap' := substMap + ConvertVDeclsToSubstMap(varDecls, varDecls');
           assert substMap'.Keys == GetVarNames(varDecls)+substMap.Keys;
-          var (body', counter'') := DesugarScopedVars(body, substMap', counter');
+          var (body', counter'') := MakeScopedVarsUnique(body, substMap', counter');
           //(Scope(optLabel, varDecls', body''), counter'')
           var c' := Scope(optLabel, varDecls', body');
 
@@ -769,7 +792,7 @@ module DesugarScopedVarsProof {
           var post1' := WpPostShallow(post1.normal, post1.normal, updatedScopes1);
           var post2' := WpPostShallow(post2.normal, post2.normal, updatedScopes2);
 
-          forall s1,s2 | RelState2(substMap, s1, s2, s2Orig)
+          forall s1,s2 | RelState(substMap, s1, s2, s2Orig)
           ensures WpShallow(a, c, post1)(s1) == WpShallow(a, c', post2)(s2)
           {
             /* We want to prove that if a name x in varDecls is already mapped to x' in substMap, then 
@@ -826,7 +849,7 @@ module DesugarScopedVarsProof {
                       VarNameSetAppend(names, GetVarNames(varDecls), 0, counter, counter, counter + |varDecls|);
                     }
 
-                    DesugarScopedVarsCorrect(
+                    MakeScopedVarsUniqueCorrect(
                       a, body, substMap', counter',  ResetVarsPost(varDecls, post1', s1), ResetVarsPost(varDecls', post2', s2), s2Orig',
                       names+GetVarNames(varDecls)
                     ); 
@@ -854,21 +877,21 @@ module DesugarScopedVarsProof {
 
           reveal RelPred();
         case If(None, thn, els) => 
-          var (thn', counter') := DesugarScopedVars(thn, substMap, counter);
-          var (els', counter'') := DesugarScopedVars(els, substMap, counter');
+          var (thn', counter') := MakeScopedVarsUnique(thn, substMap, counter);
+          var (els', counter'') := MakeScopedVarsUnique(els, substMap, counter');
 
           assert RelPred(substMap, WpShallow(a, thn, post1), WpShallow(a, thn', post2), s2Orig) by {
-            DesugarScopedVarsCorrect(a, thn, substMap, counter, post1, post2, s2Orig, names);
+            MakeScopedVarsUniqueCorrect(a, thn, substMap, counter, post1, post2, s2Orig, names);
           }
 
           assert RelPred(substMap, WpShallow(a, els, post1), WpShallow(a, els', post2), s2Orig) by {
             VarNameSetExtend(names, 0, counter, counter');
-            DesugarScopedVarsCorrect(a, els, substMap, counter', post1, post2, s2Orig, names);
+            MakeScopedVarsUniqueCorrect(a, els, substMap, counter', post1, post2, s2Orig, names);
           }
 
           reveal RelPred();
 
-          forall sA, sB | RelState2(substMap, sA, sB, s2Orig)
+          forall sA, sB | RelState(substMap, sA, sB, s2Orig)
           ensures WpShallow(a, c, post1)(sA) == WpShallow(a, If(None, thn', els'), post2)(sB)
           {
             calc {

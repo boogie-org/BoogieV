@@ -1,10 +1,10 @@
 include "BoogieSemantics.dfy"
-include "DesugarScopedVarsImpl.dfy"
+include "MakeScopedVarsUniqueImpl.dfy"
 include "Naming.dfy"
 include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
 include "dafny-libraries/src/Collections/Maps/Maps.dfy"
 
-module DesugarScopedVarsProof {
+module MakeScopedVarsUniqueProof {
 
   import opened BoogieLang
   import opened BoogieSemantics
@@ -12,7 +12,7 @@ module DesugarScopedVarsProof {
   import Maps
   import Util
   import opened Wrappers
-  import opened DesugarScopedVarsImpl
+  import opened MakeScopedVarsUniqueImpl
   import opened Naming
 
   lemma RelStateRemoveScopedVarsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, post: WpPostShallow<A>)
