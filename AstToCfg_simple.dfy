@@ -181,6 +181,11 @@ module AstToCfg {
           cover1+{exit1},
           cover2
           );
+        
+        assert IsAcyclic(cfg1.successors[exit1 := [cfg2.entry]]+cfg2.successors, cfg1.entry, (cover1+{exit1})+cover2);
+        assert cfg1.successors[exit1 := [cfg2.entry]]+cfg2.successors == successors;
+
+        assert IsAcyclic(successors, cfg1.entry, (cover1+{exit1})+cover2);
 
         assert (cover1 + {exit1}) + cover2 <= cover3 by {
           reveal CoveringSet();

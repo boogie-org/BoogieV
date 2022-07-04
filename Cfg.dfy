@@ -20,15 +20,15 @@ module BoogieCfg {
       (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys))
   }
 
-  type SuccessorRel = map<BlockId, seq<BlockId>>
+  type Graph<T> = map<T, seq<T>>
 
-  function IsAcyclicSeq(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>) : bool
+  function IsAcyclicSeq<T>(r: Graph, ns: seq<T>, cover: set<T>) : bool
     decreases cover, 1, ns
   {
     |ns| != 0 ==> ( IsAcyclic(r, ns[0], cover) && IsAcyclicSeq(r, ns[1..], cover) )
   }
 
-  function IsAcyclic(r: SuccessorRel, n: BlockId, cover: set<BlockId>) : bool
+  function IsAcyclic<T>(r: Graph, n: T, cover: set<T>) : bool
     decreases cover, 0
   {
     n in r.Keys ==> ( n in cover && IsAcyclicSeq(r, r[n], cover - {n}) )
@@ -144,18 +144,18 @@ module BoogieCfg {
 
   /*======================Acyclicity lemmas ===================================*/
 
-  lemma IsAcyclicSeqForall(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicSeqForall<T>(r: Graph<T>, ns: seq<T>, cover: set<T>)
     requires IsAcyclicSeq(r, ns, cover)
     ensures forall n :: n in ns ==> IsAcyclic(r, n, cover)
   { }
 
-  lemma IsAcyclicElem(r: SuccessorRel, ns: seq<BlockId>, nSucc: BlockId, cover: set<BlockId>)
+  lemma IsAcyclicElem<T>(r: Graph<T>, ns: seq<T>, nSucc: T, cover: set<T>)
     requires IsAcyclicSeq(r, ns, cover)
     requires nSucc in ns
     ensures IsAcyclic(r, nSucc, cover)
   { }
 
-  lemma IsAcyclicSeqLargerCover(r: SuccessorRel, ns: seq<BlockId>, cover1: set<BlockId>, cover2: set<BlockId>)
+  lemma IsAcyclicSeqLargerCover<T>(r: Graph<T>, ns: seq<T>, cover1: set<T>, cover2: set<T>)
     requires cover1 <= cover2 && IsAcyclicSeq(r, ns, cover1)
     ensures IsAcyclicSeq(r, ns, cover2)
     decreases cover1, 1, ns
@@ -166,7 +166,7 @@ module BoogieCfg {
     }
   }
 
-  lemma IsAcyclicLargerCover(r: SuccessorRel, n: BlockId, cover1: set<BlockId>, cover2: set<BlockId>)
+  lemma IsAcyclicLargerCover<T>(r: Graph<T>, n: T, cover1: set<T>, cover2: set<T>)
     requires cover1 <= cover2 && IsAcyclic(r, n, cover1)
     ensures IsAcyclic(r, n, cover2)
     decreases cover1, 0
@@ -176,13 +176,13 @@ module BoogieCfg {
     }
   }
 
-  lemma IsAcyclicSeqMerge(
-    r1: SuccessorRel, 
-    r2: SuccessorRel, 
-    ns1: seq<BlockId>,
-    n2Entry: BlockId,
-    cover1: set<BlockId>, 
-    cover2: set<BlockId>)
+  lemma IsAcyclicSeqMerge<T>(
+    r1: Graph<T>, 
+    r2: Graph<T>, 
+    ns1: seq<T>,
+    n2Entry: T,
+    cover1: set<T>, 
+    cover2: set<T>)
     requires cover1 !! cover2
     requires r1.Keys !! r2.Keys
     requires IsAcyclicSeq(r1, ns1, cover1)
@@ -215,13 +215,13 @@ module BoogieCfg {
     }
   }
 
-  lemma IsAcyclicMerge(
-    r1: SuccessorRel, 
-    r2: SuccessorRel, 
-    n1Entry: BlockId,
-    n2Entry: BlockId,
-    cover1: set<BlockId>, 
-    cover2: set<BlockId>)
+  lemma IsAcyclicMerge<T>(
+    r1: Graph<T>, 
+    r2: Graph<T>, 
+    n1Entry: T,
+    n2Entry: T,
+    cover1: set<T>, 
+    cover2: set<T>)
     requires cover1 !! cover2
     requires r1.Keys !! r2.Keys
     requires IsAcyclic(r1, n1Entry, cover1)
@@ -432,7 +432,7 @@ module BoogieCfg {
     }
   }
 
-  lemma WpCfgConjunctionExtend<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg2: Cfg, b1: map<BlockId, BasicBlock>, r1: SuccessorRel, ns: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgConjunctionExtend<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg2: Cfg, b1: map<BlockId, BasicBlock>, r1: Graph<BlockId>, ns: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>)
     requires 
       var r2 := cfg2.successors;
       && |ns| >= 1
@@ -453,7 +453,7 @@ module BoogieCfg {
     WpCfgExtend(a, cfgMerged, cfg2, b1, r1, ns[0], post, cover);
   }
 
-  lemma WpCfgExtend2<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg1: Cfg, b2: map<BlockId, BasicBlock>, r2: SuccessorRel, n1Entry: BlockId, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgExtend2<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg1: Cfg, b2: map<BlockId, BasicBlock>, r2: Graph<BlockId>, n1Entry: BlockId, post: Predicate<A>, cover: set<BlockId>)
     requires 
       var r1 := cfg1.successors;
       && cfgMerged.successors == r1 + r2
@@ -474,7 +474,7 @@ module BoogieCfg {
     WpCfgExtend(a, cfgMerged, cfg1, b2, r2, n1Entry, post, cover);
   }
   
-  lemma WpCfgExtend<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg2: Cfg, b1: map<BlockId, BasicBlock>, r1: SuccessorRel, n2Entry: BlockId, post: Predicate<A>, cover: set<BlockId>)
+  lemma WpCfgExtend<A(!new)>(a: absval_interp<A>, cfgMerged: Cfg, cfg2: Cfg, b1: map<BlockId, BasicBlock>, r1: Graph<BlockId>, n2Entry: BlockId, post: Predicate<A>, cover: set<BlockId>)
     requires 
       var r2 := cfg2.successors;
       && cfgMerged.successors == r1 + r2
@@ -517,7 +517,7 @@ module BoogieCfg {
     } 
   }
   /*
-  lemma IsAcyclicUpdate(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicUpdate(r: Graph<T>, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
     requires IsAcyclic(r, entry, cover)
     requires !(n in r.Keys)
     requires entry != n;
@@ -548,7 +548,7 @@ module BoogieCfg {
 
   /*
 
-  lemma IsAcyclicUpdate2(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicUpdate2(r: Graph<T>, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
     requires IsAcyclic(r, entry, cover)
     requires !(n in r.Keys)
     requires (forall i :: 0 <= i < |m| ==> ! (m[i] in r.Keys) && !(m[i] ==n))
@@ -613,7 +613,7 @@ module BoogieCfg {
     }
   }
 
-  lemma IsAcyclicExtendSeq(r1: SuccessorRel, r2: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicExtendSeq<T>(r1: Graph<T>, r2: Graph<T>, ns: seq<T>, cover: set<T>)
     requires IsAcyclicSeq(r2, ns, cover)
     requires (forall i :: 0 <= i < |ns| ==> !(ns[i] in r1.Keys))
     requires 
@@ -628,7 +628,7 @@ module BoogieCfg {
     }
   }
  
-  lemma IsAcyclicExtend(r1: SuccessorRel, r2: SuccessorRel, n2Entry: BlockId, cover: set<BlockId>)
+  lemma IsAcyclicExtend<T>(r1: Graph<T>, r2: Graph<T>, n2Entry: T, cover: set<T>)
     requires IsAcyclic(r2, n2Entry, cover)
     requires !(n2Entry in r1.Keys)
     requires 
@@ -646,7 +646,7 @@ module BoogieCfg {
     }
   }
 
-  lemma IsAcyclicExtend2(r1: SuccessorRel, r2: SuccessorRel, n1Entry: BlockId, cover: set<BlockId>)
+  lemma IsAcyclicExtend2<T>(r1: Graph<T>, r2: Graph<T>, n1Entry: T, cover: set<T>)
     requires IsAcyclic(r1, n1Entry, cover)
     requires !(n1Entry in r2.Keys)
     requires 
@@ -659,7 +659,7 @@ module BoogieCfg {
     assert r2 + r1 == r1 + r2;
   }
 
-  lemma IsAcyclicUpdate(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicUpdate<T>(r: Graph<T>, entry: T, n: T, m: seq<T>, cover: set<T>)
     requires IsAcyclic(r, entry, cover)
     requires !(n in r.Keys)
     requires entry != n;
@@ -672,13 +672,13 @@ module BoogieCfg {
     assert r+map[n := m] == r[n := m];
   }
 
-  lemma IsAcyclicSeqOneStep(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicSeqOneStep<T>(r: Graph<T>, ns: seq<T>, cover: set<T>)
     requires (forall i :: 0 <= i < |ns| ==> ! (ns[i] in r.Keys))
     ensures IsAcyclicSeq(r, ns, cover)
   {
   }
 
-  lemma IsAcyclicSeqUpdate2(r: SuccessorRel, ns: seq<BlockId>, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicSeqUpdate2<T>(r: Graph<T>, ns: seq<T>, n: T, m: seq<T>, cover: set<T>)
     requires IsAcyclicSeq(r, ns, cover)
     requires (forall i :: 0 <= i < |m| ==> ! (m[i] in r.Keys) && !(m[i] == n))
     ensures IsAcyclicSeq(r[n := m], ns, cover + {n})
@@ -690,7 +690,7 @@ module BoogieCfg {
     }
   }
 
-  lemma IsAcyclicUpdate2(r: SuccessorRel, entry: BlockId, n: BlockId, m: seq<BlockId>, cover: set<BlockId>)
+  lemma IsAcyclicUpdate2<T>(r: Graph<T>, entry: T, n: T, m: seq<T>, cover: set<T>)
     requires IsAcyclic(r, entry, cover)
     requires (forall i :: 0 <= i < |m| ==> ! (m[i] in r.Keys) && !(m[i] ==n))
     ensures IsAcyclic(r[n := m], entry, cover + {n})
