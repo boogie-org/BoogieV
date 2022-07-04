@@ -125,15 +125,15 @@ module MakeScopedVarsUniqueProof {
         var f := (vDecl : (var_name, Ty)) => 
             if vDecl.0 in varMapping.Keys then (varMapping[vDecl.0], vDecl.1) else vDecl;
         var varDecls' := Sequences.Map(f, varDecls);
-        RelPred(varMapping, ForallVarDeclsShallow(a, varDecls, p1), ForallVarDeclsShallow(a, varDecls', p2), s2Orig)
+        RelPred(varMapping, ForallVarDecls(a, varDecls, p1), ForallVarDecls(a, varDecls', p2), s2Orig)
     {
       var f := (vDecl : (var_name, Ty)) => 
           if vDecl.0 in varMapping.Keys then (varMapping[vDecl.0], vDecl.1) else vDecl;
       var varDecls' := Sequences.Map(f, varDecls);
       if |varDecls| == 0 {
         //trivial
-        reveal ForallVarDeclsShallow();
-        assert ForallVarDeclsShallow(a, varDecls, p1) == p1;
+        reveal ForallVarDecls();
+        assert ForallVarDecls(a, varDecls, p1) == p1;
       } else {
         var (x,t) := varDecls[0];
         var x' := varMapping[x];
@@ -143,7 +143,7 @@ module MakeScopedVarsUniqueProof {
         var varDecls' := Sequences.Map(f, varDecls);
 
         forall s1, s2 | RelState(varMapping, s1, s2, s2Orig)
-        ensures ForallVarDeclsShallow(a, varDecls, p1)(s1) == ForallVarDeclsShallow(a, varDecls', p2)(s2)
+        ensures ForallVarDecls(a, varDecls, p1)(s1) == ForallVarDecls(a, varDecls', p2)(s2)
         {
           forall vs | ValuesRespectDecls(a, vs, varDecls)
           ensures p1(StateUpdVarDecls(s1, varDecls, vs)) == p2(StateUpdVarDecls(s2, varDecls', vs))
@@ -155,7 +155,7 @@ module MakeScopedVarsUniqueProof {
             }
             reveal RelPred();
           }
-          ForallVarDeclsShallowEquiv(a, varDecls, varDecls', p1, p2, s1, s2);
+          ForallVarDeclsEquiv(a, varDecls, varDecls', p1, p2, s1, s2);
         }
 
         reveal RelPred();
@@ -179,7 +179,7 @@ module MakeScopedVarsUniqueProof {
         var f := (vDecl : (var_name, Ty)) => 
             if vDecl.0 in varMapping.Keys then (varMapping[vDecl.0], vDecl.1) else vDecl;
         var varDecls' := Sequences.Map(f, varDecls);
-        ForallVarDeclsShallow(a, varDecls, p1)(s1) ==  ForallVarDeclsShallow(a, varDecls', p2)(s2)
+        ForallVarDecls(a, varDecls, p1)(s1) ==  ForallVarDecls(a, varDecls', p2)(s2)
     {
       ForallVarDeclRel(a, varDecls, varMapping, p1, p2, sOrig);
       reveal RelPred();
@@ -192,11 +192,11 @@ module MakeScopedVarsUniqueProof {
       requires Maps.Injective(varMapping)
       ensures 
         var sc' := SubstSimpleCmd(sc, varMapping);
-        RelPred(varMapping, WpShallowSimpleCmd(a, sc, post1), WpShallowSimpleCmd(a, sc', post2), s2Orig)
+        RelPred(varMapping, WpSimpleCmd(a, sc, post1), WpSimpleCmd(a, sc', post2), s2Orig)
     {
       var sc' := SubstSimpleCmd(sc, varMapping);
-      var pre1 := WpShallowSimpleCmd(a, sc, post1);
-      var pre2 := WpShallowSimpleCmd(a, sc', post2);
+      var pre1 := WpSimpleCmd(a, sc, post1);
+      var pre2 := WpSimpleCmd(a, sc', post2);
       forall s1:map<var_name, Val<A>>, s2 | RelState(varMapping, s1, s2, s2Orig)
         ensures pre1(s1) == pre2(s2)
       {
@@ -234,38 +234,38 @@ module MakeScopedVarsUniqueProof {
             var vDecls' := Sequences.Map(f, vDecls);
             
             calc {
-              WpShallowSimpleCmd(a, Havoc(vDecls), post1)(s1);
-              ForallVarDeclsShallow(a, vDecls, post1)(s1);
+              WpSimpleCmd(a, Havoc(vDecls), post1)(s1);
+              ForallVarDecls(a, vDecls, post1)(s1);
               { ForallVarDeclRel2(a, vDecls, varMapping, post1, post2, s1, s2, s2Orig); }
-              ForallVarDeclsShallow(a, vDecls', post2)(s2);
-              WpShallowSimpleCmd(a, Havoc(vDecls'), post2)(s2);
-              WpShallowSimpleCmd(a, SubstSimpleCmd(Havoc(vDecls), varMapping), post2)(s2);
+              ForallVarDecls(a, vDecls', post2)(s2);
+              WpSimpleCmd(a, Havoc(vDecls'), post2)(s2);
+              WpSimpleCmd(a, SubstSimpleCmd(Havoc(vDecls), varMapping), post2)(s2);
             }
           case SeqSimple(sc1, sc2) =>
             var sc1' := SubstSimpleCmd(sc1, varMapping);
             var sc2' := SubstSimpleCmd(sc2, varMapping);
 
-            var post1' := WpShallowSimpleCmd(a, sc2, post1);
-            var post2' := WpShallowSimpleCmd(a, sc2', post2);
+            var post1' := WpSimpleCmd(a, sc2, post1);
+            var post2' := WpSimpleCmd(a, sc2', post2);
 
 
             calc {
-              WpShallowSimpleCmd(a, SeqSimple(sc1, sc2), post1)(s1);
-              WpShallowSimpleCmd(a, sc1, post1')(s1);
+              WpSimpleCmd(a, SeqSimple(sc1, sc2), post1)(s1);
+              WpSimpleCmd(a, sc1, post1')(s1);
               { 
                 assert RelPred(varMapping, post1', post2', s2Orig) by {
                   SubstSimpleCmdCorrect(a, sc2, varMapping, post1, post2, s2Orig);
                 }
                 SubstSimpleCmdCorrect(a, sc1, varMapping, post1', post2', s2Orig); 
               }
-              WpShallowSimpleCmd(a, sc1', post2')(s2);
-              WpShallowSimpleCmd(a, SeqSimple(sc1', sc2'), post2)(s2);
+              WpSimpleCmd(a, sc1', post2')(s2);
+              WpSimpleCmd(a, SeqSimple(sc1', sc2'), post2)(s2);
             }
         }
       }
     }
 
-    predicate {:opaque} RelPost<A(!new)>(m: map<var_name, var_name>, post1: WpPostShallow<A>, post2: WpPostShallow<A>, s2Orig: MapOrig<Val<A>>)
+    predicate {:opaque} RelPost<A(!new)>(m: map<var_name, var_name>, post1: WpPost<A>, post2: WpPost<A>, s2Orig: MapOrig<Val<A>>)
     {
       && post1.scopes.Keys == post2.scopes.Keys
       && RelPred(m, post1.normal, post2.normal, s2Orig)
@@ -420,8 +420,8 @@ module MakeScopedVarsUniqueProof {
     m: map<var_name, var_name>, 
     varDecls: seq<VarDecl>, 
     varDecls': seq<VarDecl>,
-    post1: WpPostShallow<A>, 
-    post2: WpPostShallow<A>, 
+    post1: WpPost<A>, 
+    post2: WpPost<A>, 
     s1: state<A>,
     s2: state<A>,
     s2Orig: MapOrig<Val<A>>)
@@ -582,8 +582,8 @@ module MakeScopedVarsUniqueProof {
         //&& m'.Values !! s2Orig'.Keys
       requires Maps.Injective(m)
       ensures 
-        ForallVarDeclsShallow(a, varDecls, p1)(s1) == 
-        ForallVarDeclsShallow(a, varDecls', p2)(s2)
+        ForallVarDecls(a, varDecls, p1)(s1) == 
+        ForallVarDecls(a, varDecls', p2)(s2)
   {
     var s2OrigNewKeys := set x | x in GetVarNames(varDecls) && x in m.Keys :: m[x];
     var s2Orig' := s2Orig + map x' | x' in s2OrigNewKeys :: Maps.Get(s2, x');
@@ -668,7 +668,7 @@ module MakeScopedVarsUniqueProof {
       reveal RelPred();
     }
 
-    ForallVarDeclsShallowEquiv(a, varDecls, varDecls', p1, p2, s1, s2);
+    ForallVarDeclsEquiv(a, varDecls, varDecls', p1, p2, s1, s2);
   } 
 
   /** 
@@ -718,8 +718,8 @@ module MakeScopedVarsUniqueProof {
         c: Cmd, 
         substMap: map<var_name, var_name>, 
         counter: nat,
-        post1: WpPostShallow<A>,
-        post2: WpPostShallow<A>,
+        post1: WpPost<A>,
+        post2: WpPost<A>,
         s2Orig: MapOrig<Val<A>>,
         names: set<string>)
       requires c.WellFormedVars(substMap.Keys)
@@ -734,35 +734,35 @@ module MakeScopedVarsUniqueProof {
       //requires forall vDecl | vDecls in seqSubstMap :: substMap(vDecl.) == sequSubstMap
       ensures 
         var (c', counter') := MakeScopedVarsUnique(c, substMap, counter);
-        RelPred(substMap, WpShallow(a, c, post1), WpShallow(a, c', post2), s2Orig)
+        RelPred(substMap, WpCmd(a, c, post1), WpCmd(a, c', post2), s2Orig)
     {
       reveal RelPost();
       match c {
         case SimpleCmd(sc) =>
-          reveal WpShallow();
+          reveal WpCmd();
           SubstSimpleCmdCorrect(a, sc, substMap, post1.normal, post2.normal, s2Orig);
-        case Break(_) => reveal WpShallow();
+        case Break(_) => reveal WpCmd();
         case Seq(c1, c2) => 
           var (c1', counter1') := MakeScopedVarsUnique(c1, substMap, counter);
           var (c2', counter2') := MakeScopedVarsUnique(c2, substMap, counter1');
 
-          var post1' := WpPostShallow(WpShallow(a, c2, post1), post1.currentScope, post1.scopes);
-          var post2' := WpPostShallow(WpShallow(a, c2', post2), post2.currentScope, post2.scopes);
+          var post1' := WpPost(WpCmd(a, c2, post1), post1.currentScope, post1.scopes);
+          var post2' := WpPost(WpCmd(a, c2', post2), post2.currentScope, post2.scopes);
 
           assert RelPost(substMap, post1', post2', s2Orig) by {
-            assert RelPred(substMap, WpShallow(a, c2, post1), WpShallow(a, c2', post2), s2Orig) by {
+            assert RelPred(substMap, WpCmd(a, c2, post1), WpCmd(a, c2', post2), s2Orig) by {
               VarNameSetExtend(names, 0, counter, counter1');
               MakeScopedVarsUniqueCorrect(a, c2, substMap, counter1', post1, post2, s2Orig, names);
             }
           }
 
-          assert RelPred(substMap, WpShallow(a, c1, post1'), WpShallow(a, c1', post2'), s2Orig) by {
+          assert RelPred(substMap, WpCmd(a, c1, post1'), WpCmd(a, c1', post2'), s2Orig) by {
             MakeScopedVarsUniqueCorrect(a, c1, substMap, counter, post1', post2', s2Orig, names);
           }
 
-          reveal WpShallow();
+          reveal WpCmd();
         case Scope(optLabel, varDecls, body) => 
-          /* Goal: RelPred(substMap, WpShallow(a, c, post1), WpShallow(a, c', post2)) */
+          /* Goal: RelPred(substMap, WpCmd(a, c, post1), WpCmd(a, c', post2)) */
           var varDecls' := CreateUniqueVarDecls(varDecls, counter);
 
           assert Sequences.HasNoDuplicates(GetVarNamesSeq(varDecls')) by {
@@ -788,11 +788,11 @@ module MakeScopedVarsUniqueProof {
             else post2.scopes;
           assert updatedScopes2.Keys == if optLabel.Some? then {optLabel.value} + post2.scopes.Keys else post2.scopes.Keys;
           
-          var post1' := WpPostShallow(post1.normal, post1.normal, updatedScopes1);
-          var post2' := WpPostShallow(post2.normal, post2.normal, updatedScopes2);
+          var post1' := WpPost(post1.normal, post1.normal, updatedScopes1);
+          var post2' := WpPost(post2.normal, post2.normal, updatedScopes2);
 
           forall s1,s2 | RelState(substMap, s1, s2, s2Orig)
-          ensures WpShallow(a, c, post1)(s1) == WpShallow(a, c', post2)(s2)
+          ensures WpCmd(a, c, post1)(s1) == WpCmd(a, c', post2)(s2)
           {
             /* We want to prove that if a name x in varDecls is already mapped to x' in substMap, then 
               it must be the case that x' will not be modified within the scope, since we map x to a new
@@ -810,9 +810,9 @@ module MakeScopedVarsUniqueProof {
             }
 
             calc {
-              WpShallow(a, Scope(optLabel, varDecls, body), post1)(s1);
-              {reveal WpShallow();}
-              ForallVarDeclsShallow(a, varDecls, WpShallow(a, body, ResetVarsPost(varDecls, post1', s1)))(s1);
+              WpCmd(a, Scope(optLabel, varDecls, body), post1)(s1);
+              {reveal WpCmd();}
+              ForallVarDecls(a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post1', s1)))(s1);
               { 
                 assert RelPost(substMap', ResetVarsPost(varDecls, post1', s1), ResetVarsPost(varDecls', post2', s2), s2Orig') by 
                 { 
@@ -835,8 +835,8 @@ module MakeScopedVarsUniqueProof {
                 }
 
                 assert RelPred(substMap', 
-                  WpShallow(a, body, ResetVarsPost(varDecls, post1', s1)), 
-                  WpShallow(a, body', ResetVarsPost(varDecls', post2', s2)),
+                  WpCmd(a, body, ResetVarsPost(varDecls, post1', s1)), 
+                  WpCmd(a, body', ResetVarsPost(varDecls', post2', s2)),
                   s2Orig') by
                   { 
                     assert s2Orig'.Keys <= VarNameSet(names+GetVarNames(varDecls), 0, counter') by {
@@ -854,8 +854,8 @@ module MakeScopedVarsUniqueProof {
                     ); 
                   }
                   
-                  var p1 := WpShallow(a, body, ResetVarsPost(varDecls, post1', s1));
-                  var p2 := WpShallow(a, body', ResetVarsPost(varDecls', post2', s2));
+                  var p1 := WpCmd(a, body, ResetVarsPost(varDecls, post1', s1));
+                  var p2 := WpCmd(a, body', ResetVarsPost(varDecls', post2', s2));
 
                   ForallVarDeclsRelSwitch(
                       a, 
@@ -868,9 +868,9 @@ module MakeScopedVarsUniqueProof {
                       s2,
                       s2Orig);
               }
-              ForallVarDeclsShallow(a, varDecls', WpShallow(a, body', ResetVarsPost(varDecls', post2', s2)))(s2);
-              {reveal WpShallow();}
-              WpShallow(a, Scope(optLabel, varDecls', body'), post2)(s2);
+              ForallVarDecls(a, varDecls', WpCmd(a, body', ResetVarsPost(varDecls', post2', s2)))(s2);
+              {reveal WpCmd();}
+              WpCmd(a, Scope(optLabel, varDecls', body'), post2)(s2);
             }
           }
 
@@ -879,11 +879,11 @@ module MakeScopedVarsUniqueProof {
           var (thn', counter') := MakeScopedVarsUnique(thn, substMap, counter);
           var (els', counter'') := MakeScopedVarsUnique(els, substMap, counter');
 
-          assert RelPred(substMap, WpShallow(a, thn, post1), WpShallow(a, thn', post2), s2Orig) by {
+          assert RelPred(substMap, WpCmd(a, thn, post1), WpCmd(a, thn', post2), s2Orig) by {
             MakeScopedVarsUniqueCorrect(a, thn, substMap, counter, post1, post2, s2Orig, names);
           }
 
-          assert RelPred(substMap, WpShallow(a, els, post1), WpShallow(a, els', post2), s2Orig) by {
+          assert RelPred(substMap, WpCmd(a, els, post1), WpCmd(a, els', post2), s2Orig) by {
             VarNameSetExtend(names, 0, counter, counter');
             MakeScopedVarsUniqueCorrect(a, els, substMap, counter', post1, post2, s2Orig, names);
           }
@@ -891,15 +891,15 @@ module MakeScopedVarsUniqueProof {
           reveal RelPred();
 
           forall sA, sB | RelState(substMap, sA, sB, s2Orig)
-          ensures WpShallow(a, c, post1)(sA) == WpShallow(a, If(None, thn', els'), post2)(sB)
+          ensures WpCmd(a, c, post1)(sA) == WpCmd(a, If(None, thn', els'), post2)(sB)
           {
             calc {
-              WpShallow(a, c, post1)(sA);
-              { reveal WpShallow(); }
-              Util.AndOpt(WpShallow(a, thn, post1)(sA), WpShallow(a, els, post1)(sA));
-              Util.AndOpt(WpShallow(a, thn', post2)(sB), WpShallow(a, els', post2)(sB));
-              { reveal WpShallow(); }
-              WpShallow(a, If(None, thn', els'), post2)(sB);
+              WpCmd(a, c, post1)(sA);
+              { reveal WpCmd(); }
+              Util.AndOpt(WpCmd(a, thn, post1)(sA), WpCmd(a, els, post1)(sA));
+              Util.AndOpt(WpCmd(a, thn', post2)(sB), WpCmd(a, els', post2)(sB));
+              { reveal WpCmd(); }
+              WpCmd(a, If(None, thn', els'), post2)(sB);
             }
           }
         case _ => assume false;

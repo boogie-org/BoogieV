@@ -47,8 +47,8 @@ module SemanticsTest {
     s => Some(true)
   }
 
-  function TruePost<A>() : WpPostShallow<A> {
-    WpPostShallow(TruePred(), TruePred(), map[])
+  function TruePost<A>() : WpPost<A> {
+    WpPost(TruePred(), TruePred(), map[])
   }
 
 
@@ -64,25 +64,25 @@ module SemanticsTest {
 
   lemma ScopeOuterTest<A(!new)>(a: absval_interp<A>, s: state<A>)
     requires LabelsWellDefAux(scopeOuter, TruePost<A>().scopes.Keys)
-    requires WpShallow(a, scopeOuter, TruePost())(s) != None //"well-typed"
-    ensures WpShallow(a, scopeOuter, TruePost())(s) == Some(true)
+    requires WpCmd(a, scopeOuter, TruePost())(s) != None //"well-typed"
+    ensures WpCmd(a, scopeOuter, TruePost())(s) == Some(true)
   {
     var decls := [("x", TPrim (TInt))];
     var post := TruePost<A>();
-    var postOuter := WpPostShallow(post.normal, post.normal, post.scopes);
+    var postOuter := WpPost(post.normal, post.normal, post.scopes);
 
 
-    var p1 := WpShallow(a, outerBody, ResetVarsPost(decls, postOuter, s));
+    var p1 := WpCmd(a, outerBody, ResetVarsPost(decls, postOuter, s));
     calc {
-      WpShallow(a, scopeOuter, TruePost())(s);
-      { reveal WpShallow(); }
-      ForallVarDeclsShallow( a, decls, p1 )(s);
+      WpCmd(a, scopeOuter, TruePost())(s);
+      { reveal WpCmd(); }
+      ForallVarDecls( a, decls, p1 )(s);
     }
 
     calc {
-      ForallVarDeclsShallow( a, decls, p1 )(s);
+      ForallVarDecls( a, decls, p1 )(s);
       { 
-        SomeForallVarDeclsShallow(a, decls, p1, s);
+        SomeForallVarDecls(a, decls, p1, s);
       }
       Some(forall vs | ValuesRespectDecls(a, vs, decls) :: p1(StateUpdVarDecls(s, decls, vs)) == Some(true));
     }
@@ -104,41 +104,41 @@ module SemanticsTest {
       }
 
       assert p1(s') != None by {
-        SomeForallVarDeclsShallow2(a, decls, p1, s, vs);
+        SomeForallVarDecls2(a, decls, p1, s, vs);
       }
 
     var postOuter' := ResetVarsPost(decls, postOuter, s);
       calc {
         p1(s');
-        WpShallow(a, outerBody, postOuter')(s');
-        { reveal WpShallow(); }
-        WpShallowSimpleCmd(a, Assume(cond), WpShallow(a, Seq(scopeMiddle, SimpleCmd(Assert(cond))), postOuter'))(s');
+        WpCmd(a, outerBody, postOuter')(s');
+        { reveal WpCmd(); }
+        WpSimpleCmd(a, Assume(cond), WpCmd(a, Seq(scopeMiddle, SimpleCmd(Assert(cond))), postOuter'))(s');
       }
 
       var vCond := ExprEvalBoolOpt(a, cond, s').value; //we know it is not None since p1(s') != None
 
-      var postMiddle := WpPostShallow(WpShallow(a, SimpleCmd(Assert(cond)), postOuter'), postOuter'.currentScope, postOuter'.scopes);
+      var postMiddle := WpPost(WpCmd(a, SimpleCmd(Assert(cond)), postOuter'), postOuter'.currentScope, postOuter'.scopes);
 
       assert postOuter'.scopes["A" := post.normal].Keys == {"A"} + postOuter'.scopes.Keys; 
 
       if vCond {
 
-        var postMiddle' := WpPostShallow(postMiddle.normal, postMiddle.normal, postOuter'.scopes["A" := postMiddle.normal]);
+        var postMiddle' := WpPost(postMiddle.normal, postMiddle.normal, postOuter'.scopes["A" := postMiddle.normal]);
 
-        var p2 := WpShallow(a, scopeInner, ResetVarsPost(decls, postMiddle', s'));
+        var p2 := WpCmd(a, scopeInner, ResetVarsPost(decls, postMiddle', s'));
 
         calc {
-          WpShallow(a, Seq(scopeMiddle, SimpleCmd(Assert(cond))), postOuter')(s');
-          { reveal WpShallow(); }
-          WpShallow(a, scopeMiddle, postMiddle)(s');
-          { reveal WpShallow(); }
-          ForallVarDeclsShallow( a, decls, p2 )(s');
+          WpCmd(a, Seq(scopeMiddle, SimpleCmd(Assert(cond))), postOuter')(s');
+          { reveal WpCmd(); }
+          WpCmd(a, scopeMiddle, postMiddle)(s');
+          { reveal WpCmd(); }
+          ForallVarDecls( a, decls, p2 )(s');
         }
 
         calc {
-          ForallVarDeclsShallow( a, decls, p2 )(s');
+          ForallVarDecls( a, decls, p2 )(s');
           { 
-            SomeForallVarDeclsShallow(a, decls, p2, s');
+            SomeForallVarDecls(a, decls, p2, s');
           }
           Some(forall vs | ValuesRespectDecls(a, vs, decls) :: p2(StateUpdVarDecls(s', decls, vs)) == Some(true));
         }
@@ -149,25 +149,25 @@ module SemanticsTest {
           var s'' := StateUpdVarDecls(s', decls, vs); 
 
           assert p2(s'') != None by {
-            SomeForallVarDeclsShallow2(a, decls, p2, s', vs);
+            SomeForallVarDecls2(a, decls, p2, s', vs);
           }
 
           var postMiddle'' := ResetVarsPost(decls, postMiddle', s');
-          var postInner := WpPostShallow(postMiddle''.normal, postMiddle''.normal, postMiddle''.scopes);
+          var postInner := WpPost(postMiddle''.normal, postMiddle''.normal, postMiddle''.scopes);
           
-          var p3 := WpShallow(a, innerBody, ResetVarsPost(decls, postInner, s''));
+          var p3 := WpCmd(a, innerBody, ResetVarsPost(decls, postInner, s''));
 
           calc {
             p2(s'');
-            WpShallow(a, scopeInner, postMiddle'')(s'');
-            { reveal WpShallow(); }
-            ForallVarDeclsShallow(a, decls, p3)(s'');
+            WpCmd(a, scopeInner, postMiddle'')(s'');
+            { reveal WpCmd(); }
+            ForallVarDecls(a, decls, p3)(s'');
           }
 
           calc {
-            ForallVarDeclsShallow( a, decls, p3 )(s'');
+            ForallVarDecls( a, decls, p3 )(s'');
             { 
-              SomeForallVarDeclsShallow(a, decls, p3, s'');
+              SomeForallVarDecls(a, decls, p3, s'');
             }
             Some(forall vs | ValuesRespectDecls(a, vs, decls) :: p3(StateUpdVarDecls(s'', decls, vs)) == Some(true));
           }
@@ -178,25 +178,25 @@ module SemanticsTest {
             var s3 := StateUpdVarDecls(s'', decls, vs); 
 
             assert p3(s3) != None by {
-              SomeForallVarDeclsShallow2(a, decls, p3, s'', vs);
+              SomeForallVarDecls2(a, decls, p3, s'', vs);
             }
 
             calc {
               p3(s3);
-              WpShallow(a, Break(Some("A")), ResetVarsPost(decls, postInner, s''))(s3);
-              { reveal WpShallow(); } //TODO: slow, find way to speed up
+              WpCmd(a, Break(Some("A")), ResetVarsPost(decls, postInner, s''))(s3);
+              { reveal WpCmd(); } //TODO: slow, find way to speed up
               ResetVarsPost(decls, postInner, s'').scopes["A"](s3);
               ResetVarsPred(decls, postInner.scopes["A"], s'')(s3);
               ResetVarsPred(decls, postMiddle''.scopes["A"], s'')(s3);
               ResetVarsPred(decls, ResetVarsPost(decls, postMiddle', s').scopes["A"], s'')(s3);
               ResetVarsPred(decls, ResetVarsPred(decls, postMiddle.normal, s'), s'')(s3);
-              ResetVarsPred(decls, ResetVarsPred(decls, WpShallow(a, SimpleCmd(Assert(cond)), postOuter'), s'), s'')(s3);
+              ResetVarsPred(decls, ResetVarsPred(decls, WpCmd(a, SimpleCmd(Assert(cond)), postOuter'), s'), s'')(s3);
             }
 
             calc {
-              ResetVarsPred(decls, ResetVarsPred(decls, WpShallow(a, SimpleCmd(Assert(cond)), postOuter'), s'), s'')(s3);
-              ResetVarsPred(decls, WpShallow(a, SimpleCmd(Assert(cond)), postOuter'), s')(ResetVarsState(decls, s3, s''));
-              WpShallow(a, SimpleCmd(Assert(cond)), postOuter')(ResetVarsState(decls, ResetVarsState(decls, s3, s''), s'));
+              ResetVarsPred(decls, ResetVarsPred(decls, WpCmd(a, SimpleCmd(Assert(cond)), postOuter'), s'), s'')(s3);
+              ResetVarsPred(decls, WpCmd(a, SimpleCmd(Assert(cond)), postOuter'), s')(ResetVarsState(decls, s3, s''));
+              WpCmd(a, SimpleCmd(Assert(cond)), postOuter')(ResetVarsState(decls, ResetVarsState(decls, s3, s''), s'));
             }
 
             var sInput := ResetVarsState(decls, ResetVarsState(decls, s3, s''), s');
@@ -227,9 +227,9 @@ module SemanticsTest {
             var resOuter := postOuter'.normal(sInput);
 
             calc {
-              WpShallow(a, SimpleCmd(Assert(cond)), postOuter')(sInput);
-              { reveal WpShallow(); }
-              WpShallowSimpleCmd(a, Assert(cond), postOuter'.normal)(sInput);
+              WpCmd(a, SimpleCmd(Assert(cond)), postOuter')(sInput);
+              { reveal WpCmd(); }
+              WpSimpleCmd(a, Assert(cond), postOuter'.normal)(sInput);
               postOuter'.normal(sInput);
               ResetVarsPred(decls, post.normal, s)(sInput);
               post.normal(ResetVarsState(decls, sInput, s));

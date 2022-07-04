@@ -50,10 +50,10 @@ module BoogieSemantics {
     v.Some? && TypeOfVal(a, v.value) == t
   }
 
-  function ForallVarDecls(varDecls: seq<(var_name, Ty)>, e: Expr) : Expr
+  function ForallVarDeclsExpr(varDecls: seq<(var_name, Ty)>, e: Expr) : Expr
   {
     if |varDecls| == 0 then e 
-    else var (x,t) := varDecls[0]; Binder(ForallQ, x, t, ForallVarDecls(varDecls[1..], e))
+    else var (x,t) := varDecls[0]; Binder(ForallQ, x, t, ForallVarDeclsExpr(varDecls[1..], e))
   }
 
   function NumScopesAndLoops(c: Cmd) : nat
@@ -119,14 +119,14 @@ module BoogieSemantics {
   }
 
   type Predicate<!A> = state<A> -> Option<bool>
-  datatype WpPostShallow<!A> = WpPostShallow(normal: Predicate<A>, currentScope: Predicate<A>, scopes: map<lbl_name, Predicate<A>>)
+  datatype WpPost<!A> = WpPost(normal: Predicate<A>, currentScope: Predicate<A>, scopes: map<lbl_name, Predicate<A>>)
 
   /** Note that for the weakest precondition definition making changes such as rewriting a predicate P
       to "s => P(s)" can have an impact on proofs. The reason is that in Dafny P and "s => P(s)" are not 
       necessarily the same predicate. Some lemmas aim to show that a predicate computed by the weakest precondition
       is actually the same as some other predicate (instead of just showing pointwise equality), 
       which relies on the fact on the syntactic expression used to express a predicate. */
-  function WpShallowSimpleCmd<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, post: Predicate<A>) : Predicate<A>
+  function WpSimpleCmd<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, post: Predicate<A>) : Predicate<A>
   {
     match sc
     case Skip => post
@@ -163,13 +163,13 @@ module BoogieSemantics {
           var postEval :- post(s); 
           Some(postEval) 
     case Havoc(varDecls) =>
-      ForallVarDeclsShallow(a, varDecls, post)
+      ForallVarDecls(a, varDecls, post)
     case Assign(x, t, e) => 
       s => 
         var eEval :- EvalExpr(a, e, s); 
         post(s[x := eEval])
     case SeqSimple(sc1, sc2) =>
-      WpShallowSimpleCmd(a, sc1, WpShallowSimpleCmd(a, sc2, post))
+      WpSimpleCmd(a, sc1, WpSimpleCmd(a, sc2, post))
   }
 
   function WpShallowSimpleCmdSeq<A(!new)>(a: absval_interp<A>, simpleCmds: seq<SimpleCmd>, post: Predicate<A>) : Predicate<A>
@@ -178,17 +178,17 @@ module BoogieSemantics {
     else
       s =>
         var res2 := WpShallowSimpleCmdSeq(a, simpleCmds[1..], post);
-        WpShallowSimpleCmd(a, simpleCmds[0], res2)(s)
+        WpSimpleCmd(a, simpleCmds[0], res2)(s)
   }
 
-  function {:opaque} WpShallow<A(!new)>(a: absval_interp<A>, c: Cmd, post: WpPostShallow<A>) : Predicate<A>
+  function {:opaque} WpCmd<A(!new)>(a: absval_interp<A>, c: Cmd, post: WpPost<A>) : Predicate<A>
     requires LabelsWellDefAux(c, post.scopes.Keys)
     decreases NumScopesAndLoops(c), c
   {
     match c
-    case SimpleCmd(sc) => WpShallowSimpleCmd(a, sc, post.normal)
+    case SimpleCmd(sc) => WpSimpleCmd(a, sc, post.normal)
     case Break(optLabel) => if optLabel.Some? then post.scopes[optLabel.value] else post.currentScope 
-    case Seq(c1, c2) => WpShallow(a, c1, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes))
+    case Seq(c1, c2) => WpCmd(a, c1, WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes))
     case Scope(optLabel, varDecls, body) => 
       var updatedScopes := 
         if optLabel.Some? then 
@@ -196,22 +196,22 @@ module BoogieSemantics {
         else post.scopes;
 
       assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
-      var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
+      var post' := WpPost(post.normal, post.normal, updatedScopes);
       
-      s => ForallVarDeclsShallow( a, varDecls, WpShallow(a, body, ResetVarsPost(varDecls, post', s)) )(s)
+      s => ForallVarDecls( a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s)) )(s)
     case If(optCond, thn, els) =>
       match optCond {
         case Some(cond) => 
           s => 
             var condEval :- ExprEvalBoolOpt(a, cond, s);
             if(condEval) then
-                WpShallow(a, thn, post)(s)
+                WpCmd(a, thn, post)(s)
               else 
-                WpShallow(a, els, post)(s)
+                WpCmd(a, els, post)(s)
         case None =>
           s => 
-            var thnRes :- WpShallow(a, thn, post)(s);
-            var elsRes :- WpShallow(a, els, post)(s);
+            var thnRes :- WpCmd(a, thn, post)(s);
+            var elsRes :- WpCmd(a, els, post)(s);
             Some(thnRes && elsRes)
       }
     case Loop(invs, body) => 
@@ -223,7 +223,7 @@ module BoogieSemantics {
       LoopDesugaringNumScopesAndLoops(invs, body);
       LoopDesugaringLabelsWellDef(invs, body, post.scopes.Keys);
 
-      WpShallow(a, SeqToCmd(body'), post)
+      WpCmd(a, SeqToCmd(body'), post)
   }
 
 
@@ -250,7 +250,7 @@ module BoogieSemantics {
     ensures Maps.Get(StateUpdVarDecls(s, varDecls, vs), k) == Maps.Get(s, k)
   { }
 
-  function {:opaque} ForallVarDeclsShallow<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
+  function {:opaque} ForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
   {
     if |varDecls| == 0 then p
     else 
@@ -261,13 +261,13 @@ module BoogieSemantics {
           None
   }
 
-  function {:opaque} ForallVarDeclsShallowOld<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
+  function {:opaque} ForallVarDeclsOld<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
   {
     if |varDecls| == 0 then p
     else var (x,t) := varDecls[0]; 
          s => 
-          if (forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsShallowOld(a, varDecls[1..], p)(s[x := v]).Some?) then
-            Some((forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsShallowOld(a, varDecls[1..], p)(s[x := v]) == Some(true)))
+          if (forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsOld(a, varDecls[1..], p)(s[x := v]).Some?) then
+            Some((forall v: Val<A> | TypeOfVal(a, v) == t :: ForallVarDeclsOld(a, varDecls[1..], p)(s[x := v]) == Some(true)))
           else
             None
   }
@@ -294,29 +294,29 @@ module BoogieSemantics {
   }
   */
 
-  lemma SomeForallVarDeclsShallow<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
-    requires ForallVarDeclsShallow(a, varDecls, p)(s) != None
+  lemma SomeForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
+    requires ForallVarDecls(a, varDecls, p)(s) != None
     requires |varDecls| > 0
     ensures 
       var (x,t) := varDecls[0];
-      ForallVarDeclsShallow(a, varDecls, p)(s) ==
+      ForallVarDecls(a, varDecls, p)(s) ==
       Some(forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)) == Some(true))
   {
-    reveal ForallVarDeclsShallow();
+    reveal ForallVarDecls();
   }
 
-  lemma SomeForallVarDeclsShallow2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>,
+  lemma SomeForallVarDecls2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>,
     vs: seq<Val<A>>)
-    requires ForallVarDeclsShallow(a, varDecls, p)(s) != None
+    requires ForallVarDecls(a, varDecls, p)(s) != None
     requires ValuesRespectDecls(a, vs, varDecls)
     requires |varDecls| > 0
     ensures 
       p(StateUpdVarDecls(s, varDecls, vs)).Some?
   {
-    reveal ForallVarDeclsShallow();
+    reveal ForallVarDecls();
   }
 
-  lemma  ForallVarDeclsShallowEquiv<A(!new)>(
+  lemma  ForallVarDeclsEquiv<A(!new)>(
       a: absval_interp<A>, 
       varDecls: seq<VarDecl>, 
       varDecls': seq<VarDecl>, 
@@ -330,9 +330,9 @@ module BoogieSemantics {
       && (forall vs | ValuesRespectDecls(a, vs, varDecls) :: 
           p1(StateUpdVarDecls(s1, varDecls, vs)) == p2(StateUpdVarDecls(s2, varDecls', vs)))
     ensures 
-      ForallVarDeclsShallow(a, varDecls, p1)(s1) == ForallVarDeclsShallow(a, varDecls', p2)(s2)
+      ForallVarDecls(a, varDecls, p1)(s1) == ForallVarDecls(a, varDecls', p2)(s2)
     {
-      reveal ForallVarDeclsShallow();
+      reveal ForallVarDecls();
       if |varDecls| == 0 {
         assert p1(s1) == p2(s2) by {
           //need this for Dafny to trigger the quantifier
@@ -341,11 +341,11 @@ module BoogieSemantics {
       }
     }
 
-  function ResetVarsPost<A(!new)>(varDecls: seq<(var_name,Ty)>, p: WpPostShallow<A>, s: state<A>) : WpPostShallow<A>
+  function ResetVarsPost<A(!new)>(varDecls: seq<(var_name,Ty)>, p: WpPost<A>, s: state<A>) : WpPost<A>
     ensures p.scopes.Keys == ResetVarsPost(varDecls, p, s).scopes.Keys
   {
     var newScopes := map lbl | lbl in p.scopes.Keys :: ResetVarsPred(varDecls, p.scopes[lbl], s);
-    WpPostShallow(ResetVarsPred(varDecls, p.normal, s), ResetVarsPred(varDecls, p.currentScope, s), newScopes)
+    WpPost(ResetVarsPred(varDecls, p.normal, s), ResetVarsPred(varDecls, p.currentScope, s), newScopes)
   }
 
   function ResetVarsState<A(!new)>(varDecls: seq<(var_name,Ty)>, s: state<A>, sOrig: state<A>) : state<A>
@@ -385,7 +385,7 @@ module BoogieSemantics {
     ensures forall origState, s' :: ResetVarsPred([], p, origState)(s') == p(s')
   { }
 
-  lemma ResetVarsPostNoVars<A(!new)>(a: absval_interp<A>, p: WpPostShallow<A>, origState: state<A>)
+  lemma ResetVarsPostNoVars<A(!new)>(a: absval_interp<A>, p: WpPost<A>, origState: state<A>)
     requires 
       var q := ResetVarsPost([], p, origState);
       && (forall s' :: p.normal(s') == q.normal(s'))
@@ -398,7 +398,7 @@ module BoogieSemantics {
     ensures forall s :: ResetVarsPred(varDecls, p, resetState)(s) == ResetVarsPred(varDecls, q, resetState)(s)
   { }
 
-  lemma ResetVarsPostPointwise<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, post1: WpPostShallow<A>, post2: WpPostShallow<A>, resetState: state<A>, s: state<A>) 
+  lemma ResetVarsPostPointwise<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name,Ty)>, post1: WpPost<A>, post2: WpPost<A>, resetState: state<A>, s: state<A>) 
     requires forall s :: post1.normal(s) == post2.normal(s)
     requires forall s :: post1.currentScope(s) == post2.currentScope(s)
     requires forall s, lbl :: lbl in post1.scopes.Keys && lbl in post2.scopes.Keys ==> post1.scopes[lbl](s) == post2.scopes[lbl](s)
@@ -434,17 +434,17 @@ module BoogieSemantics {
 
   lemma ForallVarDeclsPointwise<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, P: Predicate<A>, Q: Predicate<A>, s: state<A>)
   requires forall s: state<A> :: P(s) == Q(s)
-  ensures ForallVarDeclsShallow(a, varDecls, P)(s) == ForallVarDeclsShallow(a, varDecls, Q)(s)
+  ensures ForallVarDecls(a, varDecls, P)(s) == ForallVarDecls(a, varDecls, Q)(s)
   {
-    reveal ForallVarDeclsShallow();
-      /* proof below needed when using the recursive version of ForallVarDeclsShallow
-      reveal ForallVarDeclsShallow();
+    reveal ForallVarDecls();
+      /* proof below needed when using the recursive version of ForallVarDecls
+      reveal ForallVarDecls();
       if |varDecls| == 0 {
           //trivial from precondition P(s) == Q(s)
       } else {
           var (x,t) := varDecls[0];
           forall v: Val<A> | true
-              ensures ForallVarDeclsShallow(a, varDecls[1..], P)(s[x := v]) == ForallVarDeclsShallow(a, varDecls[1..], Q)(s[x := v])
+              ensures ForallVarDecls(a, varDecls[1..], P)(s[x := v]) == ForallVarDecls(a, varDecls[1..], Q)(s[x := v])
           {
               ForallVarDeclsPointwise(a, varDecls[1..], P, Q, s[x := v]);
           }
@@ -452,53 +452,53 @@ module BoogieSemantics {
       */
   }
 
-  lemma WpShallowSimpleCmdPointwise<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, P: Predicate<A>, Q: Predicate<A>, s: state<A>)
+  lemma WpSimpleCmdPointwise<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, P: Predicate<A>, Q: Predicate<A>, s: state<A>)
   requires (forall s' :: P(s') == Q(s'))
-  ensures WpShallowSimpleCmd(a, sc, P)(s) == WpShallowSimpleCmd(a, sc, Q)(s)
+  ensures WpSimpleCmd(a, sc, P)(s) == WpSimpleCmd(a, sc, Q)(s)
   {
     match sc
     case Havoc(varDecls) =>
       ForallVarDeclsPointwise(a, varDecls, P, Q, s);
     case SeqSimple(sc1, sc2) =>
       forall s':state<A> | true
-        ensures WpShallowSimpleCmd(a, sc2, P)(s') == WpShallowSimpleCmd(a, sc2, Q)(s')
+        ensures WpSimpleCmd(a, sc2, P)(s') == WpSimpleCmd(a, sc2, Q)(s')
       {
-        WpShallowSimpleCmdPointwise(a, sc2, P ,Q, s');
+        WpSimpleCmdPointwise(a, sc2, P ,Q, s');
       }
     case _ => 
   }
 
-  lemma WpShallowSimpleCmdPointwise2<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, P: Predicate<A>, Q: Predicate<A>)
+  lemma WpSimpleCmdPointwise2<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, P: Predicate<A>, Q: Predicate<A>)
   requires (forall s' :: P(s') == Q(s'))
-  ensures forall s :: WpShallowSimpleCmd(a, sc, P)(s) == WpShallowSimpleCmd(a, sc, Q)(s)
+  ensures forall s :: WpSimpleCmd(a, sc, P)(s) == WpSimpleCmd(a, sc, Q)(s)
   {
     forall s | true 
-    ensures WpShallowSimpleCmd(a, sc, P)(s) == WpShallowSimpleCmd(a, sc, Q)(s)
+    ensures WpSimpleCmd(a, sc, P)(s) == WpSimpleCmd(a, sc, Q)(s)
     {
-      WpShallowSimpleCmdPointwise(a, sc, P, Q, s);
+      WpSimpleCmdPointwise(a, sc, P, Q, s);
     }
   }
 
-  lemma WpShallowPointwise<A(!new)>(a: absval_interp<A>, c: Cmd, P: WpPostShallow, Q: WpPostShallow, s: state<A>)
+  lemma WpCmdPointwise<A(!new)>(a: absval_interp<A>, c: Cmd, P: WpPost, Q: WpPost, s: state<A>)
   requires LabelsWellDefAux(c, P.scopes.Keys) && LabelsWellDefAux(c, Q.scopes.Keys)
   requires (forall s' :: P.normal(s') == Q.normal(s'))
   requires (forall s' :: P.currentScope(s') == Q.currentScope(s'))
   requires (forall lbl, s' :: lbl in P.scopes.Keys && lbl in Q.scopes.Keys ==> P.scopes[lbl](s') == Q.scopes[lbl](s'))
-  ensures WpShallow(a, c, P)(s) == WpShallow(a, c, Q)(s)
+  ensures WpCmd(a, c, P)(s) == WpCmd(a, c, Q)(s)
   decreases NumScopesAndLoops(c), c
   {
-      reveal WpShallow();
+      reveal WpCmd();
       match c
-      case SimpleCmd(sc) => WpShallowSimpleCmdPointwise(a, sc, P.normal, Q. normal, s);
+      case SimpleCmd(sc) => WpSimpleCmdPointwise(a, sc, P.normal, Q. normal, s);
       case Seq(c1, c2) =>
         forall s':state<A> | true
-            ensures WpShallow(a, c2, P)(s') == WpShallow(a, c2, Q)(s')
+            ensures WpCmd(a, c2, P)(s') == WpCmd(a, c2, Q)(s')
         {
-            WpShallowPointwise(a, c2, P, Q, s');
+            WpCmdPointwise(a, c2, P, Q, s');
         }
       case If(optCond, thn, els) => 
-        WpShallowPointwise(a, thn, P, Q, s); //why does Dafny not infer these calls automatically
-        WpShallowPointwise(a, els, P, Q, s);
+        WpCmdPointwise(a, thn, P, Q, s); //why does Dafny not infer these calls automatically
+        WpCmdPointwise(a, els, P, Q, s);
       case Scope(optLabel, varDecls, body) => 
         var updatedScopesP := if optLabel.Some? then P.scopes[optLabel.value := P.normal] else P.scopes;
         assert updatedScopesP.Keys == if optLabel.Some? then {optLabel.value} + P.scopes.Keys else P.scopes.Keys;
@@ -506,22 +506,22 @@ module BoogieSemantics {
         var updatedScopesQ := if optLabel.Some? then Q.scopes[optLabel.value := Q.normal] else Q.scopes;
         assert updatedScopesQ.Keys == if optLabel.Some? then {optLabel.value} + Q.scopes.Keys else Q.scopes.Keys;
 
-        var P' := ResetVarsPost(varDecls, WpPostShallow(P.normal, P.normal, updatedScopesP), s);
-        var Q' := ResetVarsPost(varDecls, WpPostShallow(Q.normal, Q.normal, updatedScopesQ), s);
+        var P' := ResetVarsPost(varDecls, WpPost(P.normal, P.normal, updatedScopesP), s);
+        var Q' := ResetVarsPost(varDecls, WpPost(Q.normal, Q.normal, updatedScopesQ), s);
 
         forall s' | true
-        ensures WpShallow(a, body, P')(s') == WpShallow(a, body, Q')(s')
+        ensures WpCmd(a, body, P')(s') == WpCmd(a, body, Q')(s')
         {
-            ResetVarsPostPointwise(a, varDecls, WpPostShallow(P.normal, P.normal, updatedScopesP), WpPostShallow(Q.normal, Q.normal, updatedScopesQ), s, s');
-            WpShallowPointwise(a, body, P', Q', s');
+            ResetVarsPostPointwise(a, varDecls, WpPost(P.normal, P.normal, updatedScopesP), WpPost(Q.normal, Q.normal, updatedScopesQ), s, s');
+            WpCmdPointwise(a, body, P', Q', s');
         }
 
         calc {
-            WpShallow(a, c, P)(s); 
-            ForallVarDeclsShallow(a, varDecls, WpShallow(a, body, P'))(s);
-            { ForallVarDeclsPointwise(a, varDecls, WpShallow(a, body, P'), WpShallow(a, body, Q'), s); }
-            ForallVarDeclsShallow(a, varDecls, WpShallow(a, body, Q'))(s);
-            WpShallow(a, c, Q)(s);
+            WpCmd(a, c, P)(s); 
+            ForallVarDecls(a, varDecls, WpCmd(a, body, P'))(s);
+            { ForallVarDeclsPointwise(a, varDecls, WpCmd(a, body, P'), WpCmd(a, body, Q'), s); }
+            ForallVarDecls(a, varDecls, WpCmd(a, body, Q'))(s);
+            WpCmd(a, c, Q)(s);
         }
       case Loop(invs, body) => 
         var body' := LoopDesugaring(invs, body);
@@ -529,7 +529,7 @@ module BoogieSemantics {
         LoopDesugaringLabelsWellDef(invs, body, Q.scopes.Keys); //needed to prove precondition of recursive call
         LoopDesugaringNumScopesAndLoops(invs, body); //needed for termination
         assert NumScopesAndLoops(body) == NumScopesAndLoops(body'); //needed for termination
-        //WpShallowPointwise(a, body', P, Q, s); //this call is inferred by Dafny, which surprises me
+        //WpCmdPointwise(a, body', P, Q, s); //this call is inferred by Dafny, which surprises me
       case _ =>
   }
 
@@ -541,7 +541,7 @@ module BoogieSemantics {
   /*
   lemma WpShallowSimpleCmdMono<A(!new)>(a: absval_interp<A>, c: SimpleCmd, s: state<A>, P: Predicate<A>, Q: Predicate<A>)
   requires (forall s' :: ImpliesOpt(P(s'), Q(s'))) 
-  ensures ImpliesOpt(WpShallowSimpleCmd(a, c, P)(s), WpShallowSimpleCmd(a, c, Q)(s))
+  ensures ImpliesOpt(WpSimpleCmd(a, c, P)(s), WpSimpleCmd(a, c, Q)(s))
 
   lemma WpShallowSimpleCmdSeqMono<A(!new)>(a: absval_interp<A>, scs: seq<SimpleCmd>, s: state<A>, P: Predicate<A>, Q: Predicate<A>)
   requires (forall s' :: ImpliesOpt(P(s'), Q(s'))) 
@@ -549,10 +549,10 @@ module BoogieSemantics {
   */
   
   /*
-    lemma WpShallowNormalMono<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, P: WpPostShallow, Q: WpPostShallow)
+    lemma WpShallowNormalMono<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, P: WpPost, Q: WpPost)
     requires LabelsWellDefAux(c, P.scopes.Keys) && LabelsWellDefAux(c, Q.scopes.Keys)
     requires (forall s' :: ImpliesOpt<A>(P.normal(s'), Q.normal(s'))) && P.currentScope == Q.currentScope && P.scopes == Q.scopes
-    ensures ImpliesOpt<A>(WpShallow(a, c, P)(s), WpShallow(a, c, Q)(s))
+    ensures ImpliesOpt<A>(WpCmd(a, c, P)(s), WpCmd(a, c, Q)(s))
   */
 
   /** operational semantics */

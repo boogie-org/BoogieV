@@ -140,7 +140,7 @@ module AstToCfgCorrectness
     a: absval_interp<A>,
     c: Cmd, 
     nextVersion: BlockId,
-    post: WpPostShallow<A>,
+    post: WpPost<A>,
     s: state<A>)
     requires NoBreaksScopedVarsLoops(c)
     requires LabelsWellDefAux(c, post.scopes.Keys)
@@ -150,10 +150,10 @@ module AstToCfgCorrectness
       var cover' := CoveringSet(nextVersion, nextVersion', exitOpt.value);
 
       IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', exitOpt.value)) ==> 
-        WpShallow(a, c, post)(s) == WpCfg(a, cfg, cfg.entry, post.normal, cover')(s);
+        WpCmd(a, c, post)(s) == WpCfg(a, cfg, cfg.entry, post.normal, cover')(s);
   {
     match c {
-      case SimpleCmd(sc) => reveal WpShallow();
+      case SimpleCmd(sc) => reveal WpCmd();
       case Seq(c1, c2) =>
         var (cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
         var exit1 := exitOpt1.value;
@@ -182,22 +182,22 @@ module AstToCfgCorrectness
         if IsAcyclic(cfg'.successors, cfg1.entry, cover3)
         {
           calc {
-            WpShallow(a, c, post)(s);
-            { reveal WpShallow(); }
-            WpShallow(a, Seq(c1,c2), post)(s); //normal definition
-            { reveal WpShallow(); }
-            WpShallow(a, c1, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes))(s); //IH
+            WpCmd(a, c, post)(s);
+            { reveal WpCmd(); }
+            WpCmd(a, Seq(c1,c2), post)(s); //normal definition
+            { reveal WpCmd(); }
+            WpCmd(a, c1, WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes))(s); //IH
             {
-              AstToCfgSemanticsPreservation(a, c1, nextVersion, WpPostShallow(WpShallow(a, c2, post), post.currentScope, post.scopes), s);
+              AstToCfgSemanticsPreservation(a, c1, nextVersion, WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes), s);
             }
-            WpCfg(a, cfg1, cfg1.entry, WpShallow(a, c2, post), cover1)(s); //IH + pointwise
+            WpCfg(a, cfg1, cfg1.entry, WpCmd(a, c2, post), cover1)(s); //IH + pointwise
             {
               forall s' | true
-              ensures WpShallow(a, c2, post)(s') == WpCfg(a, cfg2, cfg2.entry, post.normal, cover2)(s')
+              ensures WpCmd(a, c2, post)(s') == WpCfg(a, cfg2, cfg2.entry, post.normal, cover2)(s')
               { 
                 AstToCfgSemanticsPreservation(a, c2, nextVersion1, post, s');
               }
-              WpCfgPointwise(a, cfg1, cfg1.entry, WpShallow(a, c2, post), WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1, s);
+              WpCfgPointwise(a, cfg1, cfg1.entry, WpCmd(a, c2, post), WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1, s);
             }
             WpCfg(a, cfg1, cfg1.entry, WpCfg(a, cfg2, cfg2.entry, post.normal, cover2), cover1)(s); 
               { 
@@ -234,24 +234,24 @@ module AstToCfgCorrectness
           else post.scopes;
 
         assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
-        var post' := WpPostShallow(post.normal, post.normal, updatedScopes);
+        var post' := WpPost(post.normal, post.normal, updatedScopes);
         var unquantifiedBody := 
-          WpShallow(a, body, ResetVarsPost(varDecls, post', s));
+          WpCmd(a, body, ResetVarsPost(varDecls, post', s));
 
         calc {
-          WpShallow(a, c, post)(s);
-          { reveal WpShallow(); }
-          ForallVarDeclsShallow(a, varDecls, unquantifiedBody)(s);
+          WpCmd(a, c, post)(s);
+          { reveal WpCmd(); }
+          ForallVarDecls(a, varDecls, unquantifiedBody)(s);
           { //scoped variable declarations have been compiled away
-            reveal ForallVarDeclsShallow();
+            reveal ForallVarDecls();
             assert varDecls == []; 
           }
           unquantifiedBody(s);
-          WpShallow(a, body, ResetVarsPost([], post', s))(s);
+          WpCmd(a, body, ResetVarsPost([], post', s))(s);
           { 
-            WpShallowPointwise(a, body, ResetVarsPost([], post', s), post', s);
+            WpCmdPointwise(a, body, ResetVarsPost([], post', s), post', s);
           }
-          WpShallow(a, body, post')(s);
+          WpCmd(a, body, post')(s);
           { AstToCfgAcyclic2(body, nextVersion);
             AstToCfgSemanticsPreservation(a, body, nextVersion, post', s); }
           WpCfg(a, bodyCfg, bodyCfg.entry, post.normal, cover)(s);
@@ -314,10 +314,10 @@ module AstToCfgCorrectness
         /** Lift then-branch-CFG WP */
 
         forall s' | true 
-          ensures WpShallow(a, thn, post)(s') == WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry})(s');
+          ensures WpCmd(a, thn, post)(s') == WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry})(s');
         {           
           calc {
-            WpShallow(a, thn, post)(s');
+            WpCmd(a, thn, post)(s');
               {
                 AstToCfgSemanticsPreservation(a, thn, entry+1, post, s'); //TODO: very slow, speed up
               }
@@ -334,10 +334,10 @@ module AstToCfgCorrectness
 
         /** Lift els-branch-CFG WP */
         forall s' | true
-          ensures WpShallow(a, els, post)(s') == WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry})(s');
+          ensures WpCmd(a, els, post)(s') == WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry})(s');
         {
           calc {
-            WpShallow(a, els, post)(s');
+            WpCmd(a, els, post)(s');
               { AstToCfgSemanticsPreservation(a, els, nextVersion1, post, s'); }
             WpCfg(a, cfgEls, cfgEls.entry, post.normal, cover2)(s');
               { 
@@ -369,7 +369,7 @@ module AstToCfgCorrectness
               { assert cfg'.blocks[entry] == Skip;
                 assert cfg'.successors[entry] ==  [cfgThn.entry, cfgEls.entry];
               }
-            WpShallowSimpleCmd(a, Skip, WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry}))(s);
+            WpSimpleCmd(a, Skip, WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry}))(s);
             WpCfgConjunction(a, cfg', [cfgThn.entry, cfgEls.entry], post.normal, cover3-{entry})(s);
             Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
           }
@@ -378,9 +378,9 @@ module AstToCfgCorrectness
             calc {
               Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
               Util.AndOpt(WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), WpCfg(a, cfg', cfgEls.entry, post.normal, cover3-{entry})(s));
-              Util.AndOpt(WpShallow(a, thn, post)(s), WpShallow(a, els, post)(s));
-              { reveal WpShallow(); }
-              WpShallow(a, c, post)(s);
+              Util.AndOpt(WpCmd(a, thn, post)(s), WpCmd(a, els, post)(s));
+              { reveal WpCmd(); }
+              WpCmd(a, c, post)(s);
             }
           } else {
             var guard := optCond.value;
@@ -399,11 +399,11 @@ module AstToCfgCorrectness
                 WpCfgEntrySplit(a, cfg', cfgThn.entry, Assume(guard), thnOrigBlock, post.normal, cover3-{entry});
                 assert cfgTemp == cfgThnInter;
               }
-              WpShallowSimpleCmd(a, Assume(guard), WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry}))(s);
+              WpSimpleCmd(a, Assume(guard), WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry}))(s);
               { 
-                WpShallowSimpleCmdPointwise(a, Assume(guard), WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry}), WpShallow(a, thn, post), s);
+                WpSimpleCmdPointwise(a, Assume(guard), WpCfg(a, cfgThnInter, cfgThn.entry, post.normal, cover3-{entry}), WpCmd(a, thn, post), s);
               } 
-              WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s);
+              WpSimpleCmd(a, Assume(guard), WpCmd(a, thn, post))(s);
             }
 
             //relate else-branch-CFG with else-branch AST
@@ -416,20 +416,20 @@ module AstToCfgCorrectness
                 WpCfgEntrySplit(a, cfg', cfgEls.entry, Assume(UnOp(Not, guard)), elsOrigBlock, post.normal, cover3-{entry});
                 assert cfgTemp == cfgElsInter;
               }
-              WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry}))(s);
+              WpSimpleCmd(a, Assume(UnOp(Not, guard)), WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry}))(s);
               { 
-                WpShallowSimpleCmdPointwise(a, Assume(guard), WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry}), WpShallow(a, els, post), s);
+                WpSimpleCmdPointwise(a, Assume(guard), WpCfg(a, cfgElsInter, cfgEls.entry, post.normal, cover3-{entry}), WpCmd(a, els, post), s);
               }
-              WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpShallow(a, els, post))(s);
+              WpSimpleCmd(a, Assume(UnOp(Not, guard)), WpCmd(a, els, post))(s);
             }
 
             //final result
             calc {
-              WpShallow(a, c, post)(s);
+              WpCmd(a, c, post)(s);
               { WpShallowIfEquiv2(a, guard, thn, els, post, s); }
               Util.AndOpt(
-                WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s),
-                WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpShallow(a, els, post))(s)
+                WpSimpleCmd(a, Assume(guard), WpCmd(a, thn, post))(s),
+                WpSimpleCmd(a, Assume(UnOp(Not, guard)), WpCmd(a, els, post))(s)
               );
               Util.AndOpt(
                 WpCfg(a, cfg', cfgThn.entry, post.normal, cover3-{entry})(s), 

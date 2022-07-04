@@ -30,15 +30,15 @@ function EliminateLoops(c: Cmd) : Cmd {
     case _ => c
 }
 
-lemma EliminateLoopsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPostShallow)
+lemma EliminateLoopsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPost)
 requires LabelsWellDefAux(c, post.scopes.Keys) && LabelsWellDefAux(EliminateLoops(c), post.scopes.Keys)
-ensures  WpShallow(a, EliminateLoops(c), post)(s) == WpShallow(a, c, post)(s)
+ensures  WpCmd(a, EliminateLoops(c), post)(s) == WpCmd(a, c, post)(s)
 {
-    reveal WpShallow();
+    reveal WpCmd();
     match c
     case Seq(c1, c2) => 
-        var c2Post := WpShallow(a, c2, post);
-        var c2ElimPost := WpShallow(a, EliminateLoops(c2), post);
+        var c2Post := WpCmd(a, c2, post);
+        var c2ElimPost := WpCmd(a, EliminateLoops(c2), post);
 
         forall s':state<A> | true
             ensures c2ElimPost(s') == c2Post(s')
@@ -47,30 +47,30 @@ ensures  WpShallow(a, EliminateLoops(c), post)(s) == WpShallow(a, c, post)(s)
         }
 
         calc {
-            WpShallow(a, EliminateLoops(c), post)(s);
-            WpShallow(a, c1, WpPostShallow(c2ElimPost, post.currentScope, post.scopes))(s); 
+            WpCmd(a, EliminateLoops(c), post)(s);
+            WpCmd(a, c1, WpPost(c2ElimPost, post.currentScope, post.scopes))(s); 
             { 
-                WpShallowPointwise(a, c1, WpPostShallow(c2ElimPost, post.currentScope, post.scopes), WpPostShallow(c2Post, post.currentScope, post.scopes), s);
+                WpCmdPointwise(a, c1, WpPost(c2ElimPost, post.currentScope, post.scopes), WpPost(c2Post, post.currentScope, post.scopes), s);
             }
-            WpShallow(a, c1, WpPostShallow(c2Post, post.currentScope, post.scopes))(s);
+            WpCmd(a, c1, WpPost(c2Post, post.currentScope, post.scopes))(s);
         }
     case Scope(optLabel, varDecls, body) => 
       var updatedScopes := if optLabel.Some? then post.scopes[optLabel.value := post.normal] else post.scopes;
       assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
 
-      var bodyPost := ResetVarsPost(varDecls, WpPostShallow(post.normal, post.normal, updatedScopes), s);
+      var bodyPost := ResetVarsPost(varDecls, WpPost(post.normal, post.normal, updatedScopes), s);
 
       forall s: state<A> | true 
-        ensures WpShallow(a, EliminateLoops(body), bodyPost)(s) == 
-                WpShallow(a, body, bodyPost)(s)
+        ensures WpCmd(a, EliminateLoops(body), bodyPost)(s) == 
+                WpCmd(a, body, bodyPost)(s)
       {
           calc {
-            WpShallow(a, EliminateLoops(body), bodyPost)(s); {EliminateLoopsCorrect(a, body, s, bodyPost); }
-            WpShallow(a, body, bodyPost)(s);
+            WpCmd(a, EliminateLoops(body), bodyPost)(s); {EliminateLoopsCorrect(a, body, s, bodyPost); }
+            WpCmd(a, body, bodyPost)(s);
           }
       }
 
-      ForallVarDeclsPointwise(a, varDecls, WpShallow(a, EliminateLoops(body), bodyPost), WpShallow(a, body, bodyPost), s);
+      ForallVarDeclsPointwise(a, varDecls, WpCmd(a, EliminateLoops(body), bodyPost), WpCmd(a, body, bodyPost), s);
     case Loop(invs, body) =>
         //trivial because of how the Wp is defined
 

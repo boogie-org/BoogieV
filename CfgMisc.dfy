@@ -53,9 +53,9 @@
     else 
       var successors := if n in g.successors.Keys then g.successors[n] else [];
       if |successors| == 0 then 
-        WpShallowSimpleCmd(a, g.blocks[n], post)
+        WpSimpleCmd(a, g.blocks[n], post)
       else 
-        WpShallowSimpleCmd(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
+        WpSimpleCmd(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
   }
 
   lemma WpCfgConjunctionAcyclicEquiv<A(!new)>(a: absval_interp<A>, g: Cfg, ns: seq<BlockId>, post: Predicate<A>, cover: set<BlockId>)
@@ -99,7 +99,7 @@
 /*==========Correspondence Wp and Operational Semantics===========================*/
 
   lemma WpSemToOpSem_SimpleCmd<A(!new)>(a: absval_interp<A>, scs: SimpleCmd, post: Predicate<A>, s: state<A>, s': ExtState<A>)
-    requires WpShallowSimpleCmd(a, scs, post)(s) == Some(true)
+    requires WpSimpleCmd(a, scs, post)(s) == Some(true)
     requires SimpleCmdOpSem(a, scs, NormalState(s), s')
     ensures s' != FailureState
     ensures forall ns' :: s' == NormalState(ns') ==> post(ns') == Some(true)
@@ -122,7 +122,7 @@
     if |successors| == 0 {
       WpSemToOpSem_SimpleCmd(a, block, post, s, s');
     } else {
-      assert WpShallowSimpleCmd(a, block, WpCfgConjunction(a, g, successors, post, cover - {n}))(s) == Some(true);
+      assert WpSimpleCmd(a, block, WpCfgConjunction(a, g, successors, post, cover - {n}))(s) == Some(true);
 
       var succ, y :| succ in successors && SimpleCmdOpSem(a, block, NormalState(s), y) && CfgRed(a, g, succ, y , s');
 

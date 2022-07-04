@@ -11,41 +11,41 @@ module SemanticsUtil {
 
   lemma WpShallowAssumeFalse<A(!new)>(a: absval_interp<A>, e: Expr, thn: Cmd, els: Cmd, post: Predicate<A>, s: state<A>)
   requires ExprEvalBoolOpt(a, e, s) == Some(false)
-  ensures WpShallowSimpleCmd(a, Assume(e), post)(s) == Some(true)
+  ensures WpSimpleCmd(a, Assume(e), post)(s) == Some(true)
   { 
   }
 
-  lemma WpShallowIfEquiv<A(!new)>(a: absval_interp<A>, guard: Expr, thn: Cmd, els: Cmd, post: WpPostShallow<A>, s: state<A>)
+  lemma WpShallowIfEquiv<A(!new)>(a: absval_interp<A>, guard: Expr, thn: Cmd, els: Cmd, post: WpPost<A>, s: state<A>)
   requires LabelsWellDefAux(thn, post.scopes.Keys) && LabelsWellDefAux(els, post.scopes.Keys)
-  ensures WpShallow(a, If(Some(guard), thn, els), post)(s) ==
-          WpShallow(a, If(None, Seq(SimpleCmd(Assume(guard)), thn), Seq(SimpleCmd(Assume(UnOp(Not, guard))), els)), post)(s)
+  ensures WpCmd(a, If(Some(guard), thn, els), post)(s) ==
+          WpCmd(a, If(None, Seq(SimpleCmd(Assume(guard)), thn), Seq(SimpleCmd(Assume(UnOp(Not, guard))), els)), post)(s)
   {  
-    reveal WpShallow();
+    reveal WpCmd();
     calc {
-      WpShallow(a, If(Some(guard), thn, els), post)(s);
+      WpCmd(a, If(Some(guard), thn, els), post)(s);
       { WpShallowIfEquiv2(a, guard, thn, els, post, s); }
       Util.AndOpt(
-        WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s),
-        WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpShallow(a, els, post))(s)
+        WpSimpleCmd(a, Assume(guard), WpCmd(a, thn, post))(s),
+        WpSimpleCmd(a, Assume(UnOp(Not, guard)), WpCmd(a, els, post))(s)
       );
       Util.AndOpt(
-        WpShallow(a, Seq(SimpleCmd(Assume(guard)), thn), post)(s),
-        WpShallow(a, Seq(SimpleCmd(Assume(UnOp(Not, guard))), els), post)(s)
+        WpCmd(a, Seq(SimpleCmd(Assume(guard)), thn), post)(s),
+        WpCmd(a, Seq(SimpleCmd(Assume(UnOp(Not, guard))), els), post)(s)
       );
-      WpShallow(a, If(None, Seq(SimpleCmd(Assume(guard)), thn), Seq(SimpleCmd(Assume(UnOp(Not, guard))), els)), post)(s);
+      WpCmd(a, If(None, Seq(SimpleCmd(Assume(guard)), thn), Seq(SimpleCmd(Assume(UnOp(Not, guard))), els)), post)(s);
     }
   }
 
-  lemma WpShallowIfEquiv2<A(!new)>(a: absval_interp<A>, guard: Expr, thn: Cmd, els: Cmd, post: WpPostShallow, s: state<A>)
+  lemma WpShallowIfEquiv2<A(!new)>(a: absval_interp<A>, guard: Expr, thn: Cmd, els: Cmd, post: WpPost, s: state<A>)
   requires LabelsWellDefAux(thn, post.scopes.Keys) && LabelsWellDefAux(els, post.scopes.Keys)
-  ensures WpShallow(a, If(Some(guard), thn, els), post)(s) ==
+  ensures WpCmd(a, If(Some(guard), thn, els), post)(s) ==
           Util.AndOpt(
-            WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s),
-            WpShallowSimpleCmd(a, Assume(UnOp(Not, guard)), WpShallow(a, els, post))(s)
+            WpSimpleCmd(a, Assume(guard), WpCmd(a, thn, post))(s),
+            WpSimpleCmd(a, Assume(UnOp(Not, guard)), WpCmd(a, els, post))(s)
           )
           //TODO maybe use proof from above and then apply this lemma for above proof
   {
-    reveal WpShallow();
+    reveal WpCmd();
     var guardOptVal := ExprEvalBoolOpt(a, guard, s);
 
     if(guardOptVal.Some?) {
@@ -58,26 +58,26 @@ module SemanticsUtil {
       var trivialBranch := if !guardVal then thn else els;
 
       calc {
-        WpShallow(a, If(Some(guard), thn, els), post)(s);
-        WpShallow(a, actualBranch, post)(s);
-        WpShallowSimpleCmd(a, actualAssume, WpShallow(a, actualBranch, post))(s);
+        WpCmd(a, If(Some(guard), thn, els), post)(s);
+        WpCmd(a, actualBranch, post)(s);
+        WpSimpleCmd(a, actualAssume, WpCmd(a, actualBranch, post))(s);
       }
 
       calc {
-        WpShallow(a, Seq(SimpleCmd(trivialAssume), trivialBranch), post)(s);
-        WpShallowSimpleCmd(a, trivialAssume, WpShallow(a, trivialBranch, post))(s);
+        WpCmd(a, Seq(SimpleCmd(trivialAssume), trivialBranch), post)(s);
+        WpSimpleCmd(a, trivialAssume, WpCmd(a, trivialBranch, post))(s);
         Some(true);
       }
     } else {
       calc {
-        WpShallowSimpleCmd(a, Assume(guard), WpShallow(a, thn, post))(s);
+        WpSimpleCmd(a, Assume(guard), WpCmd(a, thn, post))(s);
         None;
       }
 
       calc {
-        Util.AndOpt(WpShallow(a, Seq(SimpleCmd(Assume(guard)), thn), post)(s), WpShallow(a, Seq(SimpleCmd(Assume(UnOp(Not, guard))), els), post)(s));
+        Util.AndOpt(WpCmd(a, Seq(SimpleCmd(Assume(guard)), thn), post)(s), WpCmd(a, Seq(SimpleCmd(Assume(UnOp(Not, guard))), els), post)(s));
         None;
-        WpShallow(a, If(Some(guard), thn, els), post)(s);
+        WpCmd(a, If(Some(guard), thn, els), post)(s);
       }
     }
   } 
@@ -127,7 +127,7 @@ module SemanticsUtil {
   requires IsAcyclic(cfg.successors, entry, cover)
   ensures 
     var cfg' := Cfg(cfg.entry, cfg.blocks[entry := suffix], cfg.successors);
-    WpCfg(a, cfg, entry, p, cover) == WpShallowSimpleCmd(a, prefix, WpCfg(a, cfg', entry, p, cover))
+    WpCfg(a, cfg, entry, p, cover) == WpSimpleCmd(a, prefix, WpCfg(a, cfg', entry, p, cover))
   {
     if IsAcyclic(cfg.successors, entry, cover) {
       var cfg' := Cfg(cfg.entry, cfg.blocks[entry := suffix], cfg.successors);
@@ -137,18 +137,18 @@ module SemanticsUtil {
       if successors == [] {
         calc {
           WpCfg(a, cfg, entry, p, cover);
-          WpShallowSimpleCmd(a, SeqSimple(prefix, suffix), p);
-          WpShallowSimpleCmd(a, prefix, WpShallowSimpleCmd(a, suffix, p));
-          WpShallowSimpleCmd(a, prefix, WpCfg(a, cfg', entry, p, cover));
+          WpSimpleCmd(a, SeqSimple(prefix, suffix), p);
+          WpSimpleCmd(a, prefix, WpSimpleCmd(a, suffix, p));
+          WpSimpleCmd(a, prefix, WpCfg(a, cfg', entry, p, cover));
         }
       } else {
         calc {
           WpCfg(a, cfg, entry, p, cover);
-          WpShallowSimpleCmd(a, SeqSimple(prefix, suffix), WpCfgConjunction(a, cfg, successors, p, cover - {entry}));
+          WpSimpleCmd(a, SeqSimple(prefix, suffix), WpCfgConjunction(a, cfg, successors, p, cover - {entry}));
           { WpCfgConjunctionIndepOutsideCover(a, cfg, (entry, suffix), successors, p, cover - {entry}); }
-          WpShallowSimpleCmd(a, SeqSimple(prefix, suffix), WpCfgConjunction(a, cfg', successors, p, cover - {entry}));
-          WpShallowSimpleCmd(a, prefix, WpShallowSimpleCmd(a, suffix, WpCfgConjunction(a, cfg', successors, p, cover - {entry})));
-          WpShallowSimpleCmd(a, prefix, WpCfg(a, cfg', entry, p, cover));
+          WpSimpleCmd(a, SeqSimple(prefix, suffix), WpCfgConjunction(a, cfg', successors, p, cover - {entry}));
+          WpSimpleCmd(a, prefix, WpSimpleCmd(a, suffix, WpCfgConjunction(a, cfg', successors, p, cover - {entry})));
+          WpSimpleCmd(a, prefix, WpCfg(a, cfg', entry, p, cover));
         }
       }
     }

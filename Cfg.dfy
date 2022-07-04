@@ -70,9 +70,9 @@ module BoogieCfg {
       else 
         var successors := if n in g.successors.Keys then g.successors[n] else [];
         if |successors| == 0 then 
-          WpShallowSimpleCmd(a, g.blocks[n], post)
+          WpSimpleCmd(a, g.blocks[n], post)
         else 
-          WpShallowSimpleCmd(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
+          WpSimpleCmd(a, g.blocks[n], WpCfgConjunction(a, g, successors, post, cover - {n}))
     else 
       s => None
   }
@@ -103,7 +103,7 @@ module BoogieCfg {
         var block := g.blocks[n];
         var successors := if n in g.successors.Keys then g.successors[n] else [];
         if |successors| == 0  {
-          WpShallowSimpleCmdPointwise(a, block, post1, post2, s);
+          WpSimpleCmdPointwise(a, block, post1, post2, s);
         } else {
           var successorPost1 := WpCfgConjunction(a, g, successors, post1, cover - {n});
           var successorPost2 := WpCfgConjunction(a, g, successors, post2, cover - {n});
@@ -113,7 +113,7 @@ module BoogieCfg {
           {
             WpCfgConjunctionPointwise(a, g, successors, post1, post2, cover - {n}, s');
           }
-          WpShallowSimpleCmdPointwise(a, block, successorPost1, successorPost2, s);
+          WpSimpleCmdPointwise(a, block, successorPost1, successorPost2, s);
         }
       }
     }
@@ -367,12 +367,12 @@ module BoogieCfg {
 
         calc {
           WpCfg(a, mergedCfg, g1Entry, post, cover3);
-          WpShallowSimpleCmd(a, block, WpCfgConjunction(a, mergedCfg, [g2.entry], post, cover3 - {g1Entry}));
-          WpShallowSimpleCmd(a, block, WpCfg(a, mergedCfg, g2.entry, post, cover3 - {g1Entry})); 
+          WpSimpleCmd(a, block, WpCfgConjunction(a, mergedCfg, [g2.entry], post, cover3 - {g1Entry}));
+          WpSimpleCmd(a, block, WpCfg(a, mergedCfg, g2.entry, post, cover3 - {g1Entry})); 
             { WpCfgLargerCover(a, mergedCfg, g2.entry, post, cover3 - {g1Entry}, cover3); }
-          WpShallowSimpleCmd(a, block, WpCfg(a, mergedCfg, g2.entry, post, cover3));
+          WpSimpleCmd(a, block, WpCfg(a, mergedCfg, g2.entry, post, cover3));
             { assert WpCfg(a, mergedCfg, g2.entry, post, cover3) == WpCfg(a, g2, g2.entry, post, cover2); }
-          WpShallowSimpleCmd(a, block, WpCfg(a, g2, g2.entry, post, cover2));
+          WpSimpleCmd(a, block, WpCfg(a, g2, g2.entry, post, cover2));
           WpCfg(a, g1, g1Entry, WpCfg(a, g2, g2.entry, post, cover2), cover1);
         }
       } else {
@@ -380,13 +380,13 @@ module BoogieCfg {
         assert g1Entry != exit1;
         calc {
           WpCfg(a, mergedCfg, g1Entry, post, cover3);
-          WpShallowSimpleCmd(a, block, WpCfgConjunction(a, mergedCfg, successors, post, cover3-{g1Entry}));
+          WpSimpleCmd(a, block, WpCfgConjunction(a, mergedCfg, successors, post, cover3-{g1Entry}));
             { 
               assert cover3-{g1Entry} == (cover1-{g1Entry})+cover2+{exit1};
 
               WpCfgConjunctionMerge(a, g1, g2, successors, exit1, post, cover1-{g1Entry}, cover2);
             }
-          WpShallowSimpleCmd(a, block, WpCfgConjunction(a, g1, successors, WpCfg(a, g2, g2.entry, post, cover2), cover1-{g1Entry}));
+          WpSimpleCmd(a, block, WpCfgConjunction(a, g1, successors, WpCfg(a, g2, g2.entry, post, cover2), cover1-{g1Entry}));
           WpCfg(a, g1, g1Entry, WpCfg(a, g2, g2.entry, post, cover2), cover1);
         }
       }
@@ -508,9 +508,9 @@ module BoogieCfg {
         WpCfgConjunctionExtend(a, cfgMerged, cfg2, b1, r1, successors, post, cover - {n2Entry});
         calc {
           WpCfg(a, cfg2, n2Entry, post, cover);
-          WpShallowSimpleCmd(a, block, WpCfgConjunction(a, cfg2, successors, post, cover-{n2Entry}));
-          WpShallowSimpleCmd(a, block, WpCfgConjunction(a, cfgMerged, successors, post, cover-{n2Entry}));
-          WpShallowSimpleCmd(a, block, WpCfgConjunction(a, cfgMerged, successorsMerged, post, cover-{n2Entry}));
+          WpSimpleCmd(a, block, WpCfgConjunction(a, cfg2, successors, post, cover-{n2Entry}));
+          WpSimpleCmd(a, block, WpCfgConjunction(a, cfgMerged, successors, post, cover-{n2Entry}));
+          WpSimpleCmd(a, block, WpCfgConjunction(a, cfgMerged, successorsMerged, post, cover-{n2Entry}));
           WpCfg(a, cfgMerged, n2Entry, post, cover);
         }
       }
@@ -595,9 +595,9 @@ module BoogieCfg {
       if n == source {
         calc {
           WpCfg(a, cfg', source, post, cover + {source});
-          WpShallowSimpleCmd(a, block, WpCfgConjunction(a, cfg', [target], post, (cover + {source}) - {source}));
-          WpShallowSimpleCmd(a, block, WpCfg(a, cfg', target, post, (cover + {source}) - {source}));
-          WpShallowSimpleCmd(a, block, post);
+          WpSimpleCmd(a, block, WpCfgConjunction(a, cfg', [target], post, (cover + {source}) - {source}));
+          WpSimpleCmd(a, block, WpCfg(a, cfg', target, post, (cover + {source}) - {source}));
+          WpSimpleCmd(a, block, post);
           WpCfg(a, cfg, source, post, cover + {source});
         }
       } else {
