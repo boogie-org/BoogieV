@@ -20,6 +20,7 @@ module SemanticsUtil {
   ensures WpShallow(a, If(Some(guard), thn, els), post)(s) ==
           WpShallow(a, If(None, Seq(SimpleCmd(Assume(guard)), thn), Seq(SimpleCmd(Assume(UnOp(Not, guard))), els)), post)(s)
   {  
+    reveal WpShallow();
     calc {
       WpShallow(a, If(Some(guard), thn, els), post)(s);
       { WpShallowIfEquiv2(a, guard, thn, els, post, s); }
@@ -44,6 +45,7 @@ module SemanticsUtil {
           )
           //TODO maybe use proof from above and then apply this lemma for above proof
   {
+    reveal WpShallow();
     var guardOptVal := ExprEvalBoolOpt(a, guard, s);
 
     if(guardOptVal.Some?) {
