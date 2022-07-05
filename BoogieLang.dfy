@@ -226,8 +226,8 @@ module BoogieLang {
       case SimpleCmd(sc) => sc.WellFormedVars(xs)
       case Break(_) => true
       case Scope(_, varDecls, body) =>
-        && Sequences.HasNoDuplicates(varDecls)
-        && body.WellFormedVars(xs+GetVarNames(varDecls))
+        //&& Sequences.HasNoDuplicates(varDecls)
+        body.WellFormedVars(xs+GetVarNames(varDecls))
       case If(optCond, thn, els) =>
         && (optCond.Some? ==> optCond.value.FreeVars() <= xs)
         && thn.WellFormedVars(xs)
@@ -293,6 +293,28 @@ module BoogieLang {
           return s;
       }
     }
+  }
+
+  lemma SimpleCmdWellFormedVarsLarger(sc: SimpleCmd, vars: set<var_name>, vars': set<var_name>)
+    requires vars <= vars'
+    requires sc.WellFormedVars(vars)
+    ensures sc.WellFormedVars(vars')
+  { }
+
+  lemma CmdWellFormedVarsLarger(c: Cmd, vars: set<var_name>, vars': set<var_name>)
+    requires vars <= vars'
+    requires c.WellFormedVars(vars)
+    ensures c.WellFormedVars(vars')
+  { 
+    match c
+    case SimpleCmd(simpleCmd) => SimpleCmdWellFormedVarsLarger(simpleCmd, vars, vars');
+    case Scope(_, varDecls, body) =>
+      calc {
+        vars+GetVarNames(varDecls);
+      <=
+        vars'+GetVarNames(varDecls);
+      }
+    case _ =>
   }
 
   datatype Val<A> = LitV(Lit) | AbsV(A)

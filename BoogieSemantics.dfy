@@ -294,6 +294,13 @@ module BoogieSemantics {
   }
   */
 
+  lemma ForallVarDeclsEmpty<A(!new)>(a: absval_interp<A>, p: Predicate<A>)
+    ensures ForallVarDecls(a, [], p) == p
+  {
+    reveal ForallVarDecls();
+  }
+
+
   lemma SomeForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
     requires ForallVarDecls(a, varDecls, p)(s) != None
     requires |varDecls| > 0
