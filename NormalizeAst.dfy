@@ -1,12 +1,14 @@
 include "BoogieLang.dfy"
 include "BoogieSemantics.dfy"
 include "Util.dfy"
+include "AstSubsetPredicates.dfy"
 
 module NormalizeAst {
   import opened BoogieLang
   import opened BoogieSemantics
   import opened Wrappers
   import Util
+  import opened AstSubsetPredicates
 
   function SeqCmdOpt(c1Opt: Option<Cmd>, c2Opt: Option<Cmd>) : Option<Cmd>
   {
@@ -79,6 +81,7 @@ module NormalizeAst {
     requires LabelsWellDefAux(SeqSimpleOptCmd(precedingSimple, c), post.scopes.Keys)
     requires var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
              LabelsWellDefAux(SeqCmdSimpleOpt(cOpt', scExitOpt), post.scopes.Keys)
+    requires NoLoopsNoIfCond(c)
     ensures 
       var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
       WpCmd(a, SeqSimpleOptCmd(precedingSimple, c), post)(s) == 
@@ -205,7 +208,6 @@ module NormalizeAst {
           WpCmd(a, SimpleCmd(precedingSimple.value), post2)(s);
         }
       }      
-    case _ => assume false;
   }
 
 }

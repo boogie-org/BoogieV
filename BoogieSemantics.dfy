@@ -37,6 +37,24 @@ module BoogieSemantics {
     case Binder(ExistsQ, x, ty, e) => None //TODO
   }
 
+  /** TODO Binders and Old expressions */
+  lemma EvalExprFreeVarEq<A(!new)>(a: absval_interp<A>, e: Expr, s1: state<A>, s2: state<A>)
+  requires (forall k | k in e.FreeVars() :: Maps.Get(s1, k) == Maps.Get(s2, k))
+  ensures EvalExpr(a, e, s1) == EvalExpr(a, e, s2)
+  {
+    match e
+    case Var(x) => assert x in e.FreeVars();
+    case ELit(lit) => 
+    case UnOp(uop, e') => 
+      assert EvalExpr(a, e', s1) == EvalExpr(a, e', s2);
+    case BinOp(e1, bop, e2) =>
+      assert EvalExpr(a, e1, s1) == EvalExpr(a, e1, s2);
+      assert EvalExpr(a, e2, s1) == EvalExpr(a, e2, s2);
+    case Old(e) => assume false; //TODO
+    case Binder(ForallQ, x, ty, e) => assume false; //TODO
+    case Binder(ExistsQ, x, ty, e) => assume false; //TODO
+  }
+
   function ExprEvalBoolOpt<A(!new)>(a: absval_interp<A>, e: Expr, s: state<A>) : Option<bool>
   {
     match EvalExpr(a, e, s)
@@ -123,7 +141,7 @@ module BoogieSemantics {
 
   /** Note that for the weakest precondition definition making changes such as rewriting a predicate P
       to "s => P(s)" can have an impact on proofs. The reason is that in Dafny P and "s => P(s)" are not 
-      necessarily the same predicate. Some lemmas aim to show that a predicate computed by the weakest precondition
+      necessarily the same predicate. Some lemma {:verify false}s aim to show that a predicate computed by the weakest precondition
       is actually the same as some other predicate (instead of just showing pointwise equality), 
       which relies on the fact on the syntactic expression used to express a predicate. */
   function WpSimpleCmd<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, post: Predicate<A>) : Predicate<A>
@@ -271,31 +289,27 @@ module BoogieSemantics {
           else
             None
   }
-  /*
-  predicate StateUpdVarDecls2<A>(s: state<A>, s': state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>)
-    requires |varDecls| == |vs|
-  {
-    && (forall i | 0 <= i < |varDecls| :: varDecls[i].0 in s'.Keys && s'[varDecls[i].0] == vs[i])
-    && (forall k | k !in GetVarNames(varDecls) :: Maps.Get(s, k) == Maps.Get(s', k))
-  }
-
-  lemma StateUpdVarDeclsEquiv<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>)
-  requires |varDecls| == |vs|
-  requires Sequences.HasNoDuplicates(varDecls)
-  ensures StateUpdVarDecls2(s, StateUpdVarDecls(s, varDecls, vs), varDecls, vs)
-  {
-    if (|varDecls| == 0) {
-
-    } else {
-      var s' := StateUpdVarDecls(s, varDecls[1..], vs[1..]);
-
-      assert StateUpdVarDecls2()
-    }
-  }
-  */
 
   lemma ForallVarDeclsEmpty<A(!new)>(a: absval_interp<A>, p: Predicate<A>)
     ensures ForallVarDecls(a, [], p) == p
+  {
+    reveal ForallVarDecls();
+  }
+
+
+  lemma NoneForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
+  requires ForallVarDecls(a, varDecls, p)(s) == None
+  requires |varDecls| > 0
+  ensures exists vs :: ValuesRespectDecls(a, vs, varDecls) && p(StateUpdVarDecls(s, varDecls, vs)) == None
+  {
+    reveal ForallVarDecls();
+  }
+
+  lemma NoneForallVarDecls2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>, p: Predicate<A>, s: state<A>)
+  requires |varDecls| > 0
+  requires && ValuesRespectDecls(a, vs, varDecls)
+           && p(StateUpdVarDecls(s, varDecls, vs)) == None
+  ensures ForallVarDecls(a, varDecls, p)(s) == None
   {
     reveal ForallVarDecls();
   }
@@ -305,7 +319,6 @@ module BoogieSemantics {
     requires ForallVarDecls(a, varDecls, p)(s) != None
     requires |varDecls| > 0
     ensures 
-      var (x,t) := varDecls[0];
       ForallVarDecls(a, varDecls, p)(s) ==
       Some(forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)) == Some(true))
   {
@@ -321,6 +334,61 @@ module BoogieSemantics {
       p(StateUpdVarDecls(s, varDecls, vs)).Some?
   {
     reveal ForallVarDecls();
+  }
+
+  lemma SomeForallVarDecls3<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
+    requires (forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)).Some?)
+    requires |varDecls| > 0
+    ensures 
+      ForallVarDecls(a, varDecls, p)(s).Some?
+  {
+    reveal ForallVarDecls();
+  }
+
+  lemma SomeTrueForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
+    requires forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)) == Some(true)
+    requires |varDecls| > 0
+    ensures ForallVarDecls(a, varDecls, p)(s) == Some(true)
+  {
+    reveal ForallVarDecls();
+  }
+
+  lemma SomeTrueForallVarDecls2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>, vs: seq<Val<A>>)
+    requires ForallVarDecls(a, varDecls, p)(s) == Some(true)
+    requires |varDecls| > 0
+    requires ValuesRespectDecls(a, vs, varDecls)
+    ensures p(StateUpdVarDecls(s, varDecls, vs)) == Some(true)
+  {
+    reveal ForallVarDecls();
+  }
+
+  lemma SomeFalseForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>, vs: seq<Val<A>>)
+    requires |varDecls| > 0
+    requires |varDecls| == |vs|
+    requires ForallVarDecls(a, varDecls, p)(s).Some?
+    requires ValuesRespectDecls(a, vs, varDecls) && p(StateUpdVarDecls(s, varDecls, vs)) == Some(false)
+    ensures ForallVarDecls(a, varDecls, p)(s) == Some(false)
+  {
+    reveal ForallVarDecls();
+  }
+
+  lemma SomeFalseForallVarDecls2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
+    requires ForallVarDecls(a, varDecls, p)(s) == Some(false)
+    requires |varDecls| > 0
+    ensures exists vs :: ValuesRespectDecls(a, vs, varDecls) && p(StateUpdVarDecls(s, varDecls, vs)) == Some(false)
+  {
+    assert !(forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)) == Some(true)) by {
+      reveal ForallVarDecls();
+    }
+    var vs :| ValuesRespectDecls(a, vs, varDecls) && p(StateUpdVarDecls(s, varDecls, vs)) != Some(true);
+
+    assert p(StateUpdVarDecls(s, varDecls, vs)).Some? by {
+      SomeForallVarDecls2(a, varDecls, p, s, vs);
+    }
+
+    assert p(StateUpdVarDecls(s, varDecls, vs)) == Some(false) by {
+      Util.OptionBoolExhaust(p(StateUpdVarDecls(s, varDecls, vs)));
+    }
   }
 
   lemma  ForallVarDeclsEquiv<A(!new)>(
@@ -347,7 +415,7 @@ module BoogieSemantics {
         }
       }
     }
-
+  
   function ResetVarsPost<A(!new)>(varDecls: seq<(var_name,Ty)>, p: WpPost<A>, s: state<A>) : WpPost<A>
     ensures p.scopes.Keys == ResetVarsPost(varDecls, p, s).scopes.Keys
   {
@@ -486,6 +554,13 @@ module BoogieSemantics {
     }
   }
 
+  predicate PostPointwise<A(!new)>(P: WpPost<A>, Q: WpPost<A>)
+  {
+    && (forall s' :: P.normal(s') == Q.normal(s'))
+    && (forall s' :: P.currentScope(s') == Q.currentScope(s'))
+    && (forall lbl, s' :: lbl in P.scopes.Keys && lbl in Q.scopes.Keys ==> P.scopes[lbl](s') == Q.scopes[lbl](s'))
+  }
+
   lemma WpCmdPointwise<A(!new)>(a: absval_interp<A>, c: Cmd, P: WpPost, Q: WpPost, s: state<A>)
   requires LabelsWellDefAux(c, P.scopes.Keys) && LabelsWellDefAux(c, Q.scopes.Keys)
   requires (forall s' :: P.normal(s') == Q.normal(s'))
@@ -538,6 +613,18 @@ module BoogieSemantics {
         assert NumScopesAndLoops(body) == NumScopesAndLoops(body'); //needed for termination
         //WpCmdPointwise(a, body', P, Q, s); //this call is inferred by Dafny, which surprises me
       case _ =>
+  }
+
+  lemma WpCmdPointwise2<A(!new)>(a: absval_interp<A>, c: Cmd, P: WpPost, Q: WpPost)
+  requires LabelsWellDefAux(c, P.scopes.Keys) && LabelsWellDefAux(c, Q.scopes.Keys)
+  requires PostPointwise(P, Q)
+  ensures forall s :: WpCmd(a, c, P)(s) == WpCmd(a, c, Q)(s)
+  {
+    forall s 
+    {
+      WpCmdPointwise(a, c, P, Q, s);
+    }
+    reveal WpCmd(); //opaque bug
   }
 
   function ImpliesOpt(a: Option<bool>, b: Option<bool>):bool
