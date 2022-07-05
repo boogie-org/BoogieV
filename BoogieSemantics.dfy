@@ -37,6 +37,24 @@ module BoogieSemantics {
     case Binder(ExistsQ, x, ty, e) => None //TODO
   }
 
+  /** TODO Binders and Old expressions */
+  lemma EvalExprFreeVarEq<A(!new)>(a: absval_interp<A>, e: Expr, s1: state<A>, s2: state<A>)
+  requires (forall k | k in e.FreeVars() :: Maps.Get(s1, k) == Maps.Get(s2, k))
+  ensures EvalExpr(a, e, s1) == EvalExpr(a, e, s2)
+  {
+    match e
+    case Var(x) => assert x in e.FreeVars();
+    case ELit(lit) => 
+    case UnOp(uop, e') => 
+      assert EvalExpr(a, e', s1) == EvalExpr(a, e', s2);
+    case BinOp(e1, bop, e2) =>
+      assert EvalExpr(a, e1, s1) == EvalExpr(a, e1, s2);
+      assert EvalExpr(a, e2, s1) == EvalExpr(a, e2, s2);
+    case Old(e) => assume false; //TODO
+    case Binder(ForallQ, x, ty, e) => assume false; //TODO
+    case Binder(ExistsQ, x, ty, e) => assume false; //TODO
+  }
+
   function ExprEvalBoolOpt<A(!new)>(a: absval_interp<A>, e: Expr, s: state<A>) : Option<bool>
   {
     match EvalExpr(a, e, s)
