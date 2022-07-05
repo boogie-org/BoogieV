@@ -1,10 +1,11 @@
 include "BoogieSemantics.dfy"
 include "DesugarScopedVarsImpl.dfy"
+include "MakeScopedVarsUniqueProof.dfy"
 include "Naming.dfy"
 include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
 include "dafny-libraries/src/Collections/Maps/Maps.dfy"
 
-module MakeScopedVarsUniqueProof {
+module RemoveScopedVarsUniqueProof {
 
   import opened BoogieLang
   import opened BoogieSemantics
@@ -13,6 +14,7 @@ module MakeScopedVarsUniqueProof {
   import Util
   import opened Wrappers
   import opened DesugarScopedVarsImpl
+  import MakeScopedVarsUniqueProof
   import opened Naming
 
   //predicate StatesAgreeOnSet<A(!new)>(s1: state<A>, s2: state<A>, 
@@ -99,16 +101,70 @@ module MakeScopedVarsUniqueProof {
     case Seq(c1, c2) =>
   }
   */
+  /*
+  lemma RelStateUpdVarDeclsPreserve<A>(
+      varMapping: map<var_name, var_name>, 
+      s1: state<A>,
+      s2: state<A>, 
+      s2Orig: MapOrig<Val<A>>, 
+      varDecls: seq<VarDecl>, 
+      varDecls': seq<VarDecl>,
+      vs: seq<Val<A>>)
+  requires RelState(varMapping, s1, s2, s2Orig)
+  requires Maps.Injective(varMapping)
+  requires GetVarNames(varDecls) <= varMapping.Keys
+  requires |vs| == |varDecls| == |varDecls'|
+  requires (forall i | 0 <= i < |varDecls| :: varDecls'[i].0 == varMapping[varDecls[i].0])
+  ensures RelState(varMapping, StateUpdVarDecls(s1, varDecls, vs), StateUpdVarDecls(s2, varDecls', vs), s2Orig)
+  */
+
+  /*
+  lemma StateUpdVarDeclsLookupAux<A>(s1: state<A>, s2: state<A>, varDecls: seq<(var_name, Ty)>, varDecls': seq<(var_name, Ty)>,vs: seq<Val<A>>, k: var_name)
+  requires |varDecls| == |varDecls'| == |vs|
+  requires k in GetVarNames(varDecls)
+  requires Sequences.HasNoDuplicates(GetVarNamesSeq(varDecls'))
+  ensures 
+    var m := ConvertVDeclsToSubstMap(varDecls, varDecls');
+    var s1' := StateUpdVarDecls(s1, varDecls, vs);
+    var s2' := StateUpdVarDecls(s2, varDecls', vs);
+    s1'[k] == s2'[m[k]]
+  */
+
+  lemma StateUpdVarDeclsEq<A>(s1: state<A>, s2: state<A>, decls: seq<VarDecl>, vs: seq<Val<A>>)
+    requires |decls| == |vs|
+    requires Sequences.HasNoDuplicates(GetVarNamesSeq(decls))
+    ensures forall x | x in GetVarNames(decls) :: 
+      Maps.Get(StateUpdVarDecls(s1, decls, vs), x) == Maps.Get(StateUpdVarDecls(s2, decls, vs), x)
+  {
+    var id := map v | v in GetVarNames(decls) :: v;
+    assert Maps.Injective(id) by {
+      reveal Maps.Injective();
+    }
+
+    forall x | x in GetVarNames(decls)
+    ensures Maps.Get(StateUpdVarDecls(s1, decls, vs), x) == Maps.Get(StateUpdVarDecls(s2, decls, vs), x)
+    {
+      
+    }
+
+    /*
+    reveal MakeScopedVarsUniqueProof.RelState();
+    MakeScopedVarsUniqueProof.RelStateUpdVarDeclsPreserve<A>(
+      id, 
+      s1,
+      s2, 
+      map[], 
+      decls, 
+      decls,
+      vs);
+    */
+  }
+    
 
   lemma PredDependAux2<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, decls: seq<VarDecl>, p: Predicate<A>)
     requires PredDepend(p, activeVars+GetVarNames(decls))
     ensures PredDepend(ForallVarDecls(a, decls, p), activeVars)
   {
-    /*
-    assert PredDepend(WpCmd(a, c, post), activeVars+GetVarNames(decls)) by {
-      PredDependAux(a, activeVars, decls, c, post);
-    }
-    */
     if |decls| == 0 {
       reveal ForallVarDecls();
     } else {
@@ -120,6 +176,7 @@ module MakeScopedVarsUniqueProof {
         (forall vs | ValuesRespectDecls(a, vs, varDecls) :: 
           p1(StateUpdVarDecls(s1, varDecls, vs)) == p2(StateUpdVarDecls(s2, varDecls', vs)))
         */
+        
       }
     }
   }
