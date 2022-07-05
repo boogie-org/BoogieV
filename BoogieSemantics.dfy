@@ -341,6 +341,28 @@ module BoogieSemantics {
     reveal ForallVarDecls();
   }
 
+  lemma ForallVarDeclsAppend<A(!new)>(
+    a: absval_interp<A>, 
+    varDecls1: seq<(var_name, Ty)>, 
+    varDecls2: seq<(var_name, Ty)>, 
+    p: Predicate<A>,
+    s: state<A>)
+  ensures    ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s)
+          == ForallVarDecls(a, varDecls1+varDecls2, p)(s);
+  {
+    if |varDecls1| == 0 {
+      calc {
+        ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s);
+        { reveal ForallVarDecls(); }
+        ForallVarDecls(a, varDecls2, p)(s);
+        { assert varDecls2 == varDecls1+varDecls2; }
+        ForallVarDecls(a, varDecls1+varDecls2, p)(s);
+      }
+    } else {
+      assume false;
+    }
+  }
+
   lemma  ForallVarDeclsEquiv<A(!new)>(
       a: absval_interp<A>, 
       varDecls: seq<VarDecl>, 

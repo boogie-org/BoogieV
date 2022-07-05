@@ -120,8 +120,7 @@ module RemoveScopedVarsUniqueProof {
           EvalExprFreeVarEq(a, e, s1, s2);
         }
       case Havoc(varDecls) => 
-       assert 
-
+        ForallPredDepend(a, xs, varDecls, p);
       case SeqSimple(sc1, sc2) => 
         calc {
           WpSimpleCmd(a, SeqSimple(sc1, sc2), p)(s1);
@@ -142,10 +141,13 @@ module RemoveScopedVarsUniqueProof {
     requires PostDepend(post, xs)
     ensures PredDepend(WpCmd(a, c, post), xs)
   {
+    reveal WpCmd();
     match c
-    case SimpleCmd(sc) => assume false;
-    case Break(_) => reveal WpCmd();
-    case Scope(_, varDecls, body) => assume false;
+    case SimpleCmd(sc) => WpSimplePredDepend(a, xs, sc, post.normal);
+    case Break(_) => 
+    case Scope(optLabel, varDecls, body) => 
+
+      assume false;
     case If(optCond, thn, els) => assume false;
     case Loop(invs, body) => assume false;
     case Seq(c1, c2) => assume false;
@@ -217,9 +219,7 @@ module RemoveScopedVarsUniqueProof {
     ensures PredDepend(ForallVarDecls(a, decls, WpCmd(a, c, post)), activeVars)
   {
     assert PredDepend(WpCmd(a, c, post), activeVars+GetVarNames(decls)) by {
-      assert PostDepend(post, activeVars+GetVarNames(decls)) by {
-        PostDependMonotone(post, activeVars, activeVars+GetVarNames(decls));
-      }
+      assert PostDepend(post, activeVars+GetVarNames(decls));
       WpPredDepend(a, activeVars+GetVarNames(decls), c, post);
     }
 
@@ -286,9 +286,9 @@ module RemoveScopedVarsUniqueProof {
             ForallVarDecls(a, decls1, WpCmd(a, c1', post2'))(s);
             { assume false; }
             ForallVarDecls(a, decls1, ForallVarDecls(a, decls2, WpCmd(a, c1', post2NoQuant')))(s);
-            { assume false; }
+            { ForallVarDeclsAppend(a, decls1, decls2, WpCmd(a, c1', post2NoQuant'), s); }
             ForallVarDecls(a, decls1+decls2, WpCmd(a, c1', post2NoQuant'))(s);
-            { assume false; }
+            { reveal WpCmd(); }
             ForallVarDecls(a, decls1+decls2, WpCmd(a, Seq(c1', c2'), post))(s);
           }
         case _ => assume false;
