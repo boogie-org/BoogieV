@@ -120,6 +120,7 @@ module RemoveScopedVarsUniqueProof {
           EvalExprFreeVarEq(a, e, s1, s2);
         }
       case Havoc(varDecls) => 
+       assert 
 
       case SeqSimple(sc1, sc2) => 
         calc {
