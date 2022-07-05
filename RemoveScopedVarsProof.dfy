@@ -83,6 +83,61 @@ module MakeScopedVarsUniqueProof {
     case _ => assume false;
   }
 
+  lemma PredDependAux<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, decls: seq<VarDecl>, c: Cmd, post: WpPost<A>)
+    requires c.WellFormedVars(activeVars+GetVarNames(decls))
+    requires LabelsWellDefAux(c, post.scopes.Keys)
+    requires PostDepend(post, activeVars)
+    ensures PredDepend(WpCmd(a, c, post), activeVars+GetVarNames(decls))
+  /*
+  {
+    match c
+    case SimpleCmd(sc) => 
+    case Break(_) => 
+    case Scope(_, varDecls, body) =>
+    case If(optCond, thn, els) =>
+    case Loop(invs, body) =>
+    case Seq(c1, c2) =>
+  }
+  */
+
+  lemma PredDependAux2<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, decls: seq<VarDecl>, p: Predicate<A>)
+    requires PredDepend(p, activeVars+GetVarNames(decls))
+    ensures PredDepend(ForallVarDecls(a, decls, p), activeVars)
+  {
+    /*
+    assert PredDepend(WpCmd(a, c, post), activeVars+GetVarNames(decls)) by {
+      PredDependAux(a, activeVars, decls, c, post);
+    }
+    */
+    if |decls| == 0 {
+      reveal ForallVarDecls();
+    } else {
+      forall s1,s2: state<A> | (forall x | x in activeVars :: Maps.Get(s1, x) == Maps.Get(s2, x))
+      ensures ForallVarDecls(a, decls, p)(s1) == ForallVarDecls(a, decls, p)(s2)
+      {
+        assume false;
+        /* 
+        (forall vs | ValuesRespectDecls(a, vs, varDecls) :: 
+          p1(StateUpdVarDecls(s1, varDecls, vs)) == p2(StateUpdVarDecls(s2, varDecls', vs)))
+        */
+      }
+    }
+  }
+
+  lemma PredDependAux3<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, decls: seq<VarDecl>, c: Cmd, post: WpPost<A>)
+    requires c.WellFormedVars(activeVars+GetVarNames(decls))
+    requires LabelsWellDefAux(c, post.scopes.Keys)
+    requires PostDepend(post, activeVars)
+    ensures PredDepend(ForallVarDecls(a, decls, WpCmd(a, c, post)), activeVars)
+  {
+    assert PredDepend(WpCmd(a, c, post), activeVars+GetVarNames(decls)) by {
+      PredDependAux(a, activeVars, decls, c, post);
+    }
+
+    PredDependAux2(a, activeVars, decls, WpCmd(a, c, post));
+  }
+  
+
   lemma RemoveScopedVarsCorrect<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, c: Cmd, post: WpPost<A>)
     requires 
       var (c', decls) := RemoveScopedVars(c);
@@ -90,7 +145,7 @@ module MakeScopedVarsUniqueProof {
       && LabelsWellDefAux(c', post.scopes.Keys) 
       && c.WellFormedVars(activeVars) 
       && PostDepend(post, activeVars)
-      && activeVars !! GetVarNames(decls)
+      //&& activeVars !! GetVarNames(decls)
     ensures 
       var (c', decls) := RemoveScopedVars(c);
       forall s :: WpCmd(a, c, post)(s) == ForallVarDecls(a, decls, WpCmd(a, c', post))(s)
@@ -117,19 +172,31 @@ module MakeScopedVarsUniqueProof {
           var post2' := WpPost(ForallVarDecls(a, decls2, WpCmd(a, c2',post)), post.currentScope, post.scopes);
           var post2NoQuant' := WpPost(WpCmd(a, c2',post), post.currentScope, post.scopes);
 
+          assert c2'.WellFormedVars(activeVars+GetVarNames(decls2)) by {
+            RemoveScopedVarsPreserveWf(c2, activeVars);
+          }
+
           calc {
             WpCmd(a, Seq(c1, c2), post)(s);
             { reveal WpCmd(); }
             WpCmd(a, c1, post2)(s);
             { 
-              assert c2'.WellFormedVars(activeVars+GetVarNames(decls2)) by {
-                RemoveScopedVarsPreserveWf(c2, activeVars);
-              }
               RemoveScopedVarsCorrect(a, activeVars, c2, post); 
               WpCmdPointwise(a, c1, post2, post2', s);
             }
             WpCmd(a, c1, post2')(s);
-            { assume false; RemoveScopedVarsCorrect(a, activeVars, c1, post2'); }
+            { 
+              assert PredDepend(ForallVarDecls(a, decls2, WpCmd(a, c2',post)), activeVars) by {
+                PredDependAux3(a, activeVars, decls2, c2', post);
+              }
+              RemoveScopedVarsCorrect(a, activeVars, c1, post2'); 
+
+              //reveal due to opaque bug
+              reveal WpCmd();
+              reveal ForallVarDecls();
+
+              assert forall s :: WpCmd(a, c1, post2')(s) == ForallVarDecls(a, decls1, WpCmd(a, c1', post2'))(s);
+            }
             ForallVarDecls(a, decls1, WpCmd(a, c1', post2'))(s);
             { assume false; }
             ForallVarDecls(a, decls1, ForallVarDecls(a, decls2, WpCmd(a, c1', post2NoQuant')))(s);
