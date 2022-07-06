@@ -141,7 +141,7 @@ module BoogieSemantics {
 
   /** Note that for the weakest precondition definition making changes such as rewriting a predicate P
       to "s => P(s)" can have an impact on proofs. The reason is that in Dafny P and "s => P(s)" are not 
-      necessarily the same predicate. Some lemmas aim to show that a predicate computed by the weakest precondition
+      necessarily the same predicate. Some lemma {:verify false}s aim to show that a predicate computed by the weakest precondition
       is actually the same as some other predicate (instead of just showing pointwise equality), 
       which relies on the fact on the syntactic expression used to express a predicate. */
   function WpSimpleCmd<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, post: Predicate<A>) : Predicate<A>
@@ -289,31 +289,27 @@ module BoogieSemantics {
           else
             None
   }
-  /*
-  predicate StateUpdVarDecls2<A>(s: state<A>, s': state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>)
-    requires |varDecls| == |vs|
-  {
-    && (forall i | 0 <= i < |varDecls| :: varDecls[i].0 in s'.Keys && s'[varDecls[i].0] == vs[i])
-    && (forall k | k !in GetVarNames(varDecls) :: Maps.Get(s, k) == Maps.Get(s', k))
-  }
-
-  lemma StateUpdVarDeclsEquiv<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>)
-  requires |varDecls| == |vs|
-  requires Sequences.HasNoDuplicates(varDecls)
-  ensures StateUpdVarDecls2(s, StateUpdVarDecls(s, varDecls, vs), varDecls, vs)
-  {
-    if (|varDecls| == 0) {
-
-    } else {
-      var s' := StateUpdVarDecls(s, varDecls[1..], vs[1..]);
-
-      assert StateUpdVarDecls2()
-    }
-  }
-  */
 
   lemma ForallVarDeclsEmpty<A(!new)>(a: absval_interp<A>, p: Predicate<A>)
     ensures ForallVarDecls(a, [], p) == p
+  {
+    reveal ForallVarDecls();
+  }
+
+
+  lemma NoneForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
+  requires ForallVarDecls(a, varDecls, p)(s) == None
+  requires |varDecls| > 0
+  ensures exists vs :: ValuesRespectDecls(a, vs, varDecls) && p(StateUpdVarDecls(s, varDecls, vs)) == None
+  {
+    reveal ForallVarDecls();
+  }
+
+  lemma NoneForallVarDecls2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>, p: Predicate<A>, s: state<A>)
+  requires |varDecls| > 0
+  requires && ValuesRespectDecls(a, vs, varDecls)
+           && p(StateUpdVarDecls(s, varDecls, vs)) == None
+  ensures ForallVarDecls(a, varDecls, p)(s) == None
   {
     reveal ForallVarDecls();
   }
@@ -341,28 +337,6 @@ module BoogieSemantics {
     reveal ForallVarDecls();
   }
 
-  lemma ForallVarDeclsAppend<A(!new)>(
-    a: absval_interp<A>, 
-    varDecls1: seq<(var_name, Ty)>, 
-    varDecls2: seq<(var_name, Ty)>, 
-    p: Predicate<A>,
-    s: state<A>)
-  ensures    ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s)
-          == ForallVarDecls(a, varDecls1+varDecls2, p)(s);
-  {
-    if |varDecls1| == 0 {
-      calc {
-        ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s);
-        { reveal ForallVarDecls(); }
-        ForallVarDecls(a, varDecls2, p)(s);
-        { assert varDecls2 == varDecls1+varDecls2; }
-        ForallVarDecls(a, varDecls1+varDecls2, p)(s);
-      }
-    } else {
-      assume false;
-    }
-  }
-
   lemma  ForallVarDeclsEquiv<A(!new)>(
       a: absval_interp<A>, 
       varDecls: seq<VarDecl>, 
@@ -387,6 +361,33 @@ module BoogieSemantics {
         }
       }
     }
+  
+  /*
+  lemma ForallVarDeclsEquiv2<A(!new)>(
+      a: absval_interp<A>, 
+      varDecls: seq<VarDecl>, 
+      varDecls': seq<VarDecl>, 
+      p1: Predicate<A>, 
+      p2: Predicate<A>,
+      s1: state<A>,
+      s2: state<A>)
+    requires |varDecls| == 0 && |varDecls'| == 0 ==> p1(s1) == p2(s2)
+    requires 
+      forall q: Option<bool> -> bool ::
+        (forall vs | ValuesRespectDecls(a, vs, varDecls) :: q(p1(StateUpdVarDecls(s1, varDecls, vs)))) ==
+        (forall vs' | ValuesRespectDecls(a, vs', varDecls') :: q(p2(StateUpdVarDecls(s2, varDecls', vs'))))
+    ensures 
+      ForallVarDecls(a, varDecls, p1)(s1) == ForallVarDecls(a, varDecls', p2)(s2)
+    {
+      if |varDecls| == 0 {
+        reveal ForallVarDecls();
+      } else {
+        assume false;
+      }
+    }
+    */
+  
+  
 
   function ResetVarsPost<A(!new)>(varDecls: seq<(var_name,Ty)>, p: WpPost<A>, s: state<A>) : WpPost<A>
     ensures p.scopes.Keys == ResetVarsPost(varDecls, p, s).scopes.Keys
