@@ -135,7 +135,7 @@ module RemoveScopedVarsUniqueProof {
     }
   }
 
-  lemma {:verify false} WpPredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, c: Cmd, post: WpPost<A>)
+  lemma {:verify true} WpPredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, c: Cmd, post: WpPost<A>)
     requires c.WellFormedVars(xs)
     requires LabelsWellDefAux(c, post.scopes.Keys)
     requires PostDepend(post, xs)
@@ -146,11 +146,53 @@ module RemoveScopedVarsUniqueProof {
     case SimpleCmd(sc) => WpSimplePredDepend(a, xs, sc, post.normal);
     case Break(_) => 
     case Scope(optLabel, varDecls, body) => 
+      var updatedScopes := 
+        if optLabel.Some? then 
+          post.scopes[optLabel.value := post.normal]
+        else post.scopes;
 
-      assume false;
-    case If(optCond, thn, els) => assume false;
-    case Loop(invs, body) => assume false;
-    case Seq(c1, c2) => assume false;
+      assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
+      var post' := WpPost(post.normal, post.normal, updatedScopes);
+      
+      //s => ForallVarDecls( a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s)) )(s)
+      forall s1,s2 | (forall k | k in xs :: Maps.Get(s1, k) == Maps.Get(s2, k))
+      ensures WpCmd(a, c, post)(s1) == WpCmd(a, c, post)(s2)
+      {
+        calc {
+          WpCmd(a, Scope(optLabel, varDecls, body), post)(s1);
+          ForallVarDecls(a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s1)))(s1);
+          {
+            //assert WpCmd(a, body, ResetVarsPost(varDecls, post', s1))
+            
+
+            assert PredDepend(WpCmd(a, body, ResetVarsPost(varDecls, post', s2)), xs+GetVarNames(varDecls)) by {
+              assume false;
+            }
+
+            assert PredDepend(ForallVarDecls(a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s2))), xs) by {
+              ForallPredDepend(a, xs, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s2)));
+            }
+          }
+          ForallVarDecls(a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s2)))(s2);
+
+        }
+        assume false;
+      }
+
+    case If(None, thn, els) => 
+      forall s1,s2 | (forall k | k in xs :: Maps.Get(s1, k) == Maps.Get(s2, k))
+      ensures WpCmd(a, c, post)(s1) == WpCmd(a, c, post)(s2)
+      {
+        calc {
+          WpCmd(a, If(None, thn, els), post)(s1);
+          Util.AndOpt(WpCmd(a, thn, post)(s1), WpCmd(a, els, post)(s1));
+          { WpPredDepend(a, xs, thn, post); 
+            WpPredDepend(a, xs, els, post); }
+          Util.AndOpt(WpCmd(a, thn, post)(s2), WpCmd(a, els, post)(s2));
+        }
+      }
+    case Seq(c1, c2) => 
+    case _ => assume false;
   }
 
   lemma {:verify false} StateUpdVarDeclsEqOutsideDecls<A>(s: state<A>, decls: seq<VarDecl>, vs: seq<Val<A>>, x: var_name)
@@ -226,13 +268,18 @@ module RemoveScopedVarsUniqueProof {
     ForallPredDepend(a, activeVars, decls, WpCmd(a, c, post));
   }
 
-  lemma test<A(!new)>(a: absval_interp<A>, decls: seq<VarDecl>, c1: Cmd, c2: Cmd, post: WpPost<A>, s: state<A>)
+  lemma PullForallWp<A(!new)>(a: absval_interp<A>, xs: set<var_name>, xs1: set<var_name>, d2: seq<VarDecl>, c1: Cmd, p2: Predicate<A>, post: WpPost<A>, s: state<A>)
     requires LabelsWellDefAux(c1, post.scopes.Keys)
-    requires LabelsWellDefAux(c2, post.scopes.Keys)
+    requires && PostDepend(post, xs) /** needed to make sure that d2 is not captured in post */
+             && xs !! GetVarNames(d2)
+   // requires PredDepend(p2, xs+GetVarNames(d2))
+    requires && c1.WellFormedVars(xs1) /** needed to make sure that c1 and d2 do not intefere */
+             && xs1 !! GetVarNames(d2)
     ensures 
-      WpCmd(a, c1, WpPost(ForallVarDecls(a, decls, WpCmd(a, c2, post)), post.currentScope, post.scopes))(s)
+      WpCmd(a, c1, WpPost(ForallVarDecls(a, d2, p2), post.currentScope, post.scopes))(s)
     ==
-      ForallVarDecls(a, decls, WpCmd(a, c1, WpPost(WpCmd(a, c2,post), post.currentScope, post.scopes)))(s)
+      ForallVarDecls(a, d2, WpCmd(a, c1, WpPost(p2, post.currentScope, post.scopes)))(s)
+
 
   lemma {:verify true} RemoveScopedVarsCorrect<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, c: Cmd, post: WpPost<A>)
     requires 
