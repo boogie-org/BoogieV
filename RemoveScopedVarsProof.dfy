@@ -17,10 +17,15 @@ module RemoveScopedVarsUniqueProof {
   import MakeScopedVarsUniqueProof
   import opened Naming
 
-  predicate PredDepend<A(!new)>(p: Predicate<A>, depVars: set<var_name>)
+  predicate {:opaque} StateEqualOn<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>)
+  {
+    forall x | x in xs :: Maps.Get(s1, x) == Maps.Get(s2, x)
+  }
+
+  predicate {:opaque} PredDepend<A(!new)>(p: Predicate<A>, depVars: set<var_name>)
   {
     forall s1, s2 | 
-      (forall x | x in depVars :: Maps.Get(s1, x) == Maps.Get(s2, x)) :: 
+      StateEqualOn(s1, s2, depVars) :: 
       p(s1) == p(s2)
   }
 
@@ -31,19 +36,19 @@ module RemoveScopedVarsUniqueProof {
     && (forall lbl | lbl in post.scopes.Keys :: PredDepend(post.scopes[lbl], depVars))
   }
 
-  lemma {:verify false} PredDependMonotone<A(!new)>(p: Predicate<A>, depVars: set<var_name>, depVars': set<var_name>)
+  lemma {:verify false} {:verify false} PredDependMonotone<A(!new)>(p: Predicate<A>, depVars: set<var_name>, depVars': set<var_name>)
   requires depVars <= depVars'
   requires PredDepend(p, depVars)
   ensures PredDepend(p, depVars')
   { }
 
-  lemma {:verify false} PostDependMonotone<A(!new)>(post: WpPost<A>, depVars: set<var_name>, depVars': set<var_name>)
+  lemma {:verify false} {:verify false} PostDependMonotone<A(!new)>(post: WpPost<A>, depVars: set<var_name>, depVars': set<var_name>)
   requires depVars <= depVars'
   requires PostDepend(post, depVars)
   ensures PostDepend(post, depVars')
   { }
 
-  lemma {:verify false} RemoveScopedVarsPreserveWf(c: Cmd, activeVars: set<var_name>)
+  lemma {:verify false} {:verify false} RemoveScopedVarsPreserveWf(c: Cmd, activeVars: set<var_name>)
     requires c.WellFormedVars(activeVars)
     ensures 
       var (c', decls) := RemoveScopedVars(c);
@@ -97,14 +102,16 @@ module RemoveScopedVarsUniqueProof {
   }
 
 
-  lemma {:verify false} WpSimplePredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, sc: SimpleCmd, p: Predicate<A>)
+  lemma {:verify true} WpSimplePredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, sc: SimpleCmd, p: Predicate<A>)
     requires sc.WellFormedVars(xs)
     requires PredDepend(p, xs)
     ensures PredDepend(WpSimpleCmd(a, sc, p), xs)
   {
-    forall s1, s2 | (forall x | x in xs :: Maps.Get(s1, x) == Maps.Get(s2, x))
+    reveal PredDepend();
+    forall s1, s2 | StateEqualOn(s1, s2, xs)
     ensures WpSimpleCmd(a, sc, p)(s1) == WpSimpleCmd(a, sc, p)(s2)
     {
+      reveal StateEqualOn();
       match sc
       case Skip =>
       case Assert(e) =>
@@ -135,16 +142,104 @@ module RemoveScopedVarsUniqueProof {
     }
   }
 
+  lemma ResetVarsStateAux1<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, s: state<A>, s': state<A>)
+  requires StateEqualOn(s1, s2, xs)
+  requires StateEqualOn(s, s', xs)
+  ensures StateEqualOn(ResetVarsState(d, s, s1), ResetVarsState(d, s', s2), xs)
+  {
+    reveal StateEqualOn();
+    if |d| > 0 {
+      var x := d[0].0;
+      var s1' := ResetVarsState(d[1..], s, s1);
+      var s2' := ResetVarsState(d[1..], s', s2);
+      assert StateEqualOn(s1', s2', xs);
+    }
+  }
+
+  lemma ResetVarsPredAux1<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>, s: state<A>, s': state<A>)
+  requires PredDepend(p, xs)
+  requires StateEqualOn(s1, s2, xs)
+  requires StateEqualOn(s, s', xs)
+  ensures ResetVarsPred(d, p, s1)(s) == ResetVarsPred(d, p, s2)(s')
+  {
+    reveal PredDepend();
+
+    assert StateEqualOn(s, s', xs);
+    if |d| > 0 {
+
+      assert ResetVarsPred(d, p, s1)(s) == ResetVarsPred(d, p, s2)(s') by {
+        calc {
+          ResetVarsPred(d, p, s1)(s);
+          p(ResetVarsState(d, s, s1));
+          { assert StateEqualOn(ResetVarsState(d, s, s1), ResetVarsState(d, s', s2), xs) by {
+              ResetVarsStateAux1(s1, s2, xs, d, s, s');
+            } 
+          }
+          p(ResetVarsState(d, s', s2));
+          ResetVarsPred(d, p, s2)(s');
+        }
+      }
+    }
+ }
+
+  lemma ResetVarsPredAux1'<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>)
+  requires PredDepend(p, xs)
+  requires StateEqualOn(s1, s2, xs)
+  ensures forall s: state<A> :: ResetVarsPred(d, p, s1)(s) == ResetVarsPred(d, p, s2)(s)
+  {
+    reveal StateEqualOn();
+    forall s: state<A> | true
+    { 
+      ResetVarsPredAux1(s1, s2, xs, d, p, s, s);
+    }
+  }
+
+  lemma ResetVarsPredAux2<A(!new)>(s: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>)
+  requires PredDepend(p, xs)
+  ensures PredDepend(ResetVarsPred(d, p, s), xs)
+  {
+    reveal StateEqualOn();
+    forall s1, s2 | StateEqualOn(s1, s2, xs)
+    ensures ResetVarsPred(d, p, s)(s1) == ResetVarsPred(d, p, s)(s2)
+    {
+      ResetVarsPredAux1(s, s, xs, d, p, s1, s2);
+    }
+    reveal PredDepend();
+  }
+
+  lemma ResetVarsPostAux1<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, post: WpPost<A>)
+  requires PostDepend(post, xs)
+  requires StateEqualOn(s1, s2, xs)
+  ensures PostPointwise(ResetVarsPost(d, post, s1), ResetVarsPost(d, post, s2))
+  {
+    ResetVarsPredAux1'(s1, s2, xs, d, post.normal);
+    ResetVarsPredAux1'(s1, s2, xs, d, post.currentScope);
+    forall l | l in post.scopes.Keys
+    ensures forall s :: ResetVarsPred(d, post.scopes[l], s1)(s) == ResetVarsPred(d, post.scopes[l], s2)(s)
+    { ResetVarsPredAux1'(s1, s2, xs, d, post.scopes[l]); }
+  }
+
+  lemma ResetVarsPostAux2<A(!new)>(s: state<A>, xs: set<var_name>, d: seq<VarDecl>, post: WpPost<A>)
+  requires PostDepend(post, xs)
+  ensures PostDepend(ResetVarsPost(d, post, s), xs)
+  {
+    ResetVarsPredAux2(s, xs, d, post.normal);
+    ResetVarsPredAux2(s, xs, d, post.currentScope);
+    forall l | l in post.scopes.Keys
+    ensures PredDepend(ResetVarsPred(d, post.scopes[l], s), xs)
+    { ResetVarsPredAux2(s, xs, d, post.scopes[l]); }
+  }
+
   lemma {:verify true} WpPredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, c: Cmd, post: WpPost<A>)
     requires c.WellFormedVars(xs)
     requires LabelsWellDefAux(c, post.scopes.Keys)
     requires PostDepend(post, xs)
     ensures PredDepend(WpCmd(a, c, post), xs)
+    decreases c
   {
-    reveal WpCmd();
     match c
-    case SimpleCmd(sc) => WpSimplePredDepend(a, xs, sc, post.normal);
-    case Break(_) => 
+    case SimpleCmd(sc) => reveal WpCmd(); WpSimplePredDepend(a, xs, sc, post.normal);
+    case Break(_) => reveal WpCmd();
     case Scope(optLabel, varDecls, body) => 
       var updatedScopes := 
         if optLabel.Some? then 
@@ -155,43 +250,76 @@ module RemoveScopedVarsUniqueProof {
       var post' := WpPost(post.normal, post.normal, updatedScopes);
       
       //s => ForallVarDecls( a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s)) )(s)
-      forall s1,s2 | (forall k | k in xs :: Maps.Get(s1, k) == Maps.Get(s2, k))
+      forall s1, s2 : state<A> | StateEqualOn(s1, s2, xs)
       ensures WpCmd(a, c, post)(s1) == WpCmd(a, c, post)(s2)
       {
-        calc {
-          WpCmd(a, Scope(optLabel, varDecls, body), post)(s1);
-          ForallVarDecls(a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s1)))(s1);
-          {
-            //assert WpCmd(a, body, ResetVarsPost(varDecls, post', s1))
-            
-
-            assert PredDepend(WpCmd(a, body, ResetVarsPost(varDecls, post', s2)), xs+GetVarNames(varDecls)) by {
-              assume false;
+        assert L1:
+          ForallVarDecls( a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s1)) )(s1) 
+        == 
+          ForallVarDecls( a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s2)) )(s1) by {
+            assert PostPointwise(ResetVarsPost(varDecls, post', s1), ResetVarsPost(varDecls, post', s2)) by {
+              ResetVarsPostAux1(s1, s2, xs, varDecls, post');
             }
 
-            assert PredDepend(ForallVarDecls(a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s2))), xs) by {
-              ForallPredDepend(a, xs, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s2)));
-            }
+            WpCmdPointwise2(a, body, ResetVarsPost(varDecls, post', s1), ResetVarsPost(varDecls, post', s2));
+
+            ForallVarDeclsPointwise( 
+              a, 
+              varDecls, 
+              WpCmd(a, body, ResetVarsPost(varDecls, post', s1)), 
+              WpCmd(a, body, ResetVarsPost(varDecls, post', s2)),
+              s1);
           }
-          ForallVarDecls(a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s2)))(s2);
+        
+        assert L2:
+          PredDepend(ForallVarDecls( a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s2)) ), xs) by {
+          
+          assert PostDepend(ResetVarsPost(varDecls, post', s2), xs) by {
+            ResetVarsPostAux2(s2, xs, varDecls, post');
+          }
+
+          assert PostDepend(ResetVarsPost(varDecls, post', s2), xs+GetVarNames(varDecls)) by {
+            PostDependMonotone(ResetVarsPost(varDecls, post', s2), xs, xs+GetVarNames(varDecls));
+          }
+          
+          assume false;
+          WpPredDepend(a, xs+GetVarNames(varDecls), body, ResetVarsPost(varDecls, post', s2));
 
         }
-        assume false;
-      }
 
+        calc {
+          WpCmd(a, c, post)(s1);
+          { reveal WpCmd(); }
+          ForallVarDecls( a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s1)) )(s1);
+          { 
+            reveal L1;
+            reveal L2;
+            reveal PredDepend();
+          }
+          ForallVarDecls( a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s2)) )(s2);
+          { reveal WpCmd(); }
+          WpCmd(a, c, post)(s2);
+        }
+      }
+      reveal PredDepend();
     case If(None, thn, els) => 
-      forall s1,s2 | (forall k | k in xs :: Maps.Get(s1, k) == Maps.Get(s2, k))
+      reveal WpCmd();
+      forall s1,s2 | StateEqualOn(s1, s2, xs)
       ensures WpCmd(a, c, post)(s1) == WpCmd(a, c, post)(s2)
       {
         calc {
           WpCmd(a, If(None, thn, els), post)(s1);
           Util.AndOpt(WpCmd(a, thn, post)(s1), WpCmd(a, els, post)(s1));
           { WpPredDepend(a, xs, thn, post); 
-            WpPredDepend(a, xs, els, post); }
+            WpPredDepend(a, xs, els, post);
+            reveal PredDepend(); }
           Util.AndOpt(WpCmd(a, thn, post)(s2), WpCmd(a, els, post)(s2));
         }
       }
+      reveal PredDepend();
     case Seq(c1, c2) => 
+      reveal WpCmd();
+      reveal PredDepend();
     case _ => assume false;
   }
 
@@ -268,7 +396,7 @@ module RemoveScopedVarsUniqueProof {
     ForallPredDepend(a, activeVars, decls, WpCmd(a, c, post));
   }
 
-  lemma PullForallWp<A(!new)>(a: absval_interp<A>, xs: set<var_name>, xs1: set<var_name>, d2: seq<VarDecl>, c1: Cmd, p2: Predicate<A>, post: WpPost<A>, s: state<A>)
+  lemma {:verify false} PullForallWp<A(!new)>(a: absval_interp<A>, xs: set<var_name>, xs1: set<var_name>, d2: seq<VarDecl>, c1: Cmd, p2: Predicate<A>, post: WpPost<A>, s: state<A>)
     requires LabelsWellDefAux(c1, post.scopes.Keys)
     requires && PostDepend(post, xs) /** needed to make sure that d2 is not captured in post */
              && xs !! GetVarNames(d2)
@@ -280,8 +408,136 @@ module RemoveScopedVarsUniqueProof {
     ==
       ForallVarDecls(a, d2, WpCmd(a, c1, WpPost(p2, post.currentScope, post.scopes)))(s)
 
+    lemma {:verify false} ValuesRespectDeclsSlice<A(!new)>(a: absval_interp<A>, vs: seq<Val<A>>, varDecls: seq<VarDecl>, start: nat, end: nat)
+    requires ValuesRespectDecls(a, vs, varDecls)
+    requires 0 <= start <= end <= |varDecls|
+    ensures ValuesRespectDecls(a, vs[start..end], varDecls[start..end])
+    {
+      forall i | 0 <= i < |vs[start..end]|
+      ensures TypeOfVal(a, vs[start..end][i]) == varDecls[start..end][i].1 {
+        assert vs[start..end][i] == vs[start+i];
+        assert varDecls[start..end][i] == varDecls[start+i];
+        assert TypeOfValues(a, vs)[start+i] == seq(|varDecls|, i requires 0 <= i < |varDecls| => varDecls[i].1)[start+i];
+        assert TypeOfVal(a, vs[start+i]) == varDecls[start+i].1;
+      }
+    }
 
-  lemma {:verify true} RemoveScopedVarsCorrect<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, c: Cmd, post: WpPost<A>)
+    lemma {:verify false} SeqSliceAux<A>(s1: seq<A>, s2: seq<A>)
+      requires |s1| > 0
+      ensures (s1+s2)[1..] == s1[1..]+s2
+    { }
+
+    lemma {:verify false} StateUpdVarDeclsSplit2<A(!new)>(s: state<A>, d1: seq<VarDecl>, d2: seq<VarDecl>, vs1: seq<Val<A>>, vs2: seq<Val<A>>)
+      requires |d1| == |vs1| && |d2| == |vs2|
+      ensures StateUpdVarDecls(s, d1+d2, vs1+vs2) == StateUpdVarDecls(StateUpdVarDecls(s, d1, vs1), d2, vs2)
+
+    lemma {:verify false} StateUpdVarDeclsSplit<A(!new)>(s: state<A>, d1: seq<VarDecl>, d2: seq<VarDecl>, vs1: seq<Val<A>>, vs2: seq<Val<A>>)
+      requires |d1| == |vs1| && |d2| == |vs2|
+      ensures StateUpdVarDecls(s, d1+d2, vs1+vs2) == StateUpdVarDecls(StateUpdVarDecls(s, d2, vs2), d1, vs1)
+    {
+      if |d1| == 0 {
+        calc {
+          StateUpdVarDecls(s, d1+d2, vs1+vs2);
+          { 
+            assert d1+d2 == d2;
+            assert vs1+vs2 == vs2;
+          }
+          StateUpdVarDecls(s, d2, vs2);
+          StateUpdVarDecls(StateUpdVarDecls(s, d2, vs2), d1, vs1);
+        }
+      } else {
+        var x := d1[0].0;
+        var v := vs1[0];
+        assert (d1+d2)[0].0 == x;
+        assert (vs1+vs2)[0] == v;
+
+        var sA := StateUpdVarDecls(s, (d1+d2)[1..], (vs1+vs2)[1..]);
+        var sB := StateUpdVarDecls(StateUpdVarDecls(s, d2, vs2), d1[1..], vs1[1..]);
+
+        assert sA == sB by {
+          assert StateUpdVarDecls(s, d1[1..]+d2, vs1[1..]+vs2) == StateUpdVarDecls(StateUpdVarDecls(s, d2, vs2), d1[1..], vs1[1..]) by {
+            StateUpdVarDeclsSplit(s, d1[1..], d2, vs1[1..], vs2);
+          }
+          assert (d1+d2)[1..] == d1[1..]+d2 by {
+            SeqSliceAux(d1, d2); //DISCUSS (why can't Dafny prove the assertion without the helper lemma {:verify false}?)
+          }
+          assert (vs1+vs2)[1..] == vs1[1..]+vs2 by {
+            SeqSliceAux(vs1, vs2);
+          }
+        }
+
+        assert sA[x := v] == sB[x := v];
+
+        assert StateUpdVarDecls(s, d1+d2, vs1+vs2) == sA[x := v];
+        assert StateUpdVarDecls(StateUpdVarDecls(s, d2, vs2), d1, vs1) == sB[x := v];
+      }
+    }
+
+    
+  lemma {:verify false} ForallVarDeclsAppend<A(!new)>(
+      a: absval_interp<A>, 
+      varDecls1: seq<(var_name, Ty)>, 
+      varDecls2: seq<(var_name, Ty)>, 
+      p: Predicate<A>,
+      s: state<A>)
+    ensures    ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s)
+            == ForallVarDecls(a, varDecls1+varDecls2, p)(s);
+    {
+      var varDecls := varDecls1+varDecls2;
+      if |varDecls2| == 0 {
+        calc {
+          ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s);
+          { reveal ForallVarDecls(); }
+          ForallVarDecls(a, varDecls1, p)(s);
+          { assert varDecls1 == varDecls; }
+          ForallVarDecls(a, varDecls, p)(s);
+        }
+      } else {
+        if ForallVarDecls(a, varDecls, p)(s) == None {
+          NoneForallVarDecls(a, varDecls, p, s);
+          var vs :| (ValuesRespectDecls(a, vs, varDecls) && p(StateUpdVarDecls(s, varDecls, vs)) == None);
+
+          assert |vs| == |varDecls|;
+          var vs1 := vs[0..|varDecls1|];
+          var vs2 := vs[|varDecls1|..|varDecls|];
+
+          assert vs1+vs2 == vs;
+
+          assert varDecls1 == varDecls[0..|varDecls1|];
+          assert varDecls2 == varDecls[|varDecls1|..|varDecls|];
+
+          assert ValuesRespectDecls(a, vs1, varDecls1) by {
+            ValuesRespectDeclsSlice(a, vs, varDecls, 0, |varDecls1|);
+          }
+          assert ValuesRespectDecls(a, vs2, varDecls2) by {
+            ValuesRespectDeclsSlice(a, vs, varDecls, |varDecls1|, |varDecls|);
+          }
+
+          var s1 := StateUpdVarDecls(s, varDecls1, vs1);
+          assume StateUpdVarDecls(s, varDecls, vs) == StateUpdVarDecls(StateUpdVarDecls(s, varDecls1, vs1), varDecls2, vs2);
+          //TODO: need to rephrase StateUpdVarDecls?
+
+
+          assert ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s) == None by {
+            assert ForallVarDecls(a, varDecls2, p)(s1) == None by {
+              assert p(StateUpdVarDecls(s1, varDecls2, vs2)) == None;
+              NoneForallVarDecls2(a, varDecls2, vs2, p, s1);
+            }
+
+
+            if |varDecls1| == 0 {
+              reveal ForallVarDecls();
+            } else {
+              NoneForallVarDecls2(a, varDecls1, vs1, ForallVarDecls(a, varDecls2, p), s);
+            }
+          }
+        } else {
+          assume false;
+        }
+      }
+    }
+  
+  lemma {:verify false} RemoveScopedVarsCorrect<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, c: Cmd, post: WpPost<A>)
     requires 
       var (c', decls) := RemoveScopedVars(c);
       && LabelsWellDefAux(c, post.scopes.Keys) 
@@ -360,133 +616,4 @@ module RemoveScopedVarsUniqueProof {
       reveal ForallVarDecls();
       
     } 
-
-    lemma {:verify true} ValuesRespectDeclsSlice<A(!new)>(a: absval_interp<A>, vs: seq<Val<A>>, varDecls: seq<VarDecl>, start: nat, end: nat)
-    requires ValuesRespectDecls(a, vs, varDecls)
-    requires 0 <= start <= end <= |varDecls|
-    ensures ValuesRespectDecls(a, vs[start..end], varDecls[start..end])
-    {
-      forall i | 0 <= i < |vs[start..end]|
-      ensures TypeOfVal(a, vs[start..end][i]) == varDecls[start..end][i].1 {
-        assert vs[start..end][i] == vs[start+i];
-        assert varDecls[start..end][i] == varDecls[start+i];
-        assert TypeOfValues(a, vs)[start+i] == seq(|varDecls|, i requires 0 <= i < |varDecls| => varDecls[i].1)[start+i];
-        assert TypeOfVal(a, vs[start+i]) == varDecls[start+i].1;
-      }
-    }
-
-    lemma SeqSliceAux<A>(s1: seq<A>, s2: seq<A>)
-      requires |s1| > 0
-      ensures (s1+s2)[1..] == s1[1..]+s2
-    { }
-
-    lemma StateUpdVarDeclsSplit2<A(!new)>(s: state<A>, d1: seq<VarDecl>, d2: seq<VarDecl>, vs1: seq<Val<A>>, vs2: seq<Val<A>>)
-      requires |d1| == |vs1| && |d2| == |vs2|
-      ensures StateUpdVarDecls(s, d1+d2, vs1+vs2) == StateUpdVarDecls(StateUpdVarDecls(s, d1, vs1), d2, vs2)
-
-    lemma StateUpdVarDeclsSplit<A(!new)>(s: state<A>, d1: seq<VarDecl>, d2: seq<VarDecl>, vs1: seq<Val<A>>, vs2: seq<Val<A>>)
-      requires |d1| == |vs1| && |d2| == |vs2|
-      ensures StateUpdVarDecls(s, d1+d2, vs1+vs2) == StateUpdVarDecls(StateUpdVarDecls(s, d2, vs2), d1, vs1)
-    {
-      if |d1| == 0 {
-        calc {
-          StateUpdVarDecls(s, d1+d2, vs1+vs2);
-          { 
-            assert d1+d2 == d2;
-            assert vs1+vs2 == vs2;
-          }
-          StateUpdVarDecls(s, d2, vs2);
-          StateUpdVarDecls(StateUpdVarDecls(s, d2, vs2), d1, vs1);
-        }
-      } else {
-        var x := d1[0].0;
-        var v := vs1[0];
-        assert (d1+d2)[0].0 == x;
-        assert (vs1+vs2)[0] == v;
-
-        var sA := StateUpdVarDecls(s, (d1+d2)[1..], (vs1+vs2)[1..]);
-        var sB := StateUpdVarDecls(StateUpdVarDecls(s, d2, vs2), d1[1..], vs1[1..]);
-
-        assert sA == sB by {
-          assert StateUpdVarDecls(s, d1[1..]+d2, vs1[1..]+vs2) == StateUpdVarDecls(StateUpdVarDecls(s, d2, vs2), d1[1..], vs1[1..]) by {
-            StateUpdVarDeclsSplit(s, d1[1..], d2, vs1[1..], vs2);
-          }
-          assert (d1+d2)[1..] == d1[1..]+d2 by {
-            SeqSliceAux(d1, d2); //DISCUSS (why can't Dafny prove the assertion without the helper lemma?)
-          }
-          assert (vs1+vs2)[1..] == vs1[1..]+vs2 by {
-            SeqSliceAux(vs1, vs2);
-          }
-        }
-
-        assert sA[x := v] == sB[x := v];
-
-        assert StateUpdVarDecls(s, d1+d2, vs1+vs2) == sA[x := v];
-        assert StateUpdVarDecls(StateUpdVarDecls(s, d2, vs2), d1, vs1) == sB[x := v];
-      }
-    }
-
-    
-    lemma {:verify false} ForallVarDeclsAppend<A(!new)>(
-      a: absval_interp<A>, 
-      varDecls1: seq<(var_name, Ty)>, 
-      varDecls2: seq<(var_name, Ty)>, 
-      p: Predicate<A>,
-      s: state<A>)
-    ensures    ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s)
-            == ForallVarDecls(a, varDecls1+varDecls2, p)(s);
-    {
-      var varDecls := varDecls1+varDecls2;
-      if |varDecls2| == 0 {
-        calc {
-          ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s);
-          { reveal ForallVarDecls(); }
-          ForallVarDecls(a, varDecls1, p)(s);
-          { assert varDecls1 == varDecls; }
-          ForallVarDecls(a, varDecls, p)(s);
-        }
-      } else {
-        if ForallVarDecls(a, varDecls, p)(s) == None {
-          NoneForallVarDecls(a, varDecls, p, s);
-          var vs :| (ValuesRespectDecls(a, vs, varDecls) && p(StateUpdVarDecls(s, varDecls, vs)) == None);
-
-          assert |vs| == |varDecls|;
-          var vs1 := vs[0..|varDecls1|];
-          var vs2 := vs[|varDecls1|..|varDecls|];
-
-          assert vs1+vs2 == vs;
-
-          assert varDecls1 == varDecls[0..|varDecls1|];
-          assert varDecls2 == varDecls[|varDecls1|..|varDecls|];
-
-          assert ValuesRespectDecls(a, vs1, varDecls1) by {
-            ValuesRespectDeclsSlice(a, vs, varDecls, 0, |varDecls1|);
-          }
-          assert ValuesRespectDecls(a, vs2, varDecls2) by {
-            ValuesRespectDeclsSlice(a, vs, varDecls, |varDecls1|, |varDecls|);
-          }
-
-          var s1 := StateUpdVarDecls(s, varDecls1, vs1);
-          assume StateUpdVarDecls(s, varDecls, vs) == StateUpdVarDecls(StateUpdVarDecls(s, varDecls1, vs1), varDecls2, vs2);
-          //TODO: need to rephrase StateUpdVarDecls?
-
-
-          assert ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s) == None by {
-            assert ForallVarDecls(a, varDecls2, p)(s1) == None by {
-              assert p(StateUpdVarDecls(s1, varDecls2, vs2)) == None;
-              NoneForallVarDecls2(a, varDecls2, vs2, p, s1);
-            }
-
-
-            if |varDecls1| == 0 {
-              reveal ForallVarDecls();
-            } else {
-              NoneForallVarDecls2(a, varDecls1, vs1, ForallVarDecls(a, varDecls2, p), s);
-            }
-          }
-        } else {
-          assume false;
-        }
-      }
-    }
 }
