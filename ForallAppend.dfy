@@ -153,7 +153,6 @@ module ForallAppend {
   /** This proof has lots of duplication, there should be a way to make the 
   proof shorter. */
   lemma ForallVarDeclsAppend<A(!new)>(
-
       a: absval_interp<A>, 
       varDecls1: seq<(var_name, Ty)>, 
       varDecls2: seq<(var_name, Ty)>, 
