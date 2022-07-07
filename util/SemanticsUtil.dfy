@@ -1,5 +1,5 @@
-include "BoogieSemantics.dfy"
-include "Cfg.dfy"
+include "../lang/BoogieSemantics.dfy"
+include "../lang/Cfg.dfy"
 include "Util.dfy"
 
 module SemanticsUtil {

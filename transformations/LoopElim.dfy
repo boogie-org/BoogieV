@@ -1,6 +1,6 @@
-include "BoogieLang.dfy"
-include "BoogieSemantics.dfy"
-include "dafny-libraries/src/Wrappers.dfy"
+include "../lang/BoogieLang.dfy"
+include "../lang/BoogieSemantics.dfy"
+include "../dafny-libraries/src/Wrappers.dfy"
 
 import opened BoogieLang
 import opened BoogieSemantics

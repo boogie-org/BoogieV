@@ -1,6 +1,6 @@
 include "AstToCfg_simple.dfy"
-include "Util.dfy"
-include "SemanticsUtil.dfy"
+include "../util/Util.dfy"
+include "../util/SemanticsUtil.dfy"
 
 
 module AstToCfgCorrectness

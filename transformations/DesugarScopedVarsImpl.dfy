@@ -1,7 +1,7 @@
-include "BoogieSemantics.dfy"
-include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
-include "dafny-libraries/src/Collections/Maps/Maps.dfy"
-include "Naming.dfy"
+include "../lang/BoogieSemantics.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
+include "../util/Naming.dfy"
 
 module DesugarScopedVarsImpl {
 

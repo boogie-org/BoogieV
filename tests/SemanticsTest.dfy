@@ -1,5 +1,5 @@
-include "../BoogieSemantics.dfy"
-include "../BoogieLang.dfy"
+include "../lang/BoogieSemantics.dfy"
+include "../lang/BoogieLang.dfy"
 include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 
 module SemanticsTest {

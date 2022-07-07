@@ -1,9 +1,9 @@
-include "BoogieSemantics.dfy"
-include "DesugarScopedVarsImpl.dfy"
-include "Naming.dfy"
-include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
-include "dafny-libraries/src/Collections/Maps/Maps.dfy"
-include "AstSubsetPredicates.dfy"
+include "../lang/BoogieSemantics.dfy"
+include "../transformations/DesugarScopedVarsImpl.dfy"
+include "../util/Naming.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
+include "../util/AstSubsetPredicates.dfy"
 
 module MakeScopedVarsUniqueProof {
 

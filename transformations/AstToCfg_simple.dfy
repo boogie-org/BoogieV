@@ -1,7 +1,7 @@
-include "Cfg.dfy"
-include "dafny-libraries/src/Wrappers.dfy"
-include "dafny-libraries/src/Math.dfy"
-include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../lang/Cfg.dfy"
+include "../dafny-libraries/src/Wrappers.dfy"
+include "../dafny-libraries/src/Math.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 
 module AstToCfg {
 

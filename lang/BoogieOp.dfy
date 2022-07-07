@@ -1,5 +1,5 @@
 include "BoogieLang.dfy"
-include "dafny-libraries/src/Wrappers.dfy"
+include "../dafny-libraries/src/Wrappers.dfy"
 
 module BoogieOp {
   import opened BoogieLang

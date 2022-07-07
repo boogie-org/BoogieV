@@ -1,9 +1,9 @@
-include "BoogieSemantics.dfy"
-include "DesugarScopedVarsImpl.dfy"
-include "MakeScopedVarsUniqueProof.dfy"
+include "../lang/BoogieSemantics.dfy"
+include "../transformations/DesugarScopedVarsImpl.dfy"
+include "../transformations/MakeScopedVarsUniqueProof.dfy"
 include "Naming.dfy"
-include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
-include "dafny-libraries/src/Collections/Maps/Maps.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
 
 module ForallAppend {
 

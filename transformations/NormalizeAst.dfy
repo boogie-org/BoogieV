@@ -1,7 +1,7 @@
-include "BoogieLang.dfy"
-include "BoogieSemantics.dfy"
-include "Util.dfy"
-include "AstSubsetPredicates.dfy"
+include "../lang/BoogieLang.dfy"
+include "../lang/BoogieSemantics.dfy"
+include "../util/Util.dfy"
+include "../util/AstSubsetPredicates.dfy"
 
 module NormalizeAst {
   import opened BoogieLang

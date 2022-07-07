@@ -1,6 +1,6 @@
-include "dafny-libraries/src/Wrappers.dfy"
-include "Util.dfy"
-include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../dafny-libraries/src/Wrappers.dfy"
+include "../util/Util.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 
 module BoogieLang {
   import opened Wrappers 

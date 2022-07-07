@@ -1,7 +1,7 @@
 include "BoogieLang.dfy"
 include "BoogieOp.dfy"
-include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
-include "dafny-libraries/src/Collections/Maps/Maps.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
 
 module BoogieSemantics {
   import opened BoogieLang

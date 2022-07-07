@@ -1,6 +1,6 @@
 include "Util.dfy"
-include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
-include "dafny-libraries/src/Collections/Maps/Maps.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
 
 module Naming {
   import Util

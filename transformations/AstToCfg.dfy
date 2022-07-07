@@ -1,8 +1,8 @@
-include "BoogieLang.dfy"
-include "BoogieSemantics.dfy"
-include "dafny-libraries/src/Wrappers.dfy"
-include "dafny-libraries/src/Math.dfy"
-include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../lang/BoogieLang.dfy"
+include "../lang/BoogieSemantics.dfy"
+include "../dafny-libraries/src/Wrappers.dfy"
+include "../dafny-libraries/src/Math.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 
 import opened BoogieLang
 import opened Wrappers

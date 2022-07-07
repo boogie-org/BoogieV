@@ -1,11 +1,11 @@
-include "BoogieSemantics.dfy"
-include "DesugarScopedVarsImpl.dfy"
-include "MakeScopedVarsUniqueProof.dfy"
-include "Naming.dfy"
-include "ForallAppend.dfy"
-include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
-include "dafny-libraries/src/Collections/Maps/Maps.dfy"
-include "AstSubsetPredicates.dfy"
+include "../lang/BoogieSemantics.dfy"
+include "../transformations/DesugarScopedVarsImpl.dfy"
+include "../transformations/MakeScopedVarsUniqueProof.dfy"
+include "../util/Naming.dfy"
+include "../util/ForallAppend.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
+include "../util/AstSubsetPredicates.dfy"
 
 module RemoveScopedVarsUniqueProof {
 

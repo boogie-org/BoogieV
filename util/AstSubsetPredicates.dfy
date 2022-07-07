@@ -1,4 +1,4 @@
-include "BoogieLang.dfy"
+include "../lang/BoogieLang.dfy"
 
 module AstSubsetPredicates
 {
