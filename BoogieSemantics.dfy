@@ -319,7 +319,6 @@ module BoogieSemantics {
     requires ForallVarDecls(a, varDecls, p)(s) != None
     requires |varDecls| > 0
     ensures 
-      var (x,t) := varDecls[0];
       ForallVarDecls(a, varDecls, p)(s) ==
       Some(forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)) == Some(true))
   {
@@ -335,6 +334,61 @@ module BoogieSemantics {
       p(StateUpdVarDecls(s, varDecls, vs)).Some?
   {
     reveal ForallVarDecls();
+  }
+
+  lemma SomeForallVarDecls3<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
+    requires (forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)).Some?)
+    requires |varDecls| > 0
+    ensures 
+      ForallVarDecls(a, varDecls, p)(s).Some?
+  {
+    reveal ForallVarDecls();
+  }
+
+  lemma SomeTrueForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
+    requires forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)) == Some(true)
+    requires |varDecls| > 0
+    ensures ForallVarDecls(a, varDecls, p)(s) == Some(true)
+  {
+    reveal ForallVarDecls();
+  }
+
+  lemma SomeTrueForallVarDecls2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>, vs: seq<Val<A>>)
+    requires ForallVarDecls(a, varDecls, p)(s) == Some(true)
+    requires |varDecls| > 0
+    requires ValuesRespectDecls(a, vs, varDecls)
+    ensures p(StateUpdVarDecls(s, varDecls, vs)) == Some(true)
+  {
+    reveal ForallVarDecls();
+  }
+
+  lemma SomeFalseForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>, vs: seq<Val<A>>)
+    requires |varDecls| > 0
+    requires |varDecls| == |vs|
+    requires ForallVarDecls(a, varDecls, p)(s).Some?
+    requires ValuesRespectDecls(a, vs, varDecls) && p(StateUpdVarDecls(s, varDecls, vs)) == Some(false)
+    ensures ForallVarDecls(a, varDecls, p)(s) == Some(false)
+  {
+    reveal ForallVarDecls();
+  }
+
+  lemma SomeFalseForallVarDecls2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>, s: state<A>)
+    requires ForallVarDecls(a, varDecls, p)(s) == Some(false)
+    requires |varDecls| > 0
+    ensures exists vs :: ValuesRespectDecls(a, vs, varDecls) && p(StateUpdVarDecls(s, varDecls, vs)) == Some(false)
+  {
+    assert !(forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)) == Some(true)) by {
+      reveal ForallVarDecls();
+    }
+    var vs :| ValuesRespectDecls(a, vs, varDecls) && p(StateUpdVarDecls(s, varDecls, vs)) != Some(true);
+
+    assert p(StateUpdVarDecls(s, varDecls, vs)).Some? by {
+      SomeForallVarDecls2(a, varDecls, p, s, vs);
+    }
+
+    assert p(StateUpdVarDecls(s, varDecls, vs)) == Some(false) by {
+      Util.OptionBoolExhaust(p(StateUpdVarDecls(s, varDecls, vs)));
+    }
   }
 
   lemma  ForallVarDeclsEquiv<A(!new)>(
@@ -527,6 +581,13 @@ module BoogieSemantics {
     }
   }
 
+  predicate PostPointwise<A(!new)>(P: WpPost<A>, Q: WpPost<A>)
+  {
+    && (forall s' :: P.normal(s') == Q.normal(s'))
+    && (forall s' :: P.currentScope(s') == Q.currentScope(s'))
+    && (forall lbl, s' :: lbl in P.scopes.Keys && lbl in Q.scopes.Keys ==> P.scopes[lbl](s') == Q.scopes[lbl](s'))
+  }
+
   lemma WpCmdPointwise<A(!new)>(a: absval_interp<A>, c: Cmd, P: WpPost, Q: WpPost, s: state<A>)
   requires LabelsWellDefAux(c, P.scopes.Keys) && LabelsWellDefAux(c, Q.scopes.Keys)
   requires (forall s' :: P.normal(s') == Q.normal(s'))
@@ -579,6 +640,18 @@ module BoogieSemantics {
         assert NumScopesAndLoops(body) == NumScopesAndLoops(body'); //needed for termination
         //WpCmdPointwise(a, body', P, Q, s); //this call is inferred by Dafny, which surprises me
       case _ =>
+  }
+
+  lemma WpCmdPointwise2<A(!new)>(a: absval_interp<A>, c: Cmd, P: WpPost, Q: WpPost)
+  requires LabelsWellDefAux(c, P.scopes.Keys) && LabelsWellDefAux(c, Q.scopes.Keys)
+  requires PostPointwise(P, Q)
+  ensures forall s :: WpCmd(a, c, P)(s) == WpCmd(a, c, Q)(s)
+  {
+    forall s 
+    {
+      WpCmdPointwise(a, c, P, Q, s);
+    }
+    reveal WpCmd(); //opaque bug
   }
 
   function ImpliesOpt(a: Option<bool>, b: Option<bool>):bool

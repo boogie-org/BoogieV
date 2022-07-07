@@ -171,4 +171,42 @@ module DesugarScopedVarsImpl {
     case _ => (c, []) //TODO (precondition should eliminate this case)
   }
 
+  function GetDecls(c: Cmd) : seq<VarDecl>
+  {
+    match c
+    case SimpleCmd(sc) => []
+    case Break(_) => []
+    case Seq(c1, c2) => 
+      var decls1 := GetDecls(c1);
+      var decls2 := GetDecls(c2);
+      decls1 + decls2
+    case Scope(optLabel, varDecls, body) =>
+      var declsBody := GetDecls(body);
+      varDecls + declsBody
+    case If(_, thn, els) => 
+      //TODO: make sure If(Some(...)) has been desugared
+      var declsThn := GetDecls(thn);
+      var declsEls := GetDecls(els);
+      declsThn + declsEls
+    case Loop(_, body) => GetDecls(body)
+  }
+
+  /*
+  function method MakeScopedVarsUnique(
+    c: Cmd, 
+    substMap: map<var_name, var_name>, 
+    counter: nat): (Cmd, nat)
+    ensures
+      var (_, counter') := MakeScopedVarsUnique(c, substMap, counter);
+      counter <= counter'
+  */
+
+  lemma UniqueVars(c: Cmd, substMap: map<var_name, var_name>, counter: nat)
+    ensures 
+      var (c', counter') := MakeScopedVarsUnique(c, substMap, counter);
+      && Sequences.HasNoDuplicates(GetDecls(c'))
+      && counter <= counter'
+  
+
+
 }

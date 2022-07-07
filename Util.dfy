@@ -106,4 +106,13 @@ module Util {
     else SequenceToMap(s[1..])[s[0].0 := s[0].1]
   }
 
+  lemma OptionBoolExhaust(a: Option<bool>)
+    ensures a == None || a == Some(true) || a == Some(false)
+  {
+    match a
+    case None => 
+    case Some(true) =>
+    case Some(false) =>
+  }
+
 }

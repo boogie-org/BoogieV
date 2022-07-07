@@ -150,6 +150,8 @@ module ForallAppend {
     }
   }
  
+  /** This proof has lots of duplication, there should be a way to make the 
+  proof shorter. */
   lemma ForallVarDeclsAppend<A(!new)>(
 
       a: absval_interp<A>, 
@@ -163,7 +165,6 @@ module ForallAppend {
     {
       var varDecls := varDecls1+varDecls2;
       if |varDecls1| == 0 {
-        //reveal ForallVarDecls();
         calc {
           ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s);
           { reveal ForallVarDecls(); }

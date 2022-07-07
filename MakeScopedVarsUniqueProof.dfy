@@ -3,6 +3,7 @@ include "DesugarScopedVarsImpl.dfy"
 include "Naming.dfy"
 include "dafny-libraries/src/Collections/Sequences/Seq.dfy"
 include "dafny-libraries/src/Collections/Maps/Maps.dfy"
+include "AstSubsetPredicates.dfy"
 
 module MakeScopedVarsUniqueProof {
 
@@ -14,6 +15,7 @@ module MakeScopedVarsUniqueProof {
   import opened Wrappers
   import opened DesugarScopedVarsImpl
   import opened Naming
+  import opened AstSubsetPredicates
 
   type MapOrig<V> = map<var_name, Option<V>>
 
@@ -726,6 +728,7 @@ module MakeScopedVarsUniqueProof {
       requires Maps.Injective(substMap)
       requires 
         var (c', counter') := MakeScopedVarsUnique(c, substMap, counter);
+        && NoLoopsNoIfCond(c)
         && LabelsWellDefAux(c, post1.scopes.Keys) 
         && LabelsWellDefAux(c', post2.scopes.Keys)
         && RelPost(substMap, post1, post2, s2Orig)
@@ -902,7 +905,6 @@ module MakeScopedVarsUniqueProof {
               WpCmd(a, If(None, thn', els'), post2)(sB);
             }
           }
-        case _ => assume false;
       }
     }
 
