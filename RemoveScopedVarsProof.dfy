@@ -453,6 +453,7 @@ module RemoveScopedVarsUniqueProof {
       WpSimpleCmd(a, sc, ForallVarDecls(a, d, p))(s)
     ==
       ForallVarDecls(a, d, WpSimpleCmd(a, sc, p))(s)
+  { assume false; }
   /*
   {
     match sc 
@@ -580,9 +581,11 @@ module RemoveScopedVarsUniqueProof {
 
           assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
           var post' := WpPost(post.normal, post.normal, updatedScopes);
-          /*
-            s => ForallVarDecls( a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s)) )(s)
-          */
+
+          assert GetVarNames(varDecls) !! GetVarNames(declsBody) by {
+            HasNoDuplicatesAppDisj(varDecls, declsBody);
+          }
+
           calc {
             WpCmd(a, c, post)(s);
             { reveal WpCmd(); }
@@ -594,20 +597,48 @@ module RemoveScopedVarsUniqueProof {
             }
             ForallVarDecls( a, varDecls, WpCmd(a, body, post') )(s);
             { 
-              assume body.WellFormedVars(activeVars+GetVarNames(decls));
-              assume Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(body)));
-              RemoveScopedVarsCorrect(a, activeVars+GetVarNames(decls), body, post'); 
-              assume false;
+              assert PostDepend(post', activeVars+GetVarNames(varDecls)) by {
+                PostDependMonotone(post', activeVars, activeVars+GetVarNames(varDecls));
+              }
+              assert Sequences.HasNoDuplicates(GetVarNamesSeq(varDecls + declsBody));
+              assert Sequences.HasNoDuplicates(GetVarNamesSeq(declsBody)) by {
+                assert GetVarNamesSeq(varDecls+declsBody) == GetVarNamesSeq(varDecls)+GetVarNamesSeq(declsBody);
+                HasNoDuplicatesAppend(GetVarNamesSeq(varDecls), GetVarNamesSeq(declsBody));
+              }
+              assert declsBody == GetDecls(body) by {
+                RemoveScopedVarsGetDecls(body);
+              }
+
+              RemoveScopedVarsCorrect(a, activeVars+GetVarNames(varDecls), body, post'); 
+              ForallVarDeclsPointwise(a, varDecls, WpCmd(a, body, post'), ForallVarDecls(a, declsBody, WpCmd(a, body', post')), s);
             }
-            ForallVarDecls( a, varDecls, ForallVarDecls(a, decls, WpCmd(a, body', post') ))(s);
-            { assume false; ForallAppend.ForallVarDeclsAppend(a, varDecls, declsBody, WpCmd(a, body', post'), s); }
+            ForallVarDecls( a, varDecls, ForallVarDecls(a, declsBody, WpCmd(a, body', post') ))(s);
+            { ForallAppend.ForallVarDeclsAppend(a, varDecls, declsBody, WpCmd(a, body', post'), s); }
             ForallVarDecls( a, varDecls+declsBody, WpCmd(a, body', post') )(s);
-            { assume false; }
+            { assert ResetVarsPost([], post', s) == post'; }
             ForallVarDecls( a, varDecls+declsBody, WpCmd(a, body', ResetVarsPost([], post', s)) )(s);
             { reveal ForallVarDecls(); }
             ForallVarDecls( a, varDecls+declsBody, ForallVarDecls(a, [], WpCmd(a, body', ResetVarsPost([], post', s))) )(s);
             { 
-              reveal WpCmd();
+              forall s' | true
+              ensures 
+                ForallVarDecls(a, [], WpCmd(a, body', ResetVarsPost([], post', s)))(s') ==
+                WpCmd(a, Scope(optLabel, [], body'), post)(s')
+              {
+                calc {
+                ForallVarDecls(a, [], WpCmd(a, body', ResetVarsPost([], post', s)))(s');
+                { 
+                  calc {
+                    ResetVarsPost([], post', s);
+                    post';
+                    ResetVarsPost([], post', s');
+                 }
+                }
+                ForallVarDecls(a, [], WpCmd(a, body', ResetVarsPost([], post', s')))(s');
+                }
+                reveal WpCmd();
+              }
+
               ForallVarDeclsPointwise(
                 a, 
                 varDecls+declsBody, 
