@@ -14,10 +14,9 @@ module SSA
   import opened Naming
   import Maps
 
-  // we track the domain of the incarnation in a sequence to allow one to easily iterate over the map
   type Incarnation<T> = map<var_name, T> 
 
-  function method ComputeConflicts<T(==)>(inc1: map<var_name, T>, inc2: map<var_name, T>, existingConflicts: set<var_name>) : set<var_name>
+  function method ComputeConflicts<T(==)>(inc1: Incarnation<T>, inc2: Incarnation<T>, existingConflicts: set<var_name>) : set<var_name>
     ensures forall x | x in ComputeConflicts(inc1, inc2, existingConflicts) :: x in inc1.Keys || x in inc2.Keys
   {
     var conflictSet1 := set x | x in inc1.Keys && x !in existingConflicts && Maps.Get(inc1, x) != Maps.Get(inc2, x);
@@ -26,22 +25,44 @@ module SSA
     conflictSet1 + conflictSet2
   }
 
-  function method AllConflicts<T(==)>(predIncs: seq<Incarnation<T>>, existingConflicts: set<var_name>) : set<var_name>
+  /** 
+  Computes all conflicting variable mappings between incarnations. We only need to compare all incarnations with one of the incarnations I0.
+  Since if two incarnations are in conflict, then at least one of them must also be in conflict with I0.
+  */
+  function method AllConflictsAux<T(==)>(predIncs: seq<Incarnation<T>>, baseInc: Incarnation<T>, existingConflicts: set<var_name>) : set<var_name>
     decreases predIncs
   {
-    if |predIncs| <= 1 then
+    if |predIncs| == 0 then
      existingConflicts
     else
-      var inc1 := predIncs[0];
-      var inc2 := predIncs[1];
-      var conflicts := ComputeConflicts(inc1, inc2, existingConflicts);
-      AllConflicts(predIncs[2..], conflicts+existingConflicts)
+      var inc := predIncs[0];
+      var conflicts := ComputeConflicts(baseInc, inc, existingConflicts);
+      AllConflictsAux(predIncs[1..], baseInc, conflicts+existingConflicts)
+  }
+  
+  function method AllConflicts<T(==)>(predIncs: seq<Incarnation<T>>) : set<var_name>
+    decreases predIncs
+  {
+    if |predIncs| <= 1 then 
+      {}
+    else
+      AllConflictsAux(predIncs[1..], predIncs[0], {})
   }
 
-  lemma AllConflictsSubset<T>(predIncs: seq<Incarnation<T>>, existingConflicts: set<var_name>, M: set<var_name>)
+  lemma AllConflictsAuxSubset<T>(predIncs: seq<Incarnation<T>>, baseInc: Incarnation<T>, existingConflicts: set<var_name>, M: set<var_name>)
     requires forall i | 0 <= i < |predIncs| :: predIncs[i].Keys <= M
-    ensures AllConflicts(predIncs, existingConflicts) <= M+existingConflicts
+    requires baseInc.Keys <= M
+    ensures AllConflictsAux(predIncs, baseInc, existingConflicts) <= M+existingConflicts
   { }
+
+  lemma AllConflictsSubset<T>(predIncs: seq<Incarnation<T>>, M: set<var_name>)
+    requires forall i | 0 <= i < |predIncs| :: predIncs[i].Keys <= M
+    ensures AllConflicts(predIncs) <= M  
+  { 
+    if |predIncs| > 1 {
+      AllConflictsAuxSubset(predIncs[1..], predIncs[0], {}, M);
+    }
+  }
 
   datatype IncarnationResult = IncarnationResult_(localIncMap: Incarnation<var_name>, globalIncMap: Incarnation<nat>, updatedInc: Incarnation<nat>) 
 
@@ -53,11 +74,11 @@ module SSA
     else if |predIncs| == 1 then
       IncarnationResult_(predIncs[0], globalIncMap, map[])
     else 
-      var conflictVars := AllConflicts(predIncs, {});
+      var conflictVars := AllConflicts(predIncs);
 
-      /* to get the new incarnation, we can take any incarnation and update all conflicts
-         the variables with no conflicts are the same in all predecessors */
-      AllConflictsSubset(predIncs, {}, globalIncMap.Keys);
+      /* to get the new incarnation, we can take any incarnation and update all conflicts,
+         since the variables with no conflicts are the same in all predecessors */
+      AllConflictsSubset(predIncs, globalIncMap.Keys);
       var updatedInc := (map x | x in conflictVars :: globalIncMap[x]+1);
       var inputIncMap := predIncs[0] + (map x | x in updatedInc.Keys :: VersionedName(x, updatedInc[x]));
       var globalIncMap' := globalIncMap + updatedInc;
@@ -70,13 +91,13 @@ module SSA
     match b
     case Skip => (globalIncMap, input, b)
     case Assert(e) => 
-      var e' := e; //TODO substitution
+      var e' := e.MultiSubstExpr(input); 
       (globalIncMap, input, Assert(e'))
     case Assume(e) => 
-      var e' := e; //TODO substitution
+      var e' := e.MultiSubstExpr(input); 
       (globalIncMap, input, Assume(e'))
     case Assign(x, t, e) => 
-      var e' := e; //TODO substitution
+      var e' := e.MultiSubstExpr(input); 
       var counter := if x in globalIncMap.Keys then globalIncMap[x]+1 else 1;
       var x' := VersionedName(x, counter);
 
