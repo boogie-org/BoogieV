@@ -1,5 +1,6 @@
 include "../lang/Cfg.dfy"
 include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
 include "../dafny-libraries/src/Math.dfy"
 include "../util/Naming.dfy"
 
@@ -11,14 +12,145 @@ module SSA
   import Sequences = Seq
   import Math
   import opened Naming
+  import Maps
 
   // we track the domain of the incarnation in a sequence to allow one to easily iterate over the map
-  type Incarnation = inc:(map<var_name, nat>, seq<var_name>) | 
-    var xs := (set x | x in inc.1); xs == inc.0.Keys && |inc.0.Keys| == |inc.1|
-    witness (map[], [])
+  type Incarnation = map<var_name, nat> 
 
-  datatype IncarnationResult = IncarnationResult_(localIncMap: map<var_name, nat>, globalIncMap: map<var_name, nat>, conflicts: set<var_name>, newVars: seq<var_name>) 
 
+  function method ComputeConflicts(inc1: map<var_name, nat>, inc2: map<var_name, nat>, existingConflicts: set<var_name>) : set<var_name>
+  {
+    var conflictSet1 := set x | x in inc1.Keys && x !in existingConflicts && Maps.Get(inc1, x) != Maps.Get(inc2, x);
+    var conflictSet2 := set x | x in inc2.Keys && x !in inc1.Keys && x !in existingConflicts && Maps.Get(inc1, x) != Maps.Get(inc2, x);
+
+    conflictSet1 + conflictSet2
+  }
+
+  function method AllConflicts(predIncs: seq<Incarnation>, existingConflicts: set<var_name>) : set<var_name>
+    decreases predIncs
+  {
+    if |predIncs| <= 1 then
+     existingConflicts
+    else
+      var inc1 := predIncs[0];
+      var inc2 := predIncs[1];
+      var conflicts := ComputeConflicts(inc1, inc2, existingConflicts);
+      AllConflicts(predIncs[2..], conflicts+existingConflicts)
+  }
+
+  datatype IncarnationResult = IncarnationResult_(localIncMap: Incarnation, globalIncMap: Incarnation, updatedInc: Incarnation) 
+
+  function method InputIncarnation(globalIncMap: map<var_name, nat>, predIncs: seq<Incarnation>) : IncarnationResult
+    requires forall i | 0 <= i < |predIncs| :: predIncs[i].Keys <= globalIncMap.Keys
+  {
+    if |predIncs| == 0 then
+      IncarnationResult_(map[], globalIncMap, map[])
+    else if |predIncs| == 1 then
+      IncarnationResult_(predIncs[0], globalIncMap, map[])
+    else 
+      var conflictVars := AllConflicts(predIncs, {});
+
+      /* to get the new incarnation, we can take any incarnation and update all conflicts
+         the variables with no conflicts are the same in all predecessors */
+      var updatedInc := (map x | x in conflictVars :: globalIncMap[x]+1);
+      var inputIncMap := predIncs[0] + updatedInc;
+      var globalIncMap' := globalIncMap + updatedInc;
+      IncarnationResult_(inputIncMap, globalIncMap', updatedInc)
+  }
+
+  function method OutputIncarnation(globalIncMap: Incarnation, input: Incarnation, b: BasicBlock) : (map<var_name, nat>, Incarnation, BasicBlock)
+  decreases b
+  {
+    match b
+    case Skip => (globalIncMap, input, b)
+    case Assert(e) => 
+      var e' := e; //TODO substitution
+      (globalIncMap, input, Assert(e'))
+    case Assume(e) => 
+      var e' := e; //TODO substitution
+      (globalIncMap, input, Assume(e'))
+    case Assign(x, t, e) => 
+      var e' := e; //TODO substitution
+      var counter := if x in globalIncMap.Keys then globalIncMap[x]+1 else 1;
+      var x' := VersionedName(x, counter);
+
+      //TODO proper output incarnation
+      (globalIncMap[x := counter], input[x := counter], Assign(x', t, e'))
+
+    case Havoc(varDecls) => 
+      var delta := map x | x in GetVarNames(varDecls) :: if x in globalIncMap.Keys then globalIncMap[x]+1 else 1;
+      var globalIncMap' := globalIncMap + delta;
+      var output := input + delta;
+
+      assert forall i :: 0 <= i < |varDecls| ==> varDecls[i].0 in GetVarNames(varDecls);
+
+      var varDecls' := Sequences.Map( (vd : VarDecl) requires vd.0 in delta.Keys => (VersionedName(vd.0, delta[vd.0]), vd.1), varDecls);
+      
+      (globalIncMap', output, Havoc(varDecls'))
+    case SeqSimple(sc1, sc2) => 
+      var (globalIncMap1, inc1, b1) := OutputIncarnation(globalIncMap, input, sc1);
+      OutputIncarnation(globalIncMap1, inc1, sc2)
+  }
+
+  datatype SSAResult = 
+    SSAResult_(blocks: map<BlockId, BasicBlock>, incMaps: map<BlockId, Incarnation>, globalIncMap: map<var_name, nat>)
+
+  function method SSAAux(cfg: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>, prevResult: SSAResult) : SSAResult
+  {
+    if |topo| == 0 then 
+      prevResult
+    else
+      var curId := topo[0];
+
+      /** compute input incarnation by consolidating incarnation of predecessors */
+      var preds := if curId in pred.Keys then pred[curId] else [];
+      var predIncs := seq(|preds|, i requires 0 <= i < |preds| => if preds[i] in prevResult.incMaps.Keys then prevResult.incMaps[preds[i]] else map[]);
+      var incRes := InputIncarnation(prevResult.globalIncMap, predIncs);
+
+      /* for each conflict add synchronization assignments */
+      /* Problem: Need order on blocks
+      var blocks' := 
+        prevResult.blocks + 
+        map predId | predId in pred[curId] :: 
+          SeqSimple(
+            cfg.blocks[predId],
+            SeqToSimpleCmd(
+              seq(|incRes.updatedInc.Keys|, 
+                i requires 0 <= i < |incRes.updatedInc.Keys| => 
+                  Assign(
+                    incRes.updatedInc[i], 
+                    Var( prevResult.incMaps[predId]  ))   )
+            )
+          );
+      */
+      //TODO 
+      var blocks' := prevResult.blocks;
+      
+      /* compute output incarnation of block */
+      var (globalIncMap'', outputIncarnation, b') := OutputIncarnation(incRes.globalIncMap, incRes.localIncMap, cfg.blocks[curId]);
+
+      /* recurse, TODO: modify ssaResult param */
+      var ssaResult' := SSAResult_(prevResult.blocks[curId := b'], prevResult.incMaps[curId := outputIncarnation], globalIncMap'');
+      SSAAux(cfg, topo[1..], pred, prevResult)
+  }
+
+
+  function method SSA(g: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>) : Cfg
+    requires 
+      && pred.Keys <= g.blocks.Keys
+         /** successors contained in blocks */
+      && (forall blockId | blockId in g.successors.Keys ::
+          (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys))
+          /** predecessors contained in blocks */
+      && (forall blockId | blockId in pred.Keys ::
+          (forall i | 0 <= i < |pred[blockId]| :: pred[blockId][i] in g.blocks.Keys))
+  {
+    var ssaResult := SSAAux(g, topo, pred, SSAResult_(map[], map[], map[]));
+
+    Cfg(g.entry, ssaResult.blocks, g.successors)
+  }
+
+  /*
   function method InputIncarnationAux(incRes: IncarnationResult, curInc: map<var_name, nat>, xs: seq<var_name>) : IncarnationResult
     requires (set x | x in xs) <= curInc.Keys
     requires incRes.conflicts <= incRes.localIncMap.Keys
@@ -59,102 +191,6 @@ module SSA
           var incRes' := IncarnationResult_(localIncMap', incRes.globalIncMap, incRes.conflicts, newVars');
           InputIncarnationAux(incRes', curInc, xs[1..])
   }
-
-  function method InputIncarnation(incRes: IncarnationResult, predIncs: seq<Incarnation>) : IncarnationResult
-    decreases predIncs
-  {
-    if |predIncs| == 0 then
-      incRes
-    else
-      var inc := predIncs[0];
-      var incRes' := InputIncarnationAux(incRes, inc.0, inc.1);
-      InputIncarnation(incRes', predIncs[1..])
-  }
-
-  function method OutputIncarnation(globalIncMap: map<var_name, nat>, input: Incarnation, b: BasicBlock) : (map<var_name, nat>, Incarnation, BasicBlock)
-  decreases b
-  {
-    match b
-    case Skip => (globalIncMap, input, b)
-    case Assert(e) => 
-      var e' := e; //TODO substitution
-      (globalIncMap, input, Assert(e'))
-    case Assume(e) => 
-      var e' := e; //TODO substitution
-      (globalIncMap, input, Assume(e'))
-    case Assign(x, t, e) => 
-      var e' := e; //TODO substitution
-      var counter := if x in globalIncMap.Keys then globalIncMap[x]+1 else 1;
-      var x' := VersionedName(x, counter);
-
-      //TODO proper output incarnation
-      (globalIncMap[x := counter], input, Assign(x', t, e'))
-
-    case Havoc(varDecls) => 
-      var f := (a: (map<var_name, nat>, seq<VarDecl>), d: VarDecl) => 
-                var (globalMap, vs) := a;
-                var (x,t) := d;
-                var counter := if x in globalMap.Keys then globalMap[x]+1 else 1;
-                var x' := VersionedName(x, counter);
-                (globalMap[x := counter], vs+[(x',t)]);
-
-      var (globalIncMap', varDecls') := Sequences.FoldLeft(f, (globalIncMap, []), varDecls);
-      
-      //TODO proper output incarnation
-      (globalIncMap', input, Havoc(varDecls'))
-    case SeqSimple(sc1, sc2) => 
-      var (globalIncMap1, inc1, b1) := OutputIncarnation(globalIncMap, input, sc1);
-      OutputIncarnation(globalIncMap1, inc1, sc2)
-  }
-
-  datatype SSAResult = 
-    SSAResult_(blocks: map<BlockId, BasicBlock>, incMaps: map<BlockId, Incarnation>, globalIncMap: map<var_name, nat>)
-
-  function method SSAAux(cfg: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>, prevResult: SSAResult) : SSAResult
-  {
-    if |topo| == 0 then 
-      prevResult
-    else
-      var curId := topo[0];
-
-      /** compute input incarnation by consolidating incarnation of predecessors */
-      var preds := if curId in pred.Keys then pred[curId] else [];
-      var predIncs := seq(|preds|, i requires 0 <= i < |preds| => if preds[i] in prevResult.incMaps.Keys then prevResult.incMaps[preds[i]] else (map[], []));
-      var (inputIncarnation, globalIncMap'):= 
-        if |preds| == 0 then
-          ((map[], []), prevResult.globalIncMap)
-        else if |preds| == 1 then
-          (predIncs[0], prevResult.globalIncMap)
-        else
-          var incRes := InputIncarnation(IncarnationResult_(predIncs[0].0, prevResult.globalIncMap, {}, predIncs[0].1), predIncs);
-          ((incRes.localIncMap, incRes.newVars), incRes.globalIncMap);
-
-      /* for each conflict add synchronization assignments */
-      //TODO
-      
-      /* compute output incarnation of block */
-      //TODO
-      var (globalIncMap'', outputIncarnation, b') := OutputIncarnation(globalIncMap', inputIncarnation, cfg.blocks[curId]);
-
-      /* recurse, TODO: modify ssaResult param */
-      var ssaResult' := SSAResult_(prevResult.blocks[curId := b'], prevResult.incMaps[curId := outputIncarnation], globalIncMap'');
-      SSAAux(cfg, topo[1..], pred, prevResult)
-  }
-
-
-  function method SSA(g: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>) : Cfg
-    requires 
-      && pred.Keys <= g.blocks.Keys
-         /** successors contained in blocks */
-      && (forall blockId | blockId in g.successors.Keys ::
-          (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys))
-          /** predecessors contained in blocks */
-      && (forall blockId | blockId in pred.Keys ::
-          (forall i | 0 <= i < |pred[blockId]| :: pred[blockId][i] in g.blocks.Keys))
-  {
-    var ssaResult := SSAAux(g, topo, pred, SSAResult_(map[], map[], map[]));
-
-    Cfg(g.entry, ssaResult.blocks, g.successors)
-  }
+  */
 
 }

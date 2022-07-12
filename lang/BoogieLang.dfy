@@ -1,11 +1,13 @@
 include "../dafny-libraries/src/Wrappers.dfy"
 include "../util/Util.dfy"
 include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
 
 module BoogieLang {
   import opened Wrappers 
   import opened Util
   import Sequences = Seq
+  import Maps
 
 
   datatype Lit = LitInt(int) | LitBool(bool)
@@ -94,7 +96,7 @@ module BoogieLang {
 
   type VarDecl = (var_name, Ty)
 
-  datatype BinderKind = ForallQ | ExistsQ
+  datatype BinderKind = ForallQ | ExistsQ 
   {
     function method ToString() : string {
       match this 
@@ -108,9 +110,9 @@ module BoogieLang {
     | ELit(Lit)
     | UnOp(Unop, Expr)
     | BinOp(Expr, Binop, Expr)
-    | Old(Expr)
-    | Binder(BinderKind, var_name, Ty, Expr) //switch to DeBruijn?
+  // | Binder(BinderKind, var_name, Ty, Expr) //switch to DeBruijn?
   /** TODO 
+    | Old(Expr)
     | FunCall(fun_name, List<Expr>)
   */
   {
@@ -127,14 +129,13 @@ module BoogieLang {
           var bopS := bop.ToString();
           var e2S := e2.ToString();
           return "(" + e1S + " " + bopS + " " + e2S + ")";
-        case Old(e) => 
-          var eS := e.ToString();
-          return "old(" + eS +")";
+        /*
         case Binder(binderKind, x, t, e) => 
           var tS := t.ToString();
           var eS := e.ToString();
           var binderKindS := binderKind.ToString();
           return "(" + binderKindS + " " + x + ":" + tS + " :: " + eS + ")";
+        */
       }
     }
 
@@ -145,15 +146,42 @@ module BoogieLang {
         case ELit(lit) => {}
         case UnOp(uop, e) => e.FreeVars()
         case BinOp(e1, bop, e2) => e1.FreeVars() + e2.FreeVars()
-        case Old(e) => {}
+        /*
         case Binder(binderKind, x, t, e) => 
           e.FreeVars() - {x}
+        */
       }
     }
 
     static const TrueExpr: Expr := ELit(LitBool(true));
 
     static const FalseExpr: Expr := ELit(LitBool(false));
+
+    function method MultiSubstExpr(varMapping: map<var_name, var_name>): Expr
+    {
+      match this
+      case Var(x) => if x in varMapping.Keys then Var(varMapping[x]) else Var(x)
+      case ELit(_) => this
+      case UnOp(uop, e') => UnOp(uop, e'.MultiSubstExpr(varMapping))
+      case BinOp(e1, bop, e2) => BinOp(e1.MultiSubstExpr(varMapping), bop, e2.MultiSubstExpr(varMapping))
+    }
+ 
+    /*
+    //e[x |-> e']
+      function SubstExpr(e: Expr, x: var_name, esub: Expr): Expr
+      {
+        match e
+        case Var(x') => if x == x' then esub else e
+        case ELit(_) => e
+        case UnOp(uop, e') => UnOp(uop, SubstExpr(e', x, esub))
+        case BinOp(e1, bop, e2) => BinOp(SubstExpr(e1, x, esub), bop, SubstExpr(e2, x, esub))
+
+        /*TODO
+        //we ignore variable capturing: need side conditions that capturing can't occur
+        case Binder(binderKind, x, ty, ebody) => Binder(binderKind, x, ty, SubstExpr(ebody, x, esub)) 
+        */
+      }
+      */
   }
 
   datatype SimpleCmd =
@@ -203,6 +231,25 @@ module BoogieLang {
       case Assign(x, t, e) => x in xs && e.FreeVars() <= xs
       case Havoc(varDecls) => GetVarNames(varDecls) <= xs
       case SeqSimple(sc1, sc2) => sc1.WellFormedVars(xs) && sc2.WellFormedVars(xs)
+    }
+
+    function method SubstSimpleCmd(varMapping: map<var_name, var_name>) : SimpleCmd
+    {
+      match this
+      case Skip => Skip 
+      case Assert(e) => Assert(e.MultiSubstExpr(varMapping))
+      case Assume(e) => Assume(e.MultiSubstExpr(varMapping))
+      case Assign(x, t, e) =>
+        var newLHS := if x in varMapping.Keys then varMapping[x] else x;
+        var newRHS := e.MultiSubstExpr(varMapping);
+        Assign(newLHS, t, newRHS)
+      case Havoc(varDecls) =>
+        var f := (vDecl : (var_name, Ty)) => 
+            if vDecl.0 in varMapping.Keys then (varMapping[vDecl.0], vDecl.1) else vDecl;
+        var varDecls' := Sequences.Map(f, varDecls);
+        Havoc(varDecls')
+      case SeqSimple(c1, c2)  =>
+        SeqSimple(c1.SubstSimpleCmd(varMapping), c2.SubstSimpleCmd(varMapping))
     }
   }
 
@@ -355,18 +402,13 @@ module BoogieLang {
       Seq(cmds[0], SeqToCmd(cmds[1..]))
   }
 
-  //e[x |-> e']
-  function SubstExpr(e: Expr, x: var_name, esub: Expr): Expr
+  function method SeqToSimpleCmd(simpleCmds: seq<SimpleCmd>) : SimpleCmd
+    requires |simpleCmds| > 0
   {
-    match e
-    case Var(x') => if x == x' then esub else e
-    case ELit(_) => e
-    case UnOp(uop, e') => UnOp(uop, SubstExpr(e', x, esub))
-    case BinOp(e1, bop, e2) => BinOp(SubstExpr(e1, x, esub), bop, SubstExpr(e2, x, esub))
-    case Old(Expr) => Old(Expr) //TODO 
-
-    //we ignore variable capturing: need side conditions that capturing can't occur
-    case Binder(binderKind, x, ty, ebody) => Binder(binderKind, x, ty, SubstExpr(ebody, x, esub)) 
+    if |simpleCmds| == 1 then 
+      simpleCmds[0]
+    else 
+      SeqSimple(simpleCmds[0], SeqToSimpleCmd(simpleCmds[1..]))
   }
 
   function NAryBinOp(bop: Binop, exprIfEmpty: Expr, es: seq<Expr>): Expr

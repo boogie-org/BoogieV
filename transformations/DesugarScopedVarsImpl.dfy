@@ -13,41 +13,6 @@ module DesugarScopedVarsImpl {
   import opened Wrappers
   import opened Naming
 
- function method MultiSubstExpr(e: Expr, varMapping: map<var_name, var_name>): Expr
-
- lemma MultiSubstExprSpec<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
-    requires forall x | x in e.FreeVars() :: 
-      && (x in varMapping.Keys ==> Maps.Get(s1, x) == Maps.Get(s2, varMapping[x]))
-      && (x !in varMapping.Keys ==> Maps.Get(s1, x) == Maps.Get(s2, x))
-    ensures EvalExpr(a, e, s1) == EvalExpr(a, MultiSubstExpr(e, varMapping), s2)
-  
- lemma MultiSubstExprSpec2<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
-    requires (forall k | k in varMapping.Keys :: Maps.Get(s1, k) == Maps.Get(s2, varMapping[k]))
-    requires e.FreeVars() <= varMapping.Keys
-    ensures EvalExpr(a, e, s1) == EvalExpr(a, MultiSubstExpr(e, varMapping), s2)
-  {
-    MultiSubstExprSpec(a, varMapping, e, s1, s2);
-  }
-
-  function method SubstSimpleCmd(sc: SimpleCmd, varMapping: map<var_name, var_name>) : SimpleCmd
-  {
-    match sc
-    case Skip => Skip 
-    case Assert(e) => Assert(MultiSubstExpr(e, varMapping))
-    case Assume(e) => Assume(MultiSubstExpr(e, varMapping))
-    case Assign(x, t, e) =>
-      var newLHS := if x in varMapping.Keys then varMapping[x] else x;
-      var newRHS := MultiSubstExpr(e, varMapping);
-      Assign(newLHS, t, newRHS)
-    case Havoc(varDecls) =>
-      var f := (vDecl : (var_name, Ty)) => 
-          if vDecl.0 in varMapping.Keys then (varMapping[vDecl.0], vDecl.1) else vDecl;
-      var varDecls' := Sequences.Map(f, varDecls);
-      Havoc(varDecls')
-    case SeqSimple(c1, c2)  =>
-      SeqSimple(SubstSimpleCmd(c1, varMapping), SubstSimpleCmd(c2, varMapping))
-  }
-
   function method CreateUniqueVarDecls(varDecls: seq<(var_name, Ty)>, counter: nat) : seq<(var_name,Ty)>
     ensures 
       var varDecls' := CreateUniqueVarDecls(varDecls, counter);
@@ -127,7 +92,7 @@ module DesugarScopedVarsImpl {
       counter <= counter'
   {
     match c
-    case SimpleCmd(sc) => (SimpleCmd(SubstSimpleCmd(sc, substMap)), counter)
+    case SimpleCmd(sc) => (SimpleCmd(sc.SubstSimpleCmd(substMap)), counter)
     case Break(_) => (c, counter)
     case Seq(c1, c2) => 
       var (c1', counter1') := MakeScopedVarsUnique(c1, substMap, counter);
