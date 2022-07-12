@@ -15,10 +15,10 @@ module SSA
   import Maps
 
   // we track the domain of the incarnation in a sequence to allow one to easily iterate over the map
-  type Incarnation = map<var_name, nat> 
+  type Incarnation<T> = map<var_name, T> 
 
-
-  function method ComputeConflicts(inc1: map<var_name, nat>, inc2: map<var_name, nat>, existingConflicts: set<var_name>) : set<var_name>
+  function method ComputeConflicts<T(==)>(inc1: map<var_name, T>, inc2: map<var_name, T>, existingConflicts: set<var_name>) : set<var_name>
+    ensures forall x | x in ComputeConflicts(inc1, inc2, existingConflicts) :: x in inc1.Keys || x in inc2.Keys
   {
     var conflictSet1 := set x | x in inc1.Keys && x !in existingConflicts && Maps.Get(inc1, x) != Maps.Get(inc2, x);
     var conflictSet2 := set x | x in inc2.Keys && x !in inc1.Keys && x !in existingConflicts && Maps.Get(inc1, x) != Maps.Get(inc2, x);
@@ -26,7 +26,7 @@ module SSA
     conflictSet1 + conflictSet2
   }
 
-  function method AllConflicts(predIncs: seq<Incarnation>, existingConflicts: set<var_name>) : set<var_name>
+  function method AllConflicts<T(==)>(predIncs: seq<Incarnation<T>>, existingConflicts: set<var_name>) : set<var_name>
     decreases predIncs
   {
     if |predIncs| <= 1 then
@@ -38,9 +38,14 @@ module SSA
       AllConflicts(predIncs[2..], conflicts+existingConflicts)
   }
 
-  datatype IncarnationResult = IncarnationResult_(localIncMap: Incarnation, globalIncMap: Incarnation, updatedInc: Incarnation) 
+  lemma AllConflictsSubset<T>(predIncs: seq<Incarnation<T>>, existingConflicts: set<var_name>, M: set<var_name>)
+    requires forall i | 0 <= i < |predIncs| :: predIncs[i].Keys <= M
+    ensures AllConflicts(predIncs, existingConflicts) <= M+existingConflicts
+  { }
 
-  function method InputIncarnation(globalIncMap: map<var_name, nat>, predIncs: seq<Incarnation>) : IncarnationResult
+  datatype IncarnationResult = IncarnationResult_(localIncMap: Incarnation<var_name>, globalIncMap: Incarnation<nat>, updatedInc: Incarnation<nat>) 
+
+  function method InputIncarnation(globalIncMap: map<var_name, nat>, predIncs: seq<Incarnation<var_name>>) : IncarnationResult
     requires forall i | 0 <= i < |predIncs| :: predIncs[i].Keys <= globalIncMap.Keys
   {
     if |predIncs| == 0 then
@@ -52,13 +57,14 @@ module SSA
 
       /* to get the new incarnation, we can take any incarnation and update all conflicts
          the variables with no conflicts are the same in all predecessors */
+      AllConflictsSubset(predIncs, {}, globalIncMap.Keys);
       var updatedInc := (map x | x in conflictVars :: globalIncMap[x]+1);
-      var inputIncMap := predIncs[0] + updatedInc;
+      var inputIncMap := predIncs[0] + (map x | x in updatedInc.Keys :: VersionedName(x, updatedInc[x]));
       var globalIncMap' := globalIncMap + updatedInc;
       IncarnationResult_(inputIncMap, globalIncMap', updatedInc)
   }
 
-  function method OutputIncarnation(globalIncMap: Incarnation, input: Incarnation, b: BasicBlock) : (map<var_name, nat>, Incarnation, BasicBlock)
+  function method OutputIncarnation(globalIncMap: Incarnation<nat>, input: Incarnation<var_name>, b: BasicBlock) : (map<var_name, nat>, Incarnation<var_name>, BasicBlock)
   decreases b
   {
     match b
@@ -75,12 +81,12 @@ module SSA
       var x' := VersionedName(x, counter);
 
       //TODO proper output incarnation
-      (globalIncMap[x := counter], input[x := counter], Assign(x', t, e'))
+      (globalIncMap[x := counter], input[x := x'], Assign(x', t, e'))
 
     case Havoc(varDecls) => 
       var delta := map x | x in GetVarNames(varDecls) :: if x in globalIncMap.Keys then globalIncMap[x]+1 else 1;
       var globalIncMap' := globalIncMap + delta;
-      var output := input + delta;
+      var output := input + map x | x in delta.Keys :: VersionedName(x, delta[x]);
 
       assert forall i :: 0 <= i < |varDecls| ==> varDecls[i].0 in GetVarNames(varDecls);
 
@@ -93,9 +99,10 @@ module SSA
   }
 
   datatype SSAResult = 
-    SSAResult_(blocks: map<BlockId, BasicBlock>, incMaps: map<BlockId, Incarnation>, globalIncMap: map<var_name, nat>)
+    SSAResult_(blocks: map<BlockId, BasicBlock>, incMaps: map<BlockId, Incarnation<var_name>>, globalIncMap: Incarnation<nat>)
 
   function method SSAAux(cfg: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>, prevResult: SSAResult) : SSAResult
+    requires forall id | id in topo :: id in cfg.blocks.Keys
   {
     if |topo| == 0 then 
       prevResult
@@ -138,12 +145,14 @@ module SSA
   function method SSA(g: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>) : Cfg
     requires 
       && pred.Keys <= g.blocks.Keys
+      && forall id | id in topo :: id in g.blocks.Keys
          /** successors contained in blocks */
       && (forall blockId | blockId in g.successors.Keys ::
           (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys))
           /** predecessors contained in blocks */
       && (forall blockId | blockId in pred.Keys ::
           (forall i | 0 <= i < |pred[blockId]| :: pred[blockId][i] in g.blocks.Keys))
+    
   {
     var ssaResult := SSAAux(g, topo, pred, SSAResult_(map[], map[], map[]));
 
