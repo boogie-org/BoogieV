@@ -3,6 +3,7 @@ include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
 include "../dafny-libraries/src/Math.dfy"
 include "../util/Naming.dfy"
+include "../util/AstSubsetPredicates.dfy"
 
 module SSA 
 {
@@ -13,6 +14,7 @@ module SSA
   import Math
   import opened Naming
   import Maps
+  import opened AstSubsetPredicates
 
   type Incarnation<T> = map<var_name, T> 
 
@@ -178,6 +180,37 @@ module SSA
     var ssaResult := SSAAux(g, topo, pred, SSAResult_(map[], map[], map[]));
 
     Cfg(g.entry, ssaResult.blocks, g.successors)
+  }
+
+  function method PassifySimpleCmd(sc: SimpleCmd) : SimpleCmd
+  {
+    match sc
+    case Skip => sc
+    case Assert(e) => sc
+    case Assume(e) => sc    
+    case Assign(x, t, e) => Assume(BinOp(Var(x), Eq, e))
+    case Havoc(varDecls) => Skip
+    case SeqSimple(sc1, sc2) => SeqSimple(PassifySimpleCmd(sc1), PassifySimpleCmd(sc2))
+  }
+
+  function method PassifyCfg(g: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>) : Cfg
+    requires 
+      && pred.Keys <= g.blocks.Keys
+      && forall id | id in topo :: id in g.blocks.Keys
+         /** successors contained in blocks */
+      && (forall blockId | blockId in g.successors.Keys ::
+          (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys))
+          /** predecessors contained in blocks */
+      && (forall blockId | blockId in pred.Keys ::
+          (forall i | 0 <= i < |pred[blockId]| :: pred[blockId][i] in g.blocks.Keys))
+    ensures 
+      var g := PassifyCfg(g, topo, pred);
+      forall blockId | blockId in g.blocks :: IsPassive(g.blocks[blockId])
+  {
+    var cfgSSA := SSA(g, topo, pred);
+    var blocks' := map blockId | blockId in cfgSSA.blocks.Keys :: PassifySimpleCmd(cfgSSA.blocks[blockId]);
+
+    Cfg(g.entry, blocks', g.successors) 
   }
 
   /*
