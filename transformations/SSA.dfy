@@ -123,9 +123,47 @@ module SSA
 
   datatype SSAResult = 
     SSAResult_(blocks: map<BlockId, BasicBlock>, incMaps: map<BlockId, Incarnation<var_name>>, globalIncMap: Incarnation<nat>)
+  
+  function method SynchronizationBlocks(
+    predInc: Incarnation<var_name>,
+    conflictInc: Incarnation<nat>,
+    conflictSeq: seq<var_name>
+  ) : SimpleCmd
+    requires |conflictSeq| > 0
+    requires conflictInc.Keys == (set x | x in conflictSeq) 
+  {
+    var assignmentsSeq := 
+      seq(|conflictSeq|, i requires 0 <= i < |conflictSeq| => 
+        var x := conflictSeq[i];
+        var newX := VersionedName(x, conflictInc[x]);
+        var oldX := if x in predInc.Keys then predInc[x] else x;
+        Assign(newX, TPrim(TInt), Var(oldX)));
+    
+    SeqToSimpleCmd(assignmentsSeq)
+  }
+  
+  function method AddSynchronizationBlocks(
+    blocks: map<BlockId, BasicBlock>, 
+    incs: map<BlockId, Incarnation<var_name>>,
+    predIds: seq<BlockId>,
+    conflictInc: Incarnation<nat>
+  ) : map<BlockId, BasicBlock>
+    requires forall p | p in predIds :: p in blocks.Keys 
+  {
+    if |conflictInc.Keys| == 0 then
+      blocks
+    else
+      var conflictVarsSeq := Util.SetToSequenceStr(conflictInc.Keys);
+
+      var update := map predId | predId in predIds :: 
+        SeqSimple(blocks[predId], SynchronizationBlocks(incs[predId], conflictInc, conflictVarsSeq));
+
+      blocks+update
+  }
 
   function method SSAAux(cfg: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>, prevResult: SSAResult) : SSAResult
     requires forall id | id in topo :: id in cfg.blocks.Keys
+    requires forall id | id in pred.Keys :: forall p | p in pred[id] :: p in cfg.blocks.Keys 
   {
     if |topo| == 0 then 
       prevResult
@@ -138,23 +176,7 @@ module SSA
       var incRes := InputIncarnation(prevResult.globalIncMap, predIncs);
 
       /* for each conflict add synchronization assignments */
-      /* Problem: Need order on blocks
-      var blocks' := 
-        prevResult.blocks + 
-        map predId | predId in pred[curId] :: 
-          SeqSimple(
-            cfg.blocks[predId],
-            SeqToSimpleCmd(
-              seq(|incRes.updatedInc.Keys|, 
-                i requires 0 <= i < |incRes.updatedInc.Keys| => 
-                  Assign(
-                    incRes.updatedInc[i], 
-                    Var( prevResult.incMaps[predId]  ))   )
-            )
-          );
-      */
-      //TODO 
-      var blocks' := prevResult.blocks;
+      var blocks' := if curId in pred.Keys then AddSynchronizationBlocks(cfg.blocks, prevResult.incMaps, preds, incRes.updatedInc) else cfg.blocks;
       
       /* compute output incarnation of block */
       var (globalIncMap'', outputIncarnation, b') := OutputIncarnation(incRes.globalIncMap, incRes.localIncMap, cfg.blocks[curId]);
@@ -163,7 +185,6 @@ module SSA
       var ssaResult' := SSAResult_(prevResult.blocks[curId := b'], prevResult.incMaps[curId := outputIncarnation], globalIncMap'');
       SSAAux(cfg, topo[1..], pred, prevResult)
   }
-
 
   function method SSA(g: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>) : Cfg
     requires 
@@ -175,6 +196,7 @@ module SSA
           /** predecessors contained in blocks */
       && (forall blockId | blockId in pred.Keys ::
           (forall i | 0 <= i < |pred[blockId]| :: pred[blockId][i] in g.blocks.Keys))
+      && (forall id | id in pred.Keys :: forall p | p in pred[id] :: p in g.blocks.Keys )
     
   {
     var ssaResult := SSAAux(g, topo, pred, SSAResult_(map[], map[], map[]));
