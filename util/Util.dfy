@@ -157,7 +157,7 @@ module Util {
   }
 
   /** 
-  various of the following definitions are taken from http://leino.science/papers/krml275.html
+  Various of the following definitions and lemmas are taken from http://leino.science/papers/krml275.html
   */
 
   predicate IsTotalOrder<A(!new)>(R: (A, A) -> bool) {
@@ -195,15 +195,10 @@ module Util {
       var xMin := if R(x, x') then x else x';
 
       assert xMin in s;
+
       forall y | y in s
       ensures R(xMin, y)
       {
-        if y == x {
-          if xMin == x {
-
-          }   
-        } else {
-        }
       }
     }
   }
@@ -341,11 +336,8 @@ module Util {
     ensures 
       && Sorted(a, 0, a.Length)
       && multiset(a[..]) == old(multiset(a[..]))
-      //DISCUSS: possible to derive conjunct below from above?
-      //&& (set i | 0 <= i < a.Length :: a[i]) == old((set i | 0 <= i < a.Length :: a[i]))
-      //&& (set i | i in a[..]) == old((set i | i in a[..]))
     
-  lemma MultisetEmpty1<A>(s: seq<A>)
+  lemma MultisetEmpty<A>(s: seq<A>)
   requires multiset(s) == multiset{};
   ensures s == []
   {
