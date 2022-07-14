@@ -108,7 +108,6 @@ module SSA
       var counter := if x in globalIncMap.Keys then globalIncMap[x]+1 else 1;
       var x' := VersionedName(x, counter);
 
-      //TODO proper output incarnation
       (globalIncMap[x := counter], input[x := x'], Assign(x', t, e'))
 
     case Havoc(varDecls) => 
@@ -192,7 +191,6 @@ module SSA
       /* compute output incarnation of block */
       var (globalIncMap'', outputIncarnation, b') := OutputIncarnation(incRes.globalIncMap, incRes.localIncMap, cfg.blocks[curId]);
 
-      /* recurse, TODO: modify ssaResult param */
       var ssaResult' := SSAResult_(prevResult.blocks[curId := b'], prevResult.incMaps[curId := outputIncarnation], globalIncMap'');
       assert ssaResult'.incMaps.Keys == prevResult.incMaps.Keys + {topo[idTopo]};
       assert (set i | 0 <= i < idTopo :: topo[i]) + {topo[idTopo]} == (set i | 0 <= i < idTopo+1 :: topo[i]);
