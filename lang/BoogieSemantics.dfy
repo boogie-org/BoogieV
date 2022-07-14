@@ -24,7 +24,7 @@ module BoogieSemantics {
       var v1 :- EvalExpr(a, e1, s);
       var v2 :- EvalExpr(a, e2, s);
       EvalBinop(v1, bop, v2)
-    case Old(e) => None //TODO
+    /*
     case Binder(ForallQ, x, ty, e) =>  
     if forall v :: TypeOfVal(a,v) == ty ==> EvalExpr(a, e, s[x := v]) == Some(LitV(LitBool(true))) then 
                                   Some(LitV(LitBool(true))) 
@@ -35,6 +35,7 @@ module BoogieSemantics {
                               else 
                                   None //ill-typed
     case Binder(ExistsQ, x, ty, e) => None //TODO
+    */
   }
 
   /** TODO Binders and Old expressions */
@@ -50,9 +51,34 @@ module BoogieSemantics {
     case BinOp(e1, bop, e2) =>
       assert EvalExpr(a, e1, s1) == EvalExpr(a, e1, s2);
       assert EvalExpr(a, e2, s1) == EvalExpr(a, e2, s2);
-    case Old(e) => assume false; //TODO
+    /*
     case Binder(ForallQ, x, ty, e) => assume false; //TODO
     case Binder(ExistsQ, x, ty, e) => assume false; //TODO
+    */
+  }
+
+ lemma MultiSubstExprSpec<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
+    requires forall x | x in e.FreeVars() :: 
+      && (x in varMapping.Keys ==> Maps.Get(s1, x) == Maps.Get(s2, varMapping[x]))
+      && (x !in varMapping.Keys ==> Maps.Get(s1, x) == Maps.Get(s2, x))
+    ensures EvalExpr(a, e, s1) == EvalExpr(a, e.MultiSubstExpr(varMapping), s2)
+  { 
+    match e
+    case Var(x) => assert x in e.FreeVars();
+    case ELit(lit) => 
+    case UnOp(uop, e') =>
+      assert EvalExpr(a, e', s1) == EvalExpr(a, e'.MultiSubstExpr(varMapping), s2);
+    case BinOp(e1, bop, e2) =>
+      assert EvalExpr(a, e1, s1) == EvalExpr(a, e1.MultiSubstExpr(varMapping), s2);
+      assert EvalExpr(a, e2, s1) == EvalExpr(a, e2.MultiSubstExpr(varMapping), s2);
+  }
+  
+ lemma MultiSubstExprSpec2<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
+    requires (forall k | k in varMapping.Keys :: Maps.Get(s1, k) == Maps.Get(s2, varMapping[k]))
+    requires e.FreeVars() <= varMapping.Keys
+    ensures EvalExpr(a, e, s1) == EvalExpr(a, e.MultiSubstExpr(varMapping), s2)
+  {
+    MultiSubstExprSpec(a, varMapping, e, s1, s2);
   }
 
   function ExprEvalBoolOpt<A(!new)>(a: absval_interp<A>, e: Expr, s: state<A>) : Option<bool>
@@ -66,12 +92,6 @@ module BoogieSemantics {
   {
     var v := EvalExpr(a, e, s);
     v.Some? && TypeOfVal(a, v.value) == t
-  }
-
-  function ForallVarDeclsExpr(varDecls: seq<(var_name, Ty)>, e: Expr) : Expr
-  {
-    if |varDecls| == 0 then e 
-    else var (x,t) := varDecls[0]; Binder(ForallQ, x, t, ForallVarDeclsExpr(varDecls[1..], e))
   }
 
   function NumScopesAndLoops(c: Cmd) : nat

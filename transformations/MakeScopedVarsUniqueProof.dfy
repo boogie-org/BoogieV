@@ -193,10 +193,10 @@ module MakeScopedVarsUniqueProof {
       requires sc.WellFormedVars(varMapping.Keys)
       requires Maps.Injective(varMapping)
       ensures 
-        var sc' := SubstSimpleCmd(sc, varMapping);
+        var sc' := sc.SubstSimpleCmd(varMapping);
         RelPred(varMapping, WpSimpleCmd(a, sc, post1), WpSimpleCmd(a, sc', post2), s2Orig)
     {
-      var sc' := SubstSimpleCmd(sc, varMapping);
+      var sc' := sc.SubstSimpleCmd(varMapping);
       var pre1 := WpSimpleCmd(a, sc, post1);
       var pre2 := WpSimpleCmd(a, sc', post2);
       forall s1:map<var_name, Val<A>>, s2 | RelState(varMapping, s1, s2, s2Orig)
@@ -213,7 +213,7 @@ module MakeScopedVarsUniqueProof {
             reveal RelPred();
             MultiSubstExprSpec2(a, varMapping, e, s1, s2);
           case Assign(x, t, e) =>
-            var e' := MultiSubstExpr(e, varMapping);
+            var e' := e.MultiSubstExpr(varMapping);
             var v1Opt := EvalExpr(a, e, s1);
             var v2Opt := EvalExpr(a, e', s2);
             assert v1Opt == v2Opt by {
@@ -241,11 +241,11 @@ module MakeScopedVarsUniqueProof {
               { ForallVarDeclRel2(a, vDecls, varMapping, post1, post2, s1, s2, s2Orig); }
               ForallVarDecls(a, vDecls', post2)(s2);
               WpSimpleCmd(a, Havoc(vDecls'), post2)(s2);
-              WpSimpleCmd(a, SubstSimpleCmd(Havoc(vDecls), varMapping), post2)(s2);
+              WpSimpleCmd(a, Havoc(vDecls).SubstSimpleCmd(varMapping), post2)(s2);
             }
           case SeqSimple(sc1, sc2) =>
-            var sc1' := SubstSimpleCmd(sc1, varMapping);
-            var sc2' := SubstSimpleCmd(sc2, varMapping);
+            var sc1' := sc1.SubstSimpleCmd(varMapping);
+            var sc2' := sc2.SubstSimpleCmd(varMapping);
 
             var post1' := WpSimpleCmd(a, sc2, post1);
             var post2' := WpSimpleCmd(a, sc2', post2);

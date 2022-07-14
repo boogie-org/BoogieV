@@ -58,7 +58,6 @@ module AstSubsetPredicates
     && NoScopedVars(c)
   }
 
-
   predicate NoBreaksScopedVarsLoops(c: Cmd)
   {
     match c
@@ -68,5 +67,13 @@ module AstSubsetPredicates
     case Loop(_,_) => false
     case Scope(_, varDecls, body) => varDecls == [] && NoBreaksScopedVarsLoops(body)
     case If(_, thn, els) => NoBreaksScopedVarsLoops(thn) && NoBreaksScopedVarsLoops(els)
+  }
+
+  predicate IsPassive(sc: SimpleCmd)
+  {
+    match sc
+    case Assign(_, _, _) => false
+    case Havoc(_) => false
+    case _ => true
   }
 }
