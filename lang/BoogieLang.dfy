@@ -165,23 +165,6 @@ module BoogieLang {
       case UnOp(uop, e') => UnOp(uop, e'.MultiSubstExpr(varMapping))
       case BinOp(e1, bop, e2) => BinOp(e1.MultiSubstExpr(varMapping), bop, e2.MultiSubstExpr(varMapping))
     }
- 
-    /*
-    //e[x |-> e']
-      function SubstExpr(e: Expr, x: var_name, esub: Expr): Expr
-      {
-        match e
-        case Var(x') => if x == x' then esub else e
-        case ELit(_) => e
-        case UnOp(uop, e') => UnOp(uop, SubstExpr(e', x, esub))
-        case BinOp(e1, bop, e2) => BinOp(SubstExpr(e1, x, esub), bop, SubstExpr(e2, x, esub))
-
-        /*TODO
-        //we ignore variable capturing: need side conditions that capturing can't occur
-        case Binder(binderKind, x, ty, ebody) => Binder(binderKind, x, ty, SubstExpr(ebody, x, esub)) 
-        */
-      }
-      */
   }
 
   datatype SimpleCmd =
