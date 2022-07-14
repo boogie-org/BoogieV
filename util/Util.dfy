@@ -1,8 +1,10 @@
 include "../dafny-libraries/src/Wrappers.dfy"
+include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 
 module Util {
 
   import opened Wrappers
+  import Seq
 
   function RemoveDuplicates<T>(s: seq<T>): seq<T>
   {
@@ -53,11 +55,11 @@ module Util {
       digitString + NatToString(n/10)
   }
 
-  lemma {:verify false} HashTagNotInNatString(n: nat)
+  lemma HashTagNotInNatString(n: nat)
     ensures '#' !in NatToString(n)
   { }
 
-  lemma {:verify false} NatToStringInjective(n1: nat, n2: nat)
+  lemma NatToStringInjective(n1: nat, n2: nat)
     requires n1 != n2
     ensures NatToString(n1) != NatToString(n2)
   /*
@@ -106,7 +108,7 @@ module Util {
     else SequenceToMap(s[1..])[s[0].0 := s[0].1]
   }
 
-  lemma {:verify false} OptionBoolExhaust(a: Option<bool>)
+  lemma OptionBoolExhaust(a: Option<bool>)
     ensures a == None || a == Some(true) || a == Some(false)
   {
     match a
@@ -115,13 +117,107 @@ module Util {
     case Some(false) =>
   }
 
-  method Sort(a: array<string>)
-    modifies a
-    ensures 
-      && Sorted(a, 0, a.Length)
-      && multiset(a[..]) == old(multiset(a[..]))
-      //DISCUSS: possible to derive conjunct below from above?
-      && (set i | 0 <= i < a.Length :: a[i]) == old((set i | 0 <= i < a.Length :: a[i]))
+  predicate method LexRelStr(s1: string, s2: string)
+  {
+    || s1 == []
+    || (s2 != [] && s1[0] < s2[0]) 
+    || (s2 != [] && s1[0] == s2[0] && LexRelStr(s1[1..], s2[1..]))
+  }
+
+  lemma LexRelConnex(s1: string, s2: string)
+    ensures LexRelStr(s1, s2) || LexRelStr(s2, s1)
+  { }
+
+  lemma LexRelAntisym(s1: string, s2: string)
+    requires LexRelStr(s1, s2)
+    requires LexRelStr(s2, s1)
+    ensures s1 == s2
+  { }
+
+  lemma LexRelTransitive(s1: string, s2: string, s3: string)
+    requires LexRelStr(s1, s2)
+    requires LexRelStr(s2, s3)
+    ensures LexRelStr(s1, s3)
+  { }
+
+  lemma LexRelIsTotalOrder()
+  ensures IsTotalOrder(LexRelStr)
+  {
+    forall s1, s2
+    ensures LexRelStr(s1, s2) || LexRelStr(s2, s1)
+    { LexRelConnex(s1, s2); }
+
+    forall s1, s2 | LexRelStr(s1, s2) && LexRelStr(s2, s1)
+    ensures s1 == s2
+    { LexRelAntisym(s1, s2); }
+
+    forall s1, s2, s3 | LexRelStr(s1, s2) && LexRelStr(s2, s3)
+    ensures LexRelStr(s1, s3)
+    { LexRelTransitive(s1, s2, s3); }
+  }
+
+  /** 
+  various of the following definitions are taken from http://leino.science/papers/krml275.html
+  */
+
+  predicate IsTotalOrder<A(!new)>(R: (A, A) -> bool) {
+    // connexity
+    && (forall a, b :: R(a, b) || R(b, a))
+    // antisymmetry
+    && (forall a, b :: R(a, b) && R(b, a) ==> a == b)
+    // transitivity
+    && (forall a, b, c :: R(a, b) && R(b, c) ==> R(a, c))
+  }
+
+  lemma ThereIsAMinimumGeneral<A>(R: (A, A) -> bool, s: set<A>)
+    requires s != {}
+    requires IsTotalOrder(R)
+    ensures exists x :: x in s && forall y | y in s :: R(x, y)
+  {
+    var x :| x in s;
+    if s == {x} {
+      // obviously, x is the minimum
+      assert x in s;
+      assert forall y | y in s :: x == y;
+    } else {
+      // The minimum in s might be x, or it might be the minimum
+      // in s - {x}. If we knew the minimum of the latter, then
+      // we could compare the two.
+      // Let's start by giving a name to the smaller set:
+      var s' := s - {x};
+      // So, s is the union of s' and {x}:
+      assert s == s' + {x};
+      // The following lemma call establishes that there is a
+      // minimum in s'.
+      ThereIsAMinimumGeneral(R, s');
+      var x' :| x' in s' && forall y | y in s' :: R(x', y);
+
+      var xMin := if R(x, x') then x else x';
+
+      assert xMin in s;
+      forall y | y in s
+      ensures R(xMin, y)
+      {
+        if y == x {
+          if xMin == x {
+
+          }   
+        } else {
+        }
+      }
+    }
+  }
+
+  lemma ThereIsAMinimum(s: set<string>)
+    requires s != {}
+    ensures exists x :: x in s && forall y | y in s :: LexRelStr(x, y)
+  {
+    assert IsTotalOrder(LexRelStr) by {
+      LexRelIsTotalOrder();
+    }
+
+    ThereIsAMinimumGeneral(LexRelStr, s);
+  }  
 
   predicate Sorted(a: array<string>, low: int, high: int)
     requires 0 <= low <= high <= a.Length
@@ -136,8 +232,66 @@ module Util {
     forall i, j :: low <= i < j < high ==> LexRelStr(a[i], a[j])
   }
 
-  //TODO
-  lemma {:verify false} SortedUnique(s1: seq<string>, s2: seq<string>, xs: set<string>)
+  lemma UniqueMinimum(x1: string, x2: string, s: set<string>)
+  requires x1 in s && x2 in s
+  requires forall x | x in s :: LexRelStr(x1,x)
+  requires forall x | x in s :: LexRelStr(x2,x)
+  ensures x1 == x2
+  {
+    assert LexRelStr(x1, x2) || LexRelStr(x2, x1) by {
+      LexRelConnex(x1, x2);
+    }
+
+    if LexRelStr(x1, x2) && LexRelStr(x2, x1) {
+      assert x1 == x2 by {
+        LexRelAntisym(x1, x2);
+      }
+    }
+  }
+
+  lemma CardMono<A>(s1: set<A>, s2: set<A>)
+  requires s1 <= s2
+  ensures |s1| <= |s2|
+  {
+    if s1 == {} {
+
+    } else {
+      var x :| x in s1;
+      assert x in s2;
+
+      assert |s1-{x}| <= |s2-{x}| by {
+        CardMono(s1-{x}, s2-{x});
+      }
+    }
+  }
+
+  lemma CardSeqSet<A>(s: seq<A>)
+  ensures |s| >= |(set x | x in s)|
+  {
+    if |s| == 0 {
+
+    } else {
+      var xs := set x | x in s;
+      assert s[0] in xs;
+
+      var xs' := xs-{s[0]};
+
+      calc {
+        |s|;
+        |s[1..]|+1;
+      >= { CardSeqSet(s[1..]); }
+        |(set x | x in s[1..])|+1;
+      >=
+        { 
+          assert (set x | x in s[1..]) >= xs';
+          CardMono(xs', set x | x in s[1..]);
+        }
+        |xs'|+1;
+      }
+    }
+  }
+
+  lemma SortedUnique(s1: seq<string>, s2: seq<string>, xs: set<string>)
     requires |s1| == |s2| == |xs|
     requires (set x | x in s1) == (set x | x in s2) == xs
     requires SortedSeq(s1, 0, |s1|)
@@ -146,19 +300,85 @@ module Util {
   {
     if xs == {} {
     } else {
-      var x :| forall y | y in s1 :: LexRelStr(x,y);
-      forall y | y in s1
-      ensures LexRelStr(s1[0], y)
-      {
-        var i :| 0 <= i < |s1| && s1[i] == y;
-        if i > 0 {
-          assume false;
-        } else {
-          assume false;
-          LexRelConnex(x, x);
-        }
+      assert IsTotalOrder(LexRelStr) by {
+        LexRelIsTotalOrder();
       }
-      assume false;
+
+      assert forall y | y in xs :: LexRelStr(s1[0], y);
+      assert forall y | y in xs :: LexRelStr(s2[0], y);
+
+      assert s1[0] == s2[0] by {
+        UniqueMinimum(s1[0], s2[0], xs);
+      }
+
+      assert s1[1..] == s2[1..] by {
+        assert (set x | x in s1[1..]) + {s1[0]} == xs;
+        assert |s1[1..]| == |xs|-1;
+
+        if s1[0] in (set x | x in s1[1..]) {
+          assert (set x | x in s1[1..]) == xs;
+          assert |s1[1..]| >= |xs| by {
+            CardSeqSet(s1[1..]);
+          }
+          assert false;
+        }
+
+        if s2[0] in (set x | x in s2[1..]) {
+          assert (set x | x in s2[1..]) == xs;
+          assert |s2[1..]| >= |xs| by {
+            CardSeqSet(s2[1..]);
+          }
+          assert false;
+        }
+
+        SortedUnique(s1[1..], s2[1..], xs-{s1[0]});
+      }
+    }
+  }
+
+  method Sort(a: array<string>)
+    modifies a
+    ensures 
+      && Sorted(a, 0, a.Length)
+      && multiset(a[..]) == old(multiset(a[..]))
+      //DISCUSS: possible to derive conjunct below from above?
+      //&& (set i | 0 <= i < a.Length :: a[i]) == old((set i | 0 <= i < a.Length :: a[i]))
+      //&& (set i | i in a[..]) == old((set i | i in a[..]))
+    
+  lemma MultisetEmpty1<A>(s: seq<A>)
+  requires multiset(s) == multiset{};
+  ensures s == []
+  {
+    if s != [] {
+      assert s[0] in multiset(s);
+      assert false;
+    } 
+  }
+
+  lemma MultisetNonempty<A>(s: seq<A>)
+  requires s != []
+  ensures multiset(s) != multiset{}
+  {
+    assert s[0] in multiset(s);
+  }
+  
+  lemma MultisetToSetSeq<A>(s1: seq<A>, s2: seq<A>)
+  requires multiset(s1) == multiset(s2)
+  ensures (set i | i in s1) == (set i | i in s2)
+  {
+    var s1Set := (set i | i in s1);
+    var s2Set := (set i | i in s2);
+
+    forall x | x in s1Set
+    ensures x in s2Set
+    {
+      assert x in multiset(s1);
+    }
+
+    forall x | x in s2Set
+    ensures x in s1Set
+    {
+      assert x in multiset(s2);
     }
   }
 
@@ -187,7 +407,7 @@ module Util {
       decreases s'
       invariant |s'| == |s|-i
       invariant 0 <= i <= |s|
-      invariant (set j | 0 <= j < i :: a[j]) == s-s'
+      invariant (set j | j in a[0..i]) == s-s'
     {
       var x :| x in s';
 
@@ -196,18 +416,26 @@ module Util {
       a[i] := x;
 
       assert forall j | 0 <= j < i :: a[j] == a0Seq[j];
-      assert (set j | 0 <= j < i :: a[j]) == s-s';
+      assert (set j | j in a[0..i]) == s-s';
 
       var temp := s';
       s' := s' - {x};
 
-      assert (set j | 0 <= j < i+1 :: a[j]) == (s-temp)+{x};
+      assert (set j | j in a[0..i+1]) == (s-temp)+{x};
       i := i+1;
     }
+
+    assert i == |s|;
+
+    assert (set j | j in a[0..i]) == s;
+    assert (set j | j in a[..]) == s;
+    var a0 := a[..];
     
     Sort(a);
     
-    assert (set j | 0 <= j < i :: a[j]) == s;
+    MultisetToSetSeq(a[..], a0);
+    
+    assert (set j | j in a[..]) == s;
 
     var res := a[..];
 
@@ -217,108 +445,5 @@ module Util {
 
     return res;
   }
-
-  predicate method LexRelStr(s1: string, s2: string)
-  {
-    || s1 == []
-    || (s2 != [] && s1[0] < s2[0]) 
-    || (s2 != [] && s1[0] == s2[0] && LexRelStr(s1[1..], s2[1..]))
-  }
-
-lemma {:verify false} LexRelConnex(s1: string, s2: string)
-  ensures LexRelStr(s1, s2) || LexRelStr(s2, s1)
-{ }
-
-lemma {:verify false} LexRelAntisym(s1: string, s2: string)
-  requires LexRelStr(s1, s2)
-  requires LexRelStr(s2, s1)
-  ensures s1 == s2
-{ }
-
-lemma {:verify false} LexRelTransitive(s1: string, s2: string, s3: string)
-  requires LexRelStr(s1, s2)
-  requires LexRelStr(s2, s3)
-  ensures LexRelStr(s1, s3)
-{ }
-
-lemma {:verify false} LexRelIsTotalOrder()
-ensures IsTotalOrder(LexRelStr)
-{
-  forall s1, s2
-  ensures LexRelStr(s1, s2) || LexRelStr(s2, s1)
-  { LexRelConnex(s1, s2); }
-
-  forall s1, s2 | LexRelStr(s1, s2) && LexRelStr(s2, s1)
-  ensures s1 == s2
-  { LexRelAntisym(s1, s2); }
-
-  forall s1, s2, s3 | LexRelStr(s1, s2) && LexRelStr(s2, s3)
-  ensures LexRelStr(s1, s3)
-  { LexRelTransitive(s1, s2, s3); }
-}
-  
-
-/** 
-following definitions taken from http://leino.science/papers/krml275.html
-*/
-
-predicate IsTotalOrder<A(!new)>(R: (A, A) -> bool) {
-  // connexity
-  && (forall a, b :: R(a, b) || R(b, a))
-  // antisymmetry
-  && (forall a, b :: R(a, b) && R(b, a) ==> a == b)
-  // transitivity
-  && (forall a, b, c :: R(a, b) && R(b, c) ==> R(a, c))
-}
-
-lemma ThereIsAMinimumGeneral<A>(R: (A, A) -> bool, s: set<A>)
-  requires s != {}
-  requires IsTotalOrder(R)
-  ensures exists x :: x in s && forall y | y in s :: R(x, y)
-{
-  var x :| x in s;
-  if s == {x} {
-    // obviously, x is the minimum
-    assert x in s;
-    assert forall y | y in s :: x == y;
-  } else {
-    // The minimum in s might be x, or it might be the minimum
-    // in s - {x}. If we knew the minimum of the latter, then
-    // we could compare the two.
-    // Let's start by giving a name to the smaller set:
-    var s' := s - {x};
-    // So, s is the union of s' and {x}:
-    assert s == s' + {x};
-    // The following lemma {:verify false} call establishes that there is a
-    // minimum in s'.
-    ThereIsAMinimumGeneral(R, s');
-    var x' :| x' in s' && forall y | y in s' :: R(x', y);
-
-    var xMin := if R(x, x') then x else x';
-
-    assert xMin in s;
-    forall y | y in s
-    ensures R(xMin, y)
-    {
-      if y == x {
-        if xMin == x {
-
-        }   
-      } else {
-      }
-    }
-  }
-}
-
-lemma ThereIsAMinimum(s: set<string>)
-  requires s != {}
-  ensures exists x :: x in s && forall y | y in s :: LexRelStr(x, y)
-{
-  assert IsTotalOrder(LexRelStr) by {
-    LexRelIsTotalOrder();
-  }
-
-  ThereIsAMinimumGeneral(LexRelStr, s);
-}
 
 }
