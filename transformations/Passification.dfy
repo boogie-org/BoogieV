@@ -88,6 +88,11 @@ module SSA
   }
 
   function method OutputIncarnation(globalIncMap: Incarnation<nat>, input: Incarnation<var_name>, b: BasicBlock) : (map<var_name, nat>, Incarnation<var_name>, BasicBlock)
+  requires input.Keys <= globalIncMap.Keys
+  ensures
+    var (globalIncMap', outputInc, b') := OutputIncarnation(globalIncMap, input, b);
+    && outputInc.Keys <= globalIncMap'.Keys
+    && globalIncMap.Keys <= globalIncMap'.Keys
   decreases b
   {
     match b
@@ -149,6 +154,7 @@ module SSA
     conflictInc: Incarnation<nat>
   ) : map<BlockId, BasicBlock>
     requires forall p | p in predIds :: p in blocks.Keys 
+    requires forall id | id in predIds :: id in incs.Keys
   {
     if |conflictInc.Keys| == 0 then
       blocks
@@ -161,14 +167,19 @@ module SSA
       blocks+update
   }
 
-  function method SSAAux(cfg: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>, prevResult: SSAResult) : SSAResult
+  function method SSAAux(cfg: Cfg, idTopo: nat, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>, prevResult: SSAResult) : SSAResult
+    requires 0 <= idTopo <= |topo|
+    requires forall i | 0 <= i < |topo| :: topo[i] in pred.Keys ==> (set x | x in pred[topo[i]]) <= (set j | 0 <= j < i :: topo[j])
     requires forall id | id in topo :: id in cfg.blocks.Keys
     requires forall id | id in pred.Keys :: forall p | p in pred[id] :: p in cfg.blocks.Keys 
+    requires forall block | block in prevResult.incMaps.Keys :: prevResult.incMaps[block].Keys <= prevResult.globalIncMap.Keys
+    requires prevResult.incMaps.Keys == set i | 0 <= i < idTopo :: topo[i]
+    decreases |topo|-idTopo
   {
-    if |topo| == 0 then 
+    if idTopo == |topo| then 
       prevResult
     else
-      var curId := topo[0];
+      var curId := topo[idTopo];
 
       /** compute input incarnation by consolidating incarnation of predecessors */
       var preds := if curId in pred.Keys then pred[curId] else [];
@@ -183,23 +194,29 @@ module SSA
 
       /* recurse, TODO: modify ssaResult param */
       var ssaResult' := SSAResult_(prevResult.blocks[curId := b'], prevResult.incMaps[curId := outputIncarnation], globalIncMap'');
-      SSAAux(cfg, topo[1..], pred, prevResult)
+      assert ssaResult'.incMaps.Keys == prevResult.incMaps.Keys + {topo[idTopo]};
+      assert (set i | 0 <= i < idTopo :: topo[i]) + {topo[idTopo]} == (set i | 0 <= i < idTopo+1 :: topo[i]);
+
+      SSAAux(cfg, idTopo+1, topo, pred, ssaResult')
   }
 
   function method SSA(g: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>) : Cfg
     requires 
       && pred.Keys <= g.blocks.Keys
-      && forall id | id in topo :: id in g.blocks.Keys
+      && (forall id | id in topo :: id in g.blocks.Keys)
+         /** topo is a topological order w.r.t. pred */
+      && (forall i | 0 <= i < |topo| :: topo[i] in pred.Keys ==> (set x | x in pred[topo[i]]) <= (set j | 0 <= j < i :: topo[j]))
          /** successors contained in blocks */
       && (forall blockId | blockId in g.successors.Keys ::
           (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys))
           /** predecessors contained in blocks */
       && (forall blockId | blockId in pred.Keys ::
           (forall i | 0 <= i < |pred[blockId]| :: pred[blockId][i] in g.blocks.Keys))
+
       && (forall id | id in pred.Keys :: forall p | p in pred[id] :: p in g.blocks.Keys )
     
   {
-    var ssaResult := SSAAux(g, topo, pred, SSAResult_(map[], map[], map[]));
+    var ssaResult := SSAAux(g, 0, topo, pred, SSAResult_(map[], map[], map[]));
 
     Cfg(g.entry, ssaResult.blocks, g.successors)
   }
@@ -218,7 +235,9 @@ module SSA
   function method PassifyCfg(g: Cfg, topo: seq<BlockId>, pred: map<BlockId, seq<BlockId>>) : Cfg
     requires 
       && pred.Keys <= g.blocks.Keys
-      && forall id | id in topo :: id in g.blocks.Keys
+      && (forall id | id in topo :: id in g.blocks.Keys)
+         /** topo is a topological order w.r.t. pred */
+      && (forall i | 0 <= i < |topo| :: topo[i] in pred.Keys ==> (set x | x in pred[topo[i]]) <= (set j | 0 <= j < i :: topo[j]))
          /** successors contained in blocks */
       && (forall blockId | blockId in g.successors.Keys ::
           (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys))
@@ -234,48 +253,5 @@ module SSA
 
     Cfg(g.entry, blocks', g.successors) 
   }
-
-  /*
-  function method InputIncarnationAux(incRes: IncarnationResult, curInc: map<var_name, nat>, xs: seq<var_name>) : IncarnationResult
-    requires (set x | x in xs) <= curInc.Keys
-    requires incRes.conflicts <= incRes.localIncMap.Keys
-    requires incRes.localIncMap.Keys <= incRes.globalIncMap.Keys
-    decreases xs
-  {
-    if |xs| == 0 then
-      incRes
-    else 
-      var x := xs[0];
-
-      if x in incRes.conflicts then
-        //handle conflicts elsewhere
-        InputIncarnationAux(incRes, curInc, xs[1..])
-      else
-        if x in incRes.localIncMap.Keys then
-          var xPrevInc := incRes.localIncMap[x];
-          var xCurInc := curInc[x];
-
-          if xPrevInc == xCurInc then
-            //incarnations match, can keep the same incarnation
-            InputIncarnationAux(incRes, curInc, xs[1..])
-          else
-            //incarnations do not match, need to record a conflict and create a new incarnation
-            var xNewInc := incRes.globalIncMap[x]+1;
-            var globalIncMap' := incRes.globalIncMap[x := xNewInc];
-            var localIncMap' := incRes.localIncMap[x := xNewInc];
-            var conflicts' := incRes.conflicts + {x};
-
-            var incRes' := IncarnationResult_(localIncMap', globalIncMap', conflicts', incRes.newVars);
-
-            InputIncarnationAux(incRes', curInc, xs[1..])
-        else
-          //variable was not recorded
-          var xNewInc := curInc[x];
-          var localIncMap' := incRes.localIncMap[x := xNewInc];
-          var newVars' := incRes.newVars + [x];
-          var incRes' := IncarnationResult_(localIncMap', incRes.globalIncMap, incRes.conflicts, newVars');
-          InputIncarnationAux(incRes', curInc, xs[1..])
-  }
-  */
 
 }
