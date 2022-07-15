@@ -2,6 +2,7 @@ include "../lang/BoogieSemantics.dfy"
 include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
 include "../util/Naming.dfy"
+include "../util/AstSubsetPredicates.dfy"
 
 module DesugarScopedVarsImpl {
 
@@ -12,6 +13,7 @@ module DesugarScopedVarsImpl {
   import Util
   import opened Wrappers
   import opened Naming
+  import opened AstSubsetPredicates
 
   function method CreateUniqueVarDecls(varDecls: seq<(var_name, Ty)>, counter: nat) : seq<(var_name,Ty)>
     ensures 
@@ -110,8 +112,8 @@ module DesugarScopedVarsImpl {
       var (els', counter'') := MakeScopedVarsUnique(els, substMap, counter');
       (If(None, thn', els'), counter'')
     case _ => (c, counter) //TODO (precondition should eliminate this case)
-  }  
- 
+  }   
+
   function method RemoveScopedVarsAux(c: Cmd): (Cmd, seq<VarDecl>)
     /*requires substMap.Values <= set c,x | x in substMap.Keys && 0 < c < usedVars.1 :: VersionedName(x, c)
     requires forall x | x in substMap.Keys :: exists c : nat :: c <= usedVars.1 && substMap[x] == VersionedName(x, c)
@@ -143,6 +145,27 @@ module DesugarScopedVarsImpl {
     (c', decls)
   }
 
+  lemma MakeScopedVarsUniquePreserveStructure(c: Cmd, substMap: map<var_name, var_name>, counter: nat)
+    requires NoLoopsNoIfGuard(c)
+    ensures 
+      var (c', _) := MakeScopedVarsUnique(c, substMap, counter);
+      NoLoopsNoIfGuard(c')
+  { }
+
+  lemma RemoveScopedVarsAuxPreserveStructure(c: Cmd)
+    requires NoLoopsNoIfGuard(c)
+    ensures NoLoopsNoIfGuardNoScopedVars(RemoveScopedVarsAux(c).0)
+  { }
+
+  lemma RemoveScopedVarsStructure(c: Cmd)
+    requires NoLoopsNoIfGuard(c)
+    ensures NoLoopsNoIfGuardNoScopedVars(RemoveScopedVars(c).0)
+  { 
+    var (cUnique, _) := MakeScopedVarsUnique(c, map[], 0);
+    MakeScopedVarsUniquePreserveStructure(c, map[], 0);
+    RemoveScopedVarsAuxPreserveStructure(cUnique);
+  }
+
   function GetDecls(c: Cmd) : seq<VarDecl>
   {
     match c
@@ -170,7 +193,5 @@ module DesugarScopedVarsImpl {
       && Sequences.HasNoDuplicates(GetDecls(c'))
       && counter <= counter'
   { assume false; }
-  
-
 
 }

@@ -24,6 +24,9 @@ module BoogieSemantics {
       var v1 :- EvalExpr(a, e1, s);
       var v2 :- EvalExpr(a, e2, s);
       EvalBinop(v1, bop, v2)
+    case Let(x, e, body) =>
+      var v :- EvalExpr(a, e, s);
+      EvalExpr(a, body, s[x := v])
     /*
     case Binder(ForallQ, x, ty, e) =>  
     if forall v :: TypeOfVal(a,v) == ty ==> EvalExpr(a, e, s[x := v]) == Some(LitV(LitBool(true))) then 
@@ -51,6 +54,29 @@ module BoogieSemantics {
     case BinOp(e1, bop, e2) =>
       assert EvalExpr(a, e1, s1) == EvalExpr(a, e1, s2);
       assert EvalExpr(a, e2, s1) == EvalExpr(a, e2, s2);
+    case Let(x, e, body) =>
+      assert EvalExpr(a, e, s1) == EvalExpr(a, e, s2) by {
+        EvalExprFreeVarEq(a, e, s1, s2);
+      }
+
+      var vOpt := EvalExpr(a, e, s1);
+
+      if vOpt.Some? {
+        var v := vOpt.value;
+        assert EvalExpr(a, body, s1[x := v]) == EvalExpr(a, body, s2[x := v]) by
+        { 
+          assert (forall k | k in body.FreeVars() - {x} :: Maps.Get(s1, k) == Maps.Get(s2, k));
+          forall k | k in body.FreeVars()
+          ensures Maps.Get(s1[x := v], k) == Maps.Get(s2[x:= v], k)
+          {
+            if k != x {
+              assert k in (body.FreeVars() - {x});
+            }
+          }
+          EvalExprFreeVarEq(a, body, s1[x := v], s2[x := v]);
+        }
+      }
+
     /*
     case Binder(ForallQ, x, ty, e) => assume false; //TODO
     case Binder(ExistsQ, x, ty, e) => assume false; //TODO
@@ -58,6 +84,7 @@ module BoogieSemantics {
   }
 
  lemma MultiSubstExprSpec<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
+    requires e.NoBinders() //TODO: need to change substitution to avoid this
     requires forall x | x in e.FreeVars() :: 
       && (x in varMapping.Keys ==> Maps.Get(s1, x) == Maps.Get(s2, varMapping[x]))
       && (x !in varMapping.Keys ==> Maps.Get(s1, x) == Maps.Get(s2, x))
@@ -73,7 +100,9 @@ module BoogieSemantics {
       assert EvalExpr(a, e2, s1) == EvalExpr(a, e2.MultiSubstExpr(varMapping), s2);
   }
   
+ 
  lemma MultiSubstExprSpec2<A(!new)>(a: absval_interp<A>, varMapping: map<var_name, var_name>, e: Expr, s1: state<A>, s2: state<A>)
+    requires e.NoBinders()
     requires (forall k | k in varMapping.Keys :: Maps.Get(s1, k) == Maps.Get(s2, varMapping[k]))
     requires e.FreeVars() <= varMapping.Keys
     ensures EvalExpr(a, e, s1) == EvalExpr(a, e.MultiSubstExpr(varMapping), s2)

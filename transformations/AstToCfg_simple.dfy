@@ -127,7 +127,7 @@ module AstToCfg {
         (cfg, nextVersion2, exitOptResult)
   }
 
-  function AstToCfg(c: Cmd) : Cfg
+  function method AstToCfg(c: Cmd) : Cfg
     requires NoBreaksScopedVarsLoops(c)
   {
     var (g, _, exit) := AstToCfgAux(c, 0);

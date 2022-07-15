@@ -10,7 +10,7 @@ module NormalizeAst {
   import Util
   import opened AstSubsetPredicates
 
-  function SeqCmdOpt(c1Opt: Option<Cmd>, c2Opt: Option<Cmd>) : Option<Cmd>
+  function method SeqCmdOpt(c1Opt: Option<Cmd>, c2Opt: Option<Cmd>) : Option<Cmd>
   {
     if c1Opt.Some? && c2Opt.Some? then
       Some(Seq(c1Opt.value, c2Opt.value))
@@ -20,7 +20,7 @@ module NormalizeAst {
       c2Opt
   }
 
-  function SeqSimpleOptCmd(c1Opt: Option<SimpleCmd>, c2: Cmd) : Cmd
+  function method SeqSimpleOptCmd(c1Opt: Option<SimpleCmd>, c2: Cmd) : Cmd
   {
     if c1Opt.Some? then
       Seq(SimpleCmd(c1Opt.value), c2)
@@ -28,7 +28,7 @@ module NormalizeAst {
       c2
   }
 
-  function SeqCmdSimpleOpt(c1Opt: Option<Cmd>, c2Opt: Option<SimpleCmd>) : Cmd
+  function method SeqCmdSimpleOpt(c1Opt: Option<Cmd>, c2Opt: Option<SimpleCmd>) : Cmd
     requires c1Opt.Some? || c2Opt.Some?
   {
     if c1Opt.Some? && c2Opt.Some? then
@@ -42,7 +42,7 @@ module NormalizeAst {
   /** Makes sure that adjacent simple commands are combined into the same simple command.
       This way the AST-to-CFG transformation can be made simpler while reducing the number of generated
       basic blocks. */
-  function NormalizeAst(c: Cmd, precedingSimple: Option<SimpleCmd>) : (Option<Cmd>, Option<SimpleCmd>)
+  function method NormalizeAst(c: Cmd, precedingSimple: Option<SimpleCmd>) : (Option<Cmd>, Option<SimpleCmd>)
     ensures var (cOpt', scExitOpt) := NormalizeAst(c, precedingSimple); cOpt'.Some? || scExitOpt.Some?
   {
     match c 
@@ -77,13 +77,38 @@ module NormalizeAst {
       (Some(SeqSimpleOptCmd(precedingSimple, Loop(invs, body') )), None)
   }
 
+  lemma Aux(cOpt: Option<Cmd>, scOpt: Option<SimpleCmd>)
+    requires cOpt.Some? || scOpt.Some?
+    requires cOpt.Some? ==> NoLoopsNoIfGuardNoScopedVars(cOpt.value)
+    ensures NoLoopsNoIfGuardNoScopedVars(SeqCmdSimpleOpt(cOpt, scOpt))
+  { }
+
+  lemma NormalizeAstPreserveStructure(c: Cmd, precedingSimple: Option<SimpleCmd>)
+  requires NoLoopsNoIfGuardNoScopedVars(c)
+  ensures 
+    var (cOpt', scExitOpt) := NormalizeAst(c, precedingSimple); 
+    cOpt'.Some? ==> NoLoopsNoIfGuardNoScopedVars(cOpt'.value)
+  { 
+    match c 
+    case Scope(optLabel, varDecls, body) =>
+      var (body', scExitOpt) := NormalizeAst(body, None);
+      Aux(body', scExitOpt);
+    case If(optCond, thn, els) =>
+      var (thnOpt', scExitOpt1) := NormalizeAst(thn, None);
+      var (elsOpt', scExitOpt2) := NormalizeAst(els, None);
+      Aux(thnOpt', scExitOpt1);
+      Aux(elsOpt', scExitOpt2);
+    case _ =>
+ }
+           
+
   lemma TransformAstCorrectness<A(!new)>(a: absval_interp<A>, c: Cmd, precedingSimple: Option<SimpleCmd>, post: WpPost<A>, s: state<A>)
     requires LabelsWellDefAux(SeqSimpleOptCmd(precedingSimple, c), post.scopes.Keys)
     requires var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
              LabelsWellDefAux(SeqCmdSimpleOpt(cOpt', scExitOpt), post.scopes.Keys)
-    requires NoLoopsNoIfGuard(c)
+    requires NoLoopsNoIfGuardNoScopedVars(c)
     ensures 
-      var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
+      var (cOpt', scExitOpt) := NormalizeAst(c, precedingSimple);
       WpCmd(a, SeqSimpleOptCmd(precedingSimple, c), post)(s) == 
       WpCmd(a, SeqCmdSimpleOpt(cOpt', scExitOpt), post)(s)
   {

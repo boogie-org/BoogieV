@@ -69,9 +69,18 @@ module LoopElim {
       requires |cs| > 0
       requires forall c | c in cs :: NoLoops(c);
       ensures NoLoops(SeqToCmd(cs))
-    { }
+    { 
+        if |cs| > 1 {
+          calc {
+            NoLoops(SeqToCmd(cs));
+            NoLoops(Seq(cs[0], SeqToCmd(cs[1..])));
+            && NoLoops(cs[0])
+            && NoLoops(SeqToCmd(cs[1..]));
+          }
+        }
+    }
 
-    function EliminateLoops(c: Cmd) : Cmd 
+    function method EliminateLoops(c: Cmd) : Cmd 
     ensures NoLoops(EliminateLoops(c))
     {
         match c

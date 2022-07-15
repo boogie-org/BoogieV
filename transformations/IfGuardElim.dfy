@@ -42,6 +42,11 @@ module IfGuardElim {
       Seq(c1', c2')
   }
 
+  lemma EliminateIfGuardsNoLoops(c: Cmd)
+    requires NoLoops(c)
+    ensures NoLoops(EliminateIfGuards(c)) 
+  { }
+
   lemma EliminateIfGuardsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPost)
   requires NoLoops(c)
   requires LabelsWellDefAux(c, post.scopes.Keys) && LabelsWellDefAux(EliminateIfGuards(c), post.scopes.Keys)

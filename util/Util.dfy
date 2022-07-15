@@ -6,12 +6,12 @@ module Util {
   import opened Wrappers
   import Seq
 
-  function RemoveDuplicates<T>(s: seq<T>): seq<T>
+  function method RemoveDuplicates<T(==)>(s: seq<T>): seq<T>
   {
     RemoveDuplicatesAux(s, {})
   }
 
-  function RemoveDuplicatesAux<T>(s: seq<T>, alreadyIncluded: set<T>): seq<T>
+  function method RemoveDuplicatesAux<T>(s: seq<T>, alreadyIncluded: set<T>): seq<T>
   {
     if |s| == 0 then []
     else 

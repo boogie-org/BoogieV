@@ -5,72 +5,49 @@ module AstSubsetPredicates
   import opened BoogieLang
   import opened Wrappers
 
-  predicate NoLoops(c: Cmd)
+  predicate method NoLoops(c: Cmd)
   {
-    match c
-    case SimpleCmd(_) => true
-    case Break(optLbl) => true
-    case Seq(c1, c2) => NoLoops(c1) && NoLoops(c2)
-    case Loop(_,_) => false
-    case Scope(_, varDecls, body) => NoLoops(body)
-    case If(_, thn, els) => NoLoops(thn) && NoLoops(els)
+    c.PredicateRec((c: Cmd) => !c.Loop?, sc => true, e => true)
   }
 
-  predicate NoIfGuard(c: Cmd)
+  predicate method NoIfGuard(c: Cmd)
   {
-    match c
-    case SimpleCmd(_) => true
-    case Break(optLbl) => true
-    case Seq(c1, c2) => NoIfGuard(c1) && NoIfGuard(c2)
-    case Loop(_, body) => NoIfGuard(body)
-    case Scope(_, varDecls, body) => NoIfGuard(body)
-    case If(optCond, thn, els) => 
-      && optCond == None 
-      && NoIfGuard(thn)
-      && NoIfGuard(els)
+    c.PredicateRec((c: Cmd) => c.If? ==> c.guard == None, sc => true, e => true)
   }
 
-  predicate NoLoopsNoIfGuard(c: Cmd)
+  predicate method NoLoopsNoIfGuard(c: Cmd)
   {
     && NoLoops(c) 
     && NoIfGuard(c)
   }
 
-  predicate NoScopedVars(c: Cmd)
+  predicate method NoScopedVars(c: Cmd)
   {
-    match c
-    case SimpleCmd(_) => true
-    case Break(optLbl) => true
-    case Seq(thn, els) => 
-      && NoScopedVars(thn) 
-      && NoScopedVars(els)
-    case Loop(_,_) => false
-    case Scope(_, varDecls, body) => 
-      && varDecls == [] 
-      && NoScopedVars(body)
-    case If(_, thn, els) => NoScopedVars(thn) && NoScopedVars(els)
+    c.PredicateRec((c: Cmd) => c.Scope? ==> c.varDecls == [], sc => true, e => true)
   }
 
-  predicate NoLoopsNoIfGuardNoScopedVars(c: Cmd)
+  predicate method NoLoopsNoIfGuardNoScopedVars(c: Cmd)
   {
     && NoLoops(c) 
     && NoIfGuard(c)
     && NoScopedVars(c)
   }
 
-  predicate NoBreaksScopedVarsLoops(c: Cmd)
+  predicate method NoBreaks(c: Cmd)
   {
-    match c
-    case SimpleCmd(_) => true
-    case Break(optLbl) => false
-    case Seq(c1, c2) => NoBreaksScopedVarsLoops(c1) && NoBreaksScopedVarsLoops(c2)
-    case Loop(_,_) => false
-    case Scope(_, varDecls, body) => varDecls == [] && NoBreaksScopedVarsLoops(body)
-    case If(_, thn, els) => NoBreaksScopedVarsLoops(thn) && NoBreaksScopedVarsLoops(els)
+    c.PredicateRec((c: Cmd) => !c.Break?, sc => true, e => true)
   }
 
-  predicate IsPassive(sc: SimpleCmd)
+  predicate method NoBreaksScopedVarsLoops(c: Cmd)
   {
+    && NoBreaks(c)
+    && NoScopedVars(c)
+  }
+
+  predicate method IsPassive(sc: SimpleCmd)
+  {
+    sc.PredicateRec((sc': SimpleCmd) => !sc'.Assign? && !sc'.Havoc?, e => true)
+    /*
     match sc
     case Skip => true
     case Assume(_) => true
@@ -78,5 +55,6 @@ module AstSubsetPredicates
     case Assign(_, _, _) => false
     case Havoc(_) => false
     case SeqSimple(sc1, sc2) => IsPassive(sc1) && IsPassive(sc2)
+    */
   }
 }

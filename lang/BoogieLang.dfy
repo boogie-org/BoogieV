@@ -152,6 +152,7 @@ module BoogieLang {
         case ELit(lit) => {}
         case UnOp(uop, e) => e.FreeVars()
         case BinOp(e1, bop, e2) => e1.FreeVars() + e2.FreeVars()
+        case Let(x, e, body) => e.FreeVars() + (body.FreeVars() - {x})
         /*
           case Binder(binderKind, x, t, e) => 
           e.FreeVars() - {x} */
@@ -162,6 +163,22 @@ module BoogieLang {
 
     static const FalseExpr: Expr := ELit(LitBool(false));
 
+    predicate method PredicateRec(pred: Expr -> bool)
+    {
+      pred(this) &&
+      match this
+      case Var(x) => true
+      case ELit(_) => true
+      case UnOp(uop, e') => e'.PredicateRec(pred)
+      case BinOp(e1, bop, e2) => e1.PredicateRec(pred) && e2.PredicateRec(pred)
+      case Let(x, e, body) => e.PredicateRec(pred) && body.PredicateRec(pred)
+    }
+
+    predicate method NoBinders()
+    {
+      PredicateRec((e:Expr) => !e.Let?)
+    }
+
     function method MultiSubstExpr(varMapping: map<var_name, var_name>): Expr
     {
       match this
@@ -169,7 +186,7 @@ module BoogieLang {
       case ELit(_) => this
       case UnOp(uop, e') => UnOp(uop, e'.MultiSubstExpr(varMapping))
       case BinOp(e1, bop, e2) => BinOp(e1.MultiSubstExpr(varMapping), bop, e2.MultiSubstExpr(varMapping))
-      case _ => this //TODO must be changed
+      case Let(x, e, body) => Let(x, e, body.MultiSubstExpr(varMapping-{x})) //TODO: does not take variable capturing into account
     }
   }
 
@@ -220,6 +237,23 @@ module BoogieLang {
       case Assign(x, t, e) => x in xs && e.FreeVars() <= xs
       case Havoc(varDecls) => GetVarNames(varDecls) <= xs
       case SeqSimple(sc1, sc2) => sc1.WellFormedVars(xs) && sc2.WellFormedVars(xs)
+    }
+
+    predicate method PredicateRec(pred: SimpleCmd -> bool, predE: Expr -> bool)
+    {
+      pred(this) &&
+      match this
+      case Skip => true
+      case Assert(e) => predE(e)
+      case Assume(e) => predE(e)
+      case Assign(x, t, e) => predE(e)
+      case Havoc(varDecls) => true
+      case SeqSimple(sc1, sc2) => sc1.PredicateRec(pred, predE) && sc2.PredicateRec(pred, predE)
+    }
+
+    predicate method NoBinders()
+    {
+      PredicateRec((sc: SimpleCmd) => true, (e: Expr) => e.NoBinders())
     }
 
     function method SubstSimpleCmd(varMapping: map<var_name, var_name>) : SimpleCmd
@@ -329,6 +363,26 @@ module BoogieLang {
           return s;
       }
     }
+
+    predicate method PredicateRec(pred: Cmd -> bool, predSimple: SimpleCmd -> bool, predE: Expr -> bool)
+    {
+      pred(this)
+      &&
+      match this
+      case SimpleCmd(sc) => predSimple(sc) 
+      case Break(optLbl) => true
+      case Seq(c1, c2) => c1.PredicateRec(pred, predSimple, predE) && c2.PredicateRec(pred, predSimple, predE)
+      case Loop(invs, body) => (forall inv | inv in invs :: predE(inv)) && body.PredicateRec(pred, predSimple, predE)
+      case Scope(_, varDecls, body) => body.PredicateRec(pred, predSimple, predE)
+      case If(guardOpt, thn, els) => 
+        && (guardOpt.Some? ==> predE(guardOpt.value))
+        && thn.PredicateRec(pred, predSimple, predE) 
+        && els.PredicateRec(pred, predSimple, predE)
+    }
+
+    predicate method NoBinders() {
+      PredicateRec( (c: Cmd) => true, (sc: SimpleCmd) => sc.NoBinders(), (e: Expr) => e.NoBinders() )
+    }
   }
 
   lemma SimpleCmdWellFormedVarsLarger(sc: SimpleCmd, vars: set<var_name>, vars': set<var_name>)
@@ -400,7 +454,7 @@ module BoogieLang {
       SeqSimple(simpleCmds[0], SeqToSimpleCmd(simpleCmds[1..]))
   }
 
-  function NAryBinOp(bop: Binop, exprIfEmpty: Expr, es: seq<Expr>): Expr
+  function method NAryBinOp(bop: Binop, exprIfEmpty: Expr, es: seq<Expr>): Expr
   {
     if |es| == 0 then
       exprIfEmpty
@@ -429,18 +483,18 @@ module BoogieLang {
     assert GetVarNamesSeq(vs)[i] == vs[i].0;
   }
 
-  function ModifiedVars(c: Cmd): seq<(var_name, Ty)>
+  function method ModifiedVars(c: Cmd): seq<(var_name, Ty)>
   {
     RemoveDuplicates(ModifiedVarsAux(c, {}))
   }
 
-  function ModifiedVarDecls(decls: seq<(var_name, Ty)>, exclude: set<var_name>) : seq<(var_name, Ty)>
+  function method ModifiedVarDecls(decls: seq<(var_name, Ty)>, exclude: set<var_name>) : seq<(var_name, Ty)>
   {
     if |decls| == 0 then []
     else (if decls[0].0 in exclude then [] else [decls[0]]) + ModifiedVarDecls(decls[1..], exclude)
   }
 
-  function ModifiedVarsAux(c: Cmd, exclude: set<var_name>): seq<(var_name, Ty)>
+  function method ModifiedVarsAux(c: Cmd, exclude: set<var_name>): seq<(var_name, Ty)>
   {
     match c 
     case SimpleCmd(Assign(x,t,_)) => if x in exclude then [] else [(x,t)]
