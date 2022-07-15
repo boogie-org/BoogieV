@@ -100,8 +100,9 @@ module BoogieLang {
   {
     function method ToString() : string {
       match this 
-      case ForallQ => "forall"
-      case ExistsQ => "exists"
+      case Let => "let"
+      //case ForallQ => "forall"
+      //case ExistsQ => "exists"
     }
   }
     
@@ -110,7 +111,8 @@ module BoogieLang {
     | ELit(Lit)
     | UnOp(Unop, Expr)
     | BinOp(Expr, Binop, Expr)
-  // | Binder(BinderKind, var_name, Ty, Expr) //switch to DeBruijn?
+    | Let(var_name, Expr, Expr)
+    //| Binder(BinderKind, var_name, Ty, Expr) //switch to DeBruijn?
   /** TODO 
     | Old(Expr)
     | FunCall(fun_name, List<Expr>)
@@ -129,6 +131,10 @@ module BoogieLang {
           var bopS := bop.ToString();
           var e2S := e2.ToString();
           return "(" + e1S + " " + bopS + " " + e2S + ")";
+        case Let(x, e1, e2) =>
+          var e1S := e1.ToString();
+          var e2S := e2.ToString();
+          return "(let " + x + " = " + e1S + " in " + e2S + ")";
         /*
         case Binder(binderKind, x, t, e) => 
           var tS := t.ToString();
@@ -147,9 +153,8 @@ module BoogieLang {
         case UnOp(uop, e) => e.FreeVars()
         case BinOp(e1, bop, e2) => e1.FreeVars() + e2.FreeVars()
         /*
-        case Binder(binderKind, x, t, e) => 
-          e.FreeVars() - {x}
-        */
+          case Binder(binderKind, x, t, e) => 
+          e.FreeVars() - {x} */
       }
     }
 
@@ -164,6 +169,7 @@ module BoogieLang {
       case ELit(_) => this
       case UnOp(uop, e') => UnOp(uop, e'.MultiSubstExpr(varMapping))
       case BinOp(e1, bop, e2) => BinOp(e1.MultiSubstExpr(varMapping), bop, e2.MultiSubstExpr(varMapping))
+      case _ => this //TODO must be changed
     }
   }
 
@@ -243,7 +249,7 @@ module BoogieLang {
     | Seq(Cmd, Cmd)
     | Scope(labelName: Option<lbl_name>, varDecls: seq<VarDecl>, body: Cmd)
     | Loop(invariants: seq<Expr>, body: Cmd) 
-    //cond = None represents a non-deterministic if-statement (if(*) {...} else {...})
+    //guard = None represents a non-deterministic if-statement (if(*) {...} else {...})
     | If(guard: Option<Expr>, thn: Cmd, els: Cmd)
   
   /*

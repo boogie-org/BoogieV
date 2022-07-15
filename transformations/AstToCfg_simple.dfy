@@ -47,6 +47,7 @@ module AstToCfg {
                 && nextVersion < nextVersion' 
                 && (nextVersion <= exit < nextVersion')
                 && (forall n :: n in cfg.blocks.Keys ==> nextVersion <= n < nextVersion')
+                && (forall n | nextVersion <= n < nextVersion' :: n in cfg.blocks.Keys)
                 && cfg.entry in cfg.blocks.Keys
                 && exit in cfg.blocks.Keys
                    //exit block is the only sink block (note that exit block is not in successors.Keys)
@@ -124,6 +125,13 @@ module AstToCfg {
         var cfg := Cfg(entryId, blocksBeforeJoin, successorsBeforeJoin);
         var exitOptResult := if exitOpt1.Some? then exitOpt1 else exitOpt2;
         (cfg, nextVersion2, exitOptResult)
+  }
+
+  function AstToCfg(c: Cmd) : Cfg
+    requires NoBreaksScopedVarsLoops(c)
+  {
+    var (g, _, exit) := AstToCfgAux(c, 0);
+    Cfg(g.entry, g.blocks, g.successors[exit.value := []])
   }
 
   lemma AstToCfgAcyclic(

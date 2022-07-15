@@ -81,7 +81,7 @@ module NormalizeAst {
     requires LabelsWellDefAux(SeqSimpleOptCmd(precedingSimple, c), post.scopes.Keys)
     requires var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
              LabelsWellDefAux(SeqCmdSimpleOpt(cOpt', scExitOpt), post.scopes.Keys)
-    requires NoLoopsNoIfCond(c)
+    requires NoLoopsNoIfGuard(c)
     ensures 
       var (cOpt', scExitOpt):= NormalizeAst(c, precedingSimple);
       WpCmd(a, SeqSimpleOptCmd(precedingSimple, c), post)(s) == 

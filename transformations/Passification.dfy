@@ -5,7 +5,7 @@ include "../dafny-libraries/src/Math.dfy"
 include "../util/Naming.dfy"
 include "../util/AstSubsetPredicates.dfy"
 
-module SSA 
+module Passification
 {
 
   import opened BoogieLang
@@ -220,6 +220,7 @@ module SSA
   }
 
   function method PassifySimpleCmd(sc: SimpleCmd) : SimpleCmd
+  ensures IsPassive(PassifySimpleCmd(sc))
   {
     match sc
     case Skip => sc

@@ -112,7 +112,7 @@ module DesugarScopedVarsImpl {
     case _ => (c, counter) //TODO (precondition should eliminate this case)
   }  
  
-  function method RemoveScopedVars(c: Cmd): (Cmd, (seq<(var_name, Ty)>))
+  function method RemoveScopedVarsAux(c: Cmd): (Cmd, seq<VarDecl>)
     /*requires substMap.Values <= set c,x | x in substMap.Keys && 0 < c < usedVars.1 :: VersionedName(x, c)
     requires forall x | x in substMap.Keys :: exists c : nat :: c <= usedVars.1 && substMap[x] == VersionedName(x, c)
     ensures 
@@ -122,18 +122,25 @@ module DesugarScopedVarsImpl {
     case SimpleCmd(sc) => (c, [])
     case Break(_) => (c, [])
     case Seq(c1, c2) => 
-      var (c1', decls1) := RemoveScopedVars(c1);
-      var (c2', decls2) := RemoveScopedVars(c2);
+      var (c1', decls1) := RemoveScopedVarsAux(c1);
+      var (c2', decls2) := RemoveScopedVarsAux(c2);
       (Seq(c1', c2'), decls1 + decls2)
     case Scope(optLabel, varDecls, body) =>
-      var (body', declsBody) := RemoveScopedVars(body);
+      var (body', declsBody) := RemoveScopedVarsAux(body);
       (Scope(optLabel, [], body'), varDecls + declsBody)
     case If(None, thn, els) => 
       //TODO: make sure If(Some(...)) has been desugared
-      var (thn', declsThn) := RemoveScopedVars(thn);
-      var (els', declsEls) := RemoveScopedVars(els);
+      var (thn', declsThn) := RemoveScopedVarsAux(thn);
+      var (els', declsEls) := RemoveScopedVarsAux(els);
       (If(None, thn', els'), declsThn + declsEls)
     case _ => (c, []) //TODO (precondition should eliminate this case)
+  }
+
+  function method RemoveScopedVars(c: Cmd) : (Cmd, seq<VarDecl>)
+  {
+    var (cUnique, _) := MakeScopedVarsUnique(c, map[], 0);
+    var (c', decls) := RemoveScopedVarsAux(cUnique);
+    (c', decls)
   }
 
   function GetDecls(c: Cmd) : seq<VarDecl>

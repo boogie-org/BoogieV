@@ -728,7 +728,7 @@ module MakeScopedVarsUniqueProof {
       requires Maps.Injective(substMap)
       requires 
         var (c', counter') := MakeScopedVarsUnique(c, substMap, counter);
-        && NoLoopsNoIfCond(c)
+        && NoLoopsNoIfGuard(c)
         && LabelsWellDefAux(c, post1.scopes.Keys) 
         && LabelsWellDefAux(c', post2.scopes.Keys)
         && RelPost(substMap, post1, post2, s2Orig)

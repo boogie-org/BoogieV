@@ -107,7 +107,7 @@ module BoogieSemantics {
   function LoopDesugaring(invs: seq<Expr>, loopBody: Cmd) : Cmd
   {
       var loopTargets := ModifiedVars(loopBody);
-      var invsConj := NAryBinOp(And, ELit(Lit.TrueLit), invs);
+      var invsConj := NAryBinOp(And, Expr.TrueExpr, invs);
 
       var body' := [
         SimpleCmd(Assert(invsConj)), 
@@ -115,7 +115,7 @@ module BoogieSemantics {
         SimpleCmd(Assume(invsConj)), 
         loopBody,  
         SimpleCmd(Assert(invsConj)), 
-        SimpleCmd(Assume(ELit(Lit.FalseLit)))
+        SimpleCmd(Assume(Expr.FalseExpr))
       ];
 
       SeqToCmd(body')
@@ -254,9 +254,9 @@ module BoogieSemantics {
       }
     case Loop(invs, body) => 
       var loopTargets := ModifiedVars(body);
-      var invsConj := NAryBinOp(And, ELit(Lit.TrueLit), invs);
+      var invsConj := NAryBinOp(And, Expr.TrueExpr, invs);
 
-      var body' := [SimpleCmd(Assert(invsConj)), SimpleCmd(Havoc(loopTargets)), SimpleCmd(Assume(invsConj)), body,  SimpleCmd(Assert(invsConj)), SimpleCmd(Assume(ELit(Lit.FalseLit)))];
+      var body' := [SimpleCmd(Assert(invsConj)), SimpleCmd(Havoc(loopTargets)), SimpleCmd(Assume(invsConj)), body,  SimpleCmd(Assert(invsConj)), SimpleCmd(Assume(Expr.FalseExpr))];
 
       LoopDesugaringNumScopesAndLoops(invs, body);
       LoopDesugaringLabelsWellDef(invs, body, post.scopes.Keys);

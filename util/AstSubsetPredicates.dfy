@@ -16,24 +16,24 @@ module AstSubsetPredicates
     case If(_, thn, els) => NoLoops(thn) && NoLoops(els)
   }
 
-  predicate NoIfCond(c: Cmd)
+  predicate NoIfGuard(c: Cmd)
   {
     match c
     case SimpleCmd(_) => true
     case Break(optLbl) => true
-    case Seq(c1, c2) => NoIfCond(c1) && NoIfCond(c2)
-    case Loop(_, body) => NoIfCond(body)
-    case Scope(_, varDecls, body) => NoIfCond(body)
+    case Seq(c1, c2) => NoIfGuard(c1) && NoIfGuard(c2)
+    case Loop(_, body) => NoIfGuard(body)
+    case Scope(_, varDecls, body) => NoIfGuard(body)
     case If(optCond, thn, els) => 
       && optCond == None 
-      && NoIfCond(thn)
-      && NoIfCond(els)
+      && NoIfGuard(thn)
+      && NoIfGuard(els)
   }
 
-  predicate NoLoopsNoIfCond(c: Cmd)
+  predicate NoLoopsNoIfGuard(c: Cmd)
   {
     && NoLoops(c) 
-    && NoIfCond(c)
+    && NoIfGuard(c)
   }
 
   predicate NoScopedVars(c: Cmd)
@@ -51,10 +51,10 @@ module AstSubsetPredicates
     case If(_, thn, els) => NoScopedVars(thn) && NoScopedVars(els)
   }
 
-  predicate NoLoopsNoIfCondNoScopedVars(c: Cmd)
+  predicate NoLoopsNoIfGuardNoScopedVars(c: Cmd)
   {
     && NoLoops(c) 
-    && NoIfCond(c)
+    && NoIfGuard(c)
     && NoScopedVars(c)
   }
 
@@ -72,8 +72,11 @@ module AstSubsetPredicates
   predicate IsPassive(sc: SimpleCmd)
   {
     match sc
+    case Skip => true
+    case Assume(_) => true
+    case Assert(_) => true
     case Assign(_, _, _) => false
     case Havoc(_) => false
-    case _ => true
+    case SeqSimple(sc1, sc2) => IsPassive(sc1) && IsPassive(sc2)
   }
 }
