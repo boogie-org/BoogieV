@@ -43,9 +43,22 @@ module IfGuardElim {
   }
 
   lemma EliminateIfGuardsNoLoops(c: Cmd)
-    requires NoLoops(c)
-    ensures NoLoops(EliminateIfGuards(c)) 
-  { }
+    requires NoLoops(c) && NoBreaks(c)
+    ensures NoLoops(EliminateIfGuards(c)) && NoBreaks(EliminateIfGuards(c))
+  { 
+    match c
+    case If(optGuard, thn, els) =>
+      var thn' := EliminateIfGuards(thn);
+      var els' := EliminateIfGuards(els);
+      if optGuard.Some? {
+        var guard := optGuard.value;
+        assert NoLoops(Seq(SimpleCmd(Assume(guard)), thn'));
+        assert NoLoops(Seq(SimpleCmd(Assume(UnOp(Not, guard))), els'));
+        assert NoBreaks(Seq(SimpleCmd(Assume(guard)), thn'));
+        assert NoBreaks(Seq(SimpleCmd(Assume(UnOp(Not, guard))), els'));
+      }
+    case _ => 
+  }
 
   lemma EliminateIfGuardsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPost)
   requires NoLoops(c)

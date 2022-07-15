@@ -9,8 +9,6 @@ module CfgHelper {
 
   /** Topological order */
 
-  /** would like to use Sequences.FoldLeft instead of a separate method here,
-  but not sure how to get the termination constraints right */
   function method TopologicalOrderAuxSeq<T>(
     succ: Graph<T>, 
     ns: seq<T>, 

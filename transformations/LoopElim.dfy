@@ -64,20 +64,38 @@ module LoopElim {
             }
         }
     }
+
+    lemma PredicateRecSeqToCmd(cs: seq<Cmd>, predCmd: Cmd -> bool, predSimpleCmd: SimpleCmd -> bool, predExpr: Expr -> bool)
+      requires |cs| > 0
+      requires forall c : Cmd | c.Seq? :: predCmd(c)
+      requires forall c | c in cs :: c.PredicateRec(predCmd, predSimpleCmd, predExpr)
+      ensures SeqToCmd(cs).PredicateRec(predCmd, predSimpleCmd, predExpr)
+    { 
+        if |cs| > 1 {
+          calc {
+            SeqToCmd(cs).PredicateRec(predCmd, predSimpleCmd, predExpr);
+            Seq(cs[0], SeqToCmd(cs[1..])).PredicateRec(predCmd, predSimpleCmd, predExpr);
+            && cs[0].PredicateRec(predCmd, predSimpleCmd, predExpr)
+            && SeqToCmd(cs[1..]).PredicateRec(predCmd, predSimpleCmd, predExpr);
+          }
+        }
+    }
+
+    /** TODO: the following two lemmas should be derived from a more general lemma on Cmd.PredicatRec */
+    lemma NoBreaksSeqToCmd(cs: seq<Cmd>)
+      requires |cs| > 0
+      requires forall c | c in cs :: NoBreaks(c);
+      ensures NoBreaks(SeqToCmd(cs))
+    { 
+        PredicateRecSeqToCmd(cs, (cmd: Cmd) => !cmd.Break?, sc => true, e => true);
+    }
     
     lemma NoLoopsSeqToCmd(cs: seq<Cmd>)
       requires |cs| > 0
       requires forall c | c in cs :: NoLoops(c);
       ensures NoLoops(SeqToCmd(cs))
     { 
-        if |cs| > 1 {
-          calc {
-            NoLoops(SeqToCmd(cs));
-            NoLoops(Seq(cs[0], SeqToCmd(cs[1..])));
-            && NoLoops(cs[0])
-            && NoLoops(SeqToCmd(cs[1..]));
-          }
-        }
+        PredicateRecSeqToCmd(cs, (cmd: Cmd) => !cmd.Loop?, sc => true, e => true);
     }
 
     function method EliminateLoops(c: Cmd) : Cmd 
@@ -107,6 +125,30 @@ module LoopElim {
         case Seq(c1, c2) =>
             Seq(EliminateLoops(c1), EliminateLoops(c2))
         case _ => c
+    }
+
+    lemma EliminateLoopsPreserveNoBreaks(c: Cmd)
+    requires NoBreaks(c)
+    ensures NoBreaks(EliminateLoops(c))
+    {
+      match c
+      case Loop(invs, body) =>
+        var modDecls : seq<(var_name, Ty)> := ModifiedVars(body);
+        var invsConj := NAryBinOp(And, Expr.TrueExpr, invs);
+        var body' := EliminateLoops(body);
+
+        var seqResult :=
+            [ SimpleCmd(Assert(invsConj)),
+            SimpleCmd(Havoc(modDecls)),
+            SimpleCmd(Assume(invsConj)),
+            body',
+            SimpleCmd(Assert(invsConj)),
+            SimpleCmd(Assume(Expr.FalseExpr))
+            ];
+        
+        assert NoBreaks(body');
+        NoBreaksSeqToCmd(seqResult);
+      case _ => 
     }
 
     lemma EliminateLoopsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPost)

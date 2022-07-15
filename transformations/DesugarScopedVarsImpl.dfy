@@ -146,20 +146,20 @@ module DesugarScopedVarsImpl {
   }
 
   lemma MakeScopedVarsUniquePreserveStructure(c: Cmd, substMap: map<var_name, var_name>, counter: nat)
-    requires NoLoopsNoIfGuard(c)
+    requires NoLoopsNoIfGuard(c) && NoBreaks(c)
     ensures 
       var (c', _) := MakeScopedVarsUnique(c, substMap, counter);
-      NoLoopsNoIfGuard(c')
+      NoLoopsNoIfGuard(c') && NoBreaks(c')
   { }
 
   lemma RemoveScopedVarsAuxPreserveStructure(c: Cmd)
-    requires NoLoopsNoIfGuard(c)
-    ensures NoLoopsNoIfGuardNoScopedVars(RemoveScopedVarsAux(c).0)
+    requires NoLoopsNoIfGuard(c) && NoBreaks(c)
+    ensures NoLoopsNoIfGuardNoScopedVars(RemoveScopedVarsAux(c).0) && NoBreaks(RemoveScopedVarsAux(c).0)
   { }
 
   lemma RemoveScopedVarsStructure(c: Cmd)
-    requires NoLoopsNoIfGuard(c)
-    ensures NoLoopsNoIfGuardNoScopedVars(RemoveScopedVars(c).0)
+    requires NoLoopsNoIfGuard(c) && NoBreaks(c)
+    ensures NoLoopsNoIfGuardNoScopedVars(RemoveScopedVars(c).0) && NoBreaks(RemoveScopedVars(c).0)
   { 
     var (cUnique, _) := MakeScopedVarsUnique(c, map[], 0);
     MakeScopedVarsUniquePreserveStructure(c, map[], 0);

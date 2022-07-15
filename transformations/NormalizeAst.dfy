@@ -79,18 +79,18 @@ module NormalizeAst {
 
   lemma Aux(cOpt: Option<Cmd>, scOpt: Option<SimpleCmd>)
     requires cOpt.Some? || scOpt.Some?
-    requires cOpt.Some? ==> NoLoopsNoIfGuardNoScopedVars(cOpt.value)
-    ensures NoLoopsNoIfGuardNoScopedVars(SeqCmdSimpleOpt(cOpt, scOpt))
+    requires cOpt.Some? ==> NoLoopsNoIfGuardNoScopedVars(cOpt.value) && NoBreaks(cOpt.value)
+    ensures NoLoopsNoIfGuardNoScopedVars(SeqCmdSimpleOpt(cOpt, scOpt)) && NoBreaks(SeqCmdSimpleOpt(cOpt, scOpt))
   { }
 
   lemma NormalizeAstPreserveStructure(c: Cmd, precedingSimple: Option<SimpleCmd>)
-  requires NoLoopsNoIfGuardNoScopedVars(c)
+  requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
   ensures 
     var (cOpt', scExitOpt) := NormalizeAst(c, precedingSimple); 
-    cOpt'.Some? ==> NoLoopsNoIfGuardNoScopedVars(cOpt'.value)
+    cOpt'.Some? ==> (NoLoopsNoIfGuardNoScopedVars(cOpt'.value) && NoBreaks(cOpt'.value))
   { 
     match c 
-    case Scope(optLabel, varDecls, body) =>
+    case Scope(_, _, body) =>
       var (body', scExitOpt) := NormalizeAst(body, None);
       Aux(body', scExitOpt);
     case If(optCond, thn, els) =>

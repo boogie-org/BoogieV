@@ -3,6 +3,8 @@ include "../dafny-libraries/src/Wrappers.dfy"
 include "../dafny-libraries/src/Math.dfy"
 include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 
+include "../util/AstSubsetPredicates.dfy"
+
 module AstToCfg {
 
   import opened BoogieLang
@@ -11,17 +13,7 @@ module AstToCfg {
   import Sequences = Seq
   import opened BoogieCfg
   import Math
-
-  predicate NoBreaksScopedVarsLoops(c: Cmd)
-  {
-    match c
-    case SimpleCmd(_) => true
-    case Break(optLbl) => false
-    case Seq(thn, els) => NoBreaksScopedVarsLoops(thn) && NoBreaksScopedVarsLoops(els)
-    case Loop(_,_) => false
-    case Scope(_, varDecls, body) => varDecls == [] && NoBreaksScopedVarsLoops(body)
-    case If(_, thn, els) => NoBreaksScopedVarsLoops(thn) && NoBreaksScopedVarsLoops(els)
-  }
+  import opened AstSubsetPredicates
 
   function {:opaque} CoveringSet(oldVersion: nat, newVersion: nat, exclude: nat) : set<nat>
   {
@@ -39,7 +31,7 @@ module AstToCfg {
   */
   function method AstToCfgAux(c: Cmd, nextVersion: BlockId) : (Cfg, BlockId, Option<BlockId>) 
     //Option for exit block needed once break statements are taken into account
-    requires NoBreaksScopedVarsLoops(c)
+    requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
     ensures  var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
                 exitOpt != None  &&
                 var exit := exitOpt.value;
@@ -128,7 +120,7 @@ module AstToCfg {
   }
 
   function method AstToCfg(c: Cmd) : Cfg
-    requires NoBreaksScopedVarsLoops(c)
+    requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
   {
     var (g, _, exit) := AstToCfgAux(c, 0);
     Cfg(g.entry, g.blocks, g.successors[exit.value := []])
@@ -137,7 +129,7 @@ module AstToCfg {
   lemma AstToCfgAcyclic(
     c: Cmd, 
     nextVersion: BlockId)
-    requires NoBreaksScopedVarsLoops(c)
+    requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
     ensures  
       var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
 
