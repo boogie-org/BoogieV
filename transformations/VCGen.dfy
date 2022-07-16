@@ -56,7 +56,7 @@ module VCGen
       WpSimpleCmdDeep(g.blocks[blockId], successorVC)
   }
 
-  function method VCGenAux(idTopo: nat, topo: seq<BlockId>, blockMapping: map<BlockId, Expr>, result: Expr) : Expr
+  function method GenerateVCAux(idTopo: nat, topo: seq<BlockId>, blockMapping: map<BlockId, Expr>, result: Expr) : Expr
     requires 0 <= idTopo <= |topo|
     requires forall b | b in topo :: b in blockMapping.Keys
   {
@@ -69,7 +69,7 @@ module VCGen
       Let(blockVCId, blockVC, result)
   }
 
-  function method VCGen(g: Cfg, topo: seq<BlockId>) : Expr
+  function method GenerateVC(g: Cfg, topo: seq<BlockId>) : Expr
     requires |topo| > 0
     requires forall blockId | blockId in g.blocks.Keys :: IsPassive(g.blocks[blockId])
     requires forall blockId | blockId in topo :: blockId in g.blocks.Keys
@@ -77,7 +77,7 @@ module VCGen
     var blockToVC := BlockToVC(g, topo);
 
     //TODO: is topo[0] the entry block?
-    VCGenAux(1, topo, blockToVC, blockToVC[topo[0]])
+    GenerateVCAux(1, topo, blockToVC, blockToVC[topo[0]])
   }
 
 }

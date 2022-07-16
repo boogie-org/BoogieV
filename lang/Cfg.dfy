@@ -12,12 +12,17 @@ module BoogieCfg {
 
   datatype Cfg = Cfg(entry: BlockId, blocks: map<BlockId, BasicBlock>, successors: map<BlockId, seq<BlockId>>)
 
-  function CfgWf(g: Cfg) : bool
+  predicate GraphWf<T>(succRel: map<T, seq<T>>)
   {
-    g.blocks.Keys == g.successors.Keys &&
-    g.entry in g.blocks.Keys &&
-    (forall blockId :: blockId in g.successors.Keys ==> 
-      (forall i :: 0 <= i < |g.successors[blockId]| ==> g.successors[blockId][i] in g.blocks.Keys))
+    (forall blockId :: blockId in succRel.Keys ==> 
+      (forall i :: 0 <= i < |succRel[blockId]| ==> succRel[blockId][i] in succRel.Keys))
+  }
+
+  predicate CfgWf(g: Cfg)
+  {
+    && g.blocks.Keys == g.successors.Keys
+    && g.entry in g.blocks.Keys
+    && GraphWf(g.successors)
   }
 
   type SuccessorRel = map<BlockId, seq<BlockId>>

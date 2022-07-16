@@ -14,9 +14,15 @@ module CfgHelper {
     ns: seq<T>, 
     visitedAndStack: (set<T>, seq<T>)
     ) : (set<T>, seq<T>)
+
+    requires GraphWf(succ)
+    requires (forall n | n in ns :: n in succ.Keys)
+    requires (forall n | n in visitedAndStack.1 :: n in succ.Keys)
     decreases succ.Keys - visitedAndStack.0, 1, ns
     ensures
       var res := TopologicalOrderAuxSeq(succ, ns, visitedAndStack);
+
+      && (forall n | n in res.1 :: n in succ.Keys)
       && visitedAndStack.0 <= res.0      
       //&& (forall n | n in ns :: n !in visitedAndStack.0 ==> n in res.1)
   {
@@ -31,12 +37,16 @@ module CfgHelper {
     n: T, 
     visitedAndStack: (set<T>, seq<T>)
     ) : (set<T>, seq<T>)
+    requires GraphWf(succ)
+    requires n in succ.Keys
+    requires (forall n | n in visitedAndStack.1 :: n in succ.Keys)
     ensures
       var (visited', stack'):= TopologicalOrderAux(succ, n, visitedAndStack);
+      && (forall n | n in stack' :: n in succ.Keys)
       && visitedAndStack.0 <= visited'      
       && ((n !in visitedAndStack.0) ==> 
               && n in visited'
-              && stack'[0] == n)
+              && stack'[0] == n) 
     decreases succ.Keys - visitedAndStack.0, 0
   {
     var (visited, stack) := visitedAndStack;
@@ -45,6 +55,7 @@ module CfgHelper {
     else 
       var visited' := visited + {n};
       var successors : seq<T> := if n in succ.Keys then succ[n] else [];
+      assert n in succ.Keys;
       var (visitedRes, stackRes) :=
         if n in succ.Keys then
           TopologicalOrderAuxSeq(succ, succ[n], (visited', stack))
@@ -55,10 +66,17 @@ module CfgHelper {
   }
 
   function method TopologicalOrder(cfg: Cfg, blocksSeq: seq<BlockId>) : seq<BlockId>
+    requires 
+      && CfgWf(cfg)
+      && forall n | n in blocksSeq :: n in cfg.successors.Keys
+    ensures
+      var res := TopologicalOrder(cfg, blocksSeq);
+      (forall n | n in res :: n in cfg.successors.Keys)
   {
     TopologicalOrderAuxSeq(cfg.successors, blocksSeq, ({}, [])).1
   }
 
+  //lemma TopologicalOrderAuxCorrect()
   
   /** Predecessor map */
   function method PredecessorMap<T>(succ: Graph<T>, ns: seq<T>) : Graph<T>
@@ -73,10 +91,12 @@ module CfgHelper {
   }
 
   lemma PredecessorMapCorrect<T>(succ: Graph<T>, ns: seq<T>)
-  requires succ.Keys <= set n | n in ns :: n
-  ensures
-    var pred := PredecessorMap(succ, ns);
+    requires succ.Keys <= set n | n in ns :: n
+    requires GraphWf(succ)
+    ensures
+      var pred := PredecessorMap(succ, ns);
 
+    && pred.Keys <= succ.Keys
     /** only predecessors are recorded  */
     && (forall n | n in pred.Keys :: forall p | p in pred[n] :: p in succ.Keys && n in succ[p])
     /** every predecessor is recorded */
@@ -97,6 +117,10 @@ module CfgHelper {
     var inv2 := (pred: Graph<T>, ns: seq<T>) => 
       (forall n | n in succ.Keys && n !in ns :: forall s | s in succ[n] :: s in pred.Keys && n in pred[s]);
     Sequences.LemmaInvFoldLeft(inv2, stp, f, map [], ns);
+
+
+    var inv3 := (pred: Graph<T>, ns: seq<T>) => pred.Keys <= succ.Keys;
+    Sequences.LemmaInvFoldLeft(inv3, stp, f, map [], ns);
   }
 
 }

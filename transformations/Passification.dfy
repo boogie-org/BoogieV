@@ -173,6 +173,10 @@ module Passification
     requires forall id | id in pred.Keys :: forall p | p in pred[id] :: p in cfg.blocks.Keys 
     requires forall block | block in prevResult.incMaps.Keys :: prevResult.incMaps[block].Keys <= prevResult.globalIncMap.Keys
     requires prevResult.incMaps.Keys == set i | 0 <= i < idTopo :: topo[i]
+    requires prevResult.blocks.Keys == set i | 0 <= i < idTopo :: topo[i]
+    ensures   
+      var res := SSAAux(cfg, idTopo, topo, pred, prevResult);
+      res.blocks.Keys == set i | i in topo
     decreases |topo|-idTopo
   {
     if idTopo == |topo| then 
@@ -212,7 +216,9 @@ module Passification
           (forall i | 0 <= i < |pred[blockId]| :: pred[blockId][i] in g.blocks.Keys))
 
       && (forall id | id in pred.Keys :: forall p | p in pred[id] :: p in g.blocks.Keys )
-    
+    ensures 
+      var g' := SSA(g, topo, pred);
+      g'.blocks.Keys == set i | i in topo
   {
     var ssaResult := SSAAux(g, 0, topo, pred, SSAResult_(map[], map[], map[]));
 
@@ -244,8 +250,9 @@ module Passification
       && (forall blockId | blockId in pred.Keys ::
           (forall i | 0 <= i < |pred[blockId]| :: pred[blockId][i] in g.blocks.Keys))
     ensures 
-      var g := PassifyCfg(g, topo, pred);
-      forall blockId | blockId in g.blocks :: IsPassive(g.blocks[blockId])
+      var g' := PassifyCfg(g, topo, pred);
+      && (forall blockId | blockId in g'.blocks :: IsPassive(g'.blocks[blockId]))
+      && g'.blocks.Keys == set i | i in topo
   {
     var cfgSSA := SSA(g, topo, pred);
     var blocks' := map blockId | blockId in cfgSSA.blocks.Keys :: PassifySimpleCmd(cfgSSA.blocks[blockId]);
