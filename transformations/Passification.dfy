@@ -4,6 +4,8 @@ include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
 include "../dafny-libraries/src/Math.dfy"
 include "../util/Naming.dfy"
 include "../util/AstSubsetPredicates.dfy"
+include "../util/SortUtil.dfy"
+
 
 module Passification
 {
@@ -15,6 +17,7 @@ module Passification
   import opened Naming
   import Maps
   import opened AstSubsetPredicates
+  import SortUtil
 
   type Incarnation<T> = map<var_name, T> 
 
@@ -158,7 +161,7 @@ module Passification
     if |conflictInc.Keys| == 0 then
       blocks
     else
-      var conflictVarsSeq := Util.SetToSequenceStr(conflictInc.Keys);
+      var conflictVarsSeq := SortUtil.SetToSequenceStr(conflictInc.Keys);
 
       var update := map predId | predId in predIds :: 
         SeqSimple(blocks[predId], SynchronizationBlocks(incs[predId], conflictInc, conflictVarsSeq));
