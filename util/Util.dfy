@@ -115,4 +115,43 @@ module Util {
     case Some(true) =>
     case Some(false) =>
   }
+
+  /*
+    (forall i, j {:trigger s[i], s[j]}:: 0 <= i < |s| && 0 <= j < |s| && i != j ==> s[i] != s[j])
+  */
+  lemma HasNoDuplicatesAppDisj2<T>(s1: seq<T>, s2: seq<T>)
+  requires 
+    && Seq.HasNoDuplicates(s1)
+    && Seq.HasNoDuplicates(s2)
+    && (set s | s in s1) !! (set s | s in s2)
+  ensures 
+    Seq.HasNoDuplicates(s1+s2)
+  {
+
+    reveal Seq.HasNoDuplicates();
+
+    var s := s1+s2;
+    forall i,j | 0 <= i < |s| && 0 <= j < |s| && i != j
+    ensures s[i] != s[j]
+    {
+      if 0 <= i < |s1| && 0 <= j < |s1| {
+        //use that s1 has no duplicates
+      } else if |s1| <= i < |s| && |s1| <= j < |s| {
+        //use that s2 has no duplicates
+      } else if 0 <= i < |s1| {
+        assert |s1| <= j < |s|;
+        assert s[i] in s1;
+        assert s[j] in s2;
+        assert s[i] in (set s | s in s1);
+        assert s[j] in (set s | s in s2);
+        assert (set s | s in s1) !! (set s | s in s2);
+        assert s[i] != s[j];
+        //DISCUSS
+      } else {
+        assume false;
+      }
+
+    }
+
+  }
 }

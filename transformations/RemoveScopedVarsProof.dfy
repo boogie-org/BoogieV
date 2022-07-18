@@ -563,6 +563,7 @@ module RemoveScopedVarsAuxUniqueProof {
       && PostDepend(post, activeVars)
       && Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(c)))
       && NoLoopsNoIfGuard(c)
+      && NoLoopsNoIfGuard(c')
       && activeVars !! GetVarNames(decls)
     ensures 
       var (c', decls) := RemoveScopedVarsAux(c);
@@ -752,7 +753,6 @@ module RemoveScopedVarsAuxUniqueProof {
             WpCmd(a, c1, post2')(s);
             { 
               assert PredDepend(ForallVarDecls(a, decls2, WpCmd(a, c2',post)), activeVars) by {
-                assume NoLoopsNoIfGuard(c2'); //TODO
                 ForallWpPredDepend(a, activeVars, decls2, c2', post);
               }
 
