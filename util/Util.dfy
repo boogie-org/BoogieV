@@ -58,35 +58,41 @@ module Util {
     ensures '#' !in NatToString(n)
   { }
 
+  lemma test(n: nat, c1: char, c2: char)
+  {
+    var digit := n % 10;
+    var c3 := '0' + (digit as char);
+  }
   lemma NatToStringInjective(n1: nat, n2: nat)
     requires n1 != n2
     ensures NatToString(n1) != NatToString(n2)
-  /*
   {
     if n1 == 0 {
       //trivial
     } else {
       var digit1 := n1 % 10;
       var digitString1 := ['0' + digit1 as char];
+      var res1 := digitString1 + NatToString(n1/10);
 
       var digit2 := n2 % 10;
       var digitString2 := ['0' + digit2 as char];
+      var res2 := digitString2 + NatToString(n2/10);
 
       assert |digitString1| == |digitString2|;
 
-      assume NatToString(n1/10) != NatToString(n2/10);
-
       if digit1 != digit2 {
-        //assert ('0'+ digit1 as char) != ('1'+ digit2 as char);
-        assume false;
+        assert ('0'+ digit1 as char) != ('0'+ digit2 as char);
+        assert digitString1 != digitString2;
+        assert res1[0] != res2[0];
       } else {
-        assume n1/10 != n2/10;
-        NatToStringInjective(n1/10, n2/10);
-
+        assert NatToString(n1/10) != NatToString(n2/10) by {
+          assert n1/10 != n2/10;
+          NatToStringInjective(n1/10, n2/10);
+        }
+        assert res1[1..] != res2[1..];
       }
     }
   }
-  */
 
   function method BoolToString(b: bool) : string {
     if b then "true" else "false"

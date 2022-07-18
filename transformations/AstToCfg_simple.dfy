@@ -119,12 +119,13 @@ module AstToCfg {
         (cfg, nextVersion2, exitOptResult)
   }
 
-  function method AstToCfg(c: Cmd) : (Cfg, seq<BlockId>)
+  function method AstToCfg(c: Cmd) : (Cfg, seq<BlockId>, ghost set<BlockId>)
     requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
     ensures 
-      var (g, blocks) := AstToCfg(c);
-      && (set n | n in blocks) == g.blocks.Keys
-      && CfgWf(g)
+      var (g', blocks, cover) := AstToCfg(c);
+      && (set n | n in blocks) == g'.blocks.Keys
+      && CfgWf(g')
+      && IsAcyclic(g'.successors, g'.entry, cover)
       /*
       && g.blocks.Keys == g.successors.Keys
       && (forall n :: n in g.successors.Keys ==>   
@@ -154,10 +155,18 @@ module AstToCfg {
     }
 
     AstToCfgAcyclic(c, 0);
-    (Cfg(g.entry, g.blocks, g.successors[exit.value := []]), blocksSeq)
+
+    ghost var cover := CoveringSet(0, nextVersion, exit.value);
+
+    assert IsAcyclic(g.successors[exit.value := []], g.entry, cover+{exit.value}) by {
+      IsAcyclicUpdate2(g.successors, g.entry, exit.value, [], cover);
+    }
+    var g' := Cfg(g.entry, g.blocks, g.successors[exit.value := []]);
+
+    (g', blocksSeq, ghost cover+{exit.value})
   }
 
-  lemma {:verify false} AstToCfgAcyclic(
+  lemma AstToCfgAcyclic(
     c: Cmd, 
     nextVersion: BlockId)
     requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)

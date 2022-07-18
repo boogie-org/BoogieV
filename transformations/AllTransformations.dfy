@@ -53,17 +53,20 @@ module AllTransformations
     assert NoBreaks(c4);
     assert NoLoopsNoIfGuardNoScopedVars(c4) && NoBreaks(c4);
     
-    assert NoBreaksScopedVarsLoops(c4);
-
     /** Ast-to-CFG */
-    var (g1, blockSeq) := AstToCfg.AstToCfg(c4);
+    var (g1, blockSeq, cover) := AstToCfg.AstToCfg(c4);
 
     /** Compute auxiliary CFG data */
     var pred := CfgHelper.PredecessorMap(g1.successors, blockSeq);
 
     CfgHelper.PredecessorMapCorrect(g1.successors, blockSeq);
 
-    var topo := CfgHelper.TopologicalOrder(g1, blockSeq);
+    var topo := CfgHelper.TopologicalOrder(g1);
+
+    assert (forall i | 0 <= i < |topo| :: topo[i] in pred.Keys ==> (set x | x in pred[topo[i]]) <= (set j | 0 <= j < i :: topo[j])) by {
+      CfgHelper.TopologicalOrderCorrect(g1, cover);
+      assume false;
+    }
 
     Expr.TrueExpr
 

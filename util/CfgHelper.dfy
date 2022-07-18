@@ -14,7 +14,6 @@ module CfgHelper {
     ns: seq<T>, 
     visitedAndStack: (set<T>, seq<T>)
     ) : (set<T>, seq<T>)
-
     requires GraphWf(succ)
     requires (forall n | n in ns :: n in succ.Keys)
     requires (forall n | n in visitedAndStack.1 :: n in succ.Keys)
@@ -65,18 +64,68 @@ module CfgHelper {
       (visitedRes, [n]+stackRes)
   }
 
-  function method TopologicalOrder(cfg: Cfg, blocksSeq: seq<BlockId>) : seq<BlockId>
-    requires 
-      && CfgWf(cfg)
-      && forall n | n in blocksSeq :: n in cfg.successors.Keys
+  function method TopologicalOrder(cfg: Cfg) : seq<BlockId>
+    requires CfgWf(cfg)
+    //&& forall n | n in blocksSeq :: n in cfg.successors.Keys
     ensures
-      var res := TopologicalOrder(cfg, blocksSeq);
+      var res := TopologicalOrder(cfg);
       (forall n | n in res :: n in cfg.successors.Keys)
   {
-    TopologicalOrderAuxSeq(cfg.successors, blocksSeq, ({}, [])).1
+    //TopologicalOrderAuxSeq(cfg.successors, blocksSeq, ({}, [])).1
+    TopologicalOrderAux(cfg.successors, cfg.entry, ({}, [])).1
   }
 
-  //lemma TopologicalOrderAuxCorrect()
+  /*
+  lemma TopologicalOrderAuxSeqCorrect(
+    succ: Graph<BlockId>, 
+    ns: seq<BlockId>, 
+    visitedAndStack: (set<BlockId>, seq<BlockId>),
+    cover: set<BlockId>
+  )
+    requires IsAcyclicSeq(succ, ns, cover)
+    requires GraphWf(succ)
+    requires n in succ.Keys
+    requires (forall n | n in visitedAndStack.1 :: n in succ.Keys)
+    ensures
+      var (visited', stack'):= TopologicalOrderAux(succ, n, visitedAndStack);
+      forall i | 0 <= i < |stack'| :: (set nSucc | nSucc in succ[stack'[i]]) <=  (set j | 0 < j < |stack'| :: stack'[j]) 
+    */
+
+  lemma TopologicalOrderAuxCorrect(
+    succ: Graph<BlockId>, 
+    n: BlockId, 
+    visitedAndStack: (set<BlockId>, seq<BlockId>),
+    cover: set<BlockId>
+  )
+    requires IsAcyclic(succ, n, cover)
+    requires GraphWf(succ)
+    requires n in succ.Keys
+    requires (forall n | n in visitedAndStack.1 :: n in succ.Keys)
+    ensures
+      var (visited', stack'):= TopologicalOrderAux(succ, n, visitedAndStack);
+      forall i | 0 <= i < |stack'| :: (set nSucc | nSucc in succ[stack'[i]]) <=  (set j | i < j < |stack'| :: stack'[j]) 
+  
+  
+  lemma TopologicalOrderCorrect(
+    cfg: Cfg, 
+    cover: set<BlockId>
+  )
+    requires CfgWf(cfg)
+    requires
+      var succ := cfg.successors;
+      && IsAcyclic(succ, cfg.entry, cover)
+      && GraphWf(succ)
+      && cfg.entry in succ.Keys
+    ensures
+      var succ := cfg.successors;
+      var topo := TopologicalOrder(cfg);
+      forall i | 0 <= i < |topo| :: (set nSucc | nSucc in succ[topo[i]]) <=  (set j | i < j < |topo| :: topo[j]) 
+  {
+    var (_, topo):= TopologicalOrderAux(cfg.successors, cfg.entry, ({}, []));
+    TopologicalOrderAuxCorrect(cfg.successors, cfg.entry, ({}, []), cover);
+    assume forall i | 0 <= i < |topo| :: (set nSucc | nSucc in cfg.successors[topo[i]]) <=  (set j | i < j < |topo| :: topo[j]);
+  }
+
   
   /** Predecessor map */
   function method PredecessorMap<T>(succ: Graph<T>, ns: seq<T>) : Graph<T>
