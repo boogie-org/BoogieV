@@ -20,29 +20,7 @@ module Util {
         [s[0]] + RemoveDuplicatesAux(s[1..], {s[0]}+alreadyIncluded)
   }
 
-  method IntToString(i: int) returns (s: string) {
-    if i == 0 {
-      return "0";
-    } 
-
-    s := "";
-    var j := i;
-
-    if i < 0 {
-      s := "-";
-      j := -i;
-    }
-
-    while j != 0
-      invariant j >= 0;
-    {
-      var d := j % 10;
-      s := ['0' + d as char] + s;
-      j := j / 10;
-    }
-  }
-
-  function method IntToString2(i: int) : string {
+  function method IntToString(i: int) : string {
     if i < 0 then "-"+NatToString(-i) else NatToString(i)
   }
 

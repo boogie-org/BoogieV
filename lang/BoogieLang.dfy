@@ -17,12 +17,12 @@ module BoogieLang {
 
     static const FalseLit: Lit := LitBool(false);
 
-    method ToString() returns (s: string) {
+    function method ToString() : string {
       match this {
         case LitInt(i) => 
-          s := IntToString(i);
+          IntToString(i)
         case LitBool(b) => 
-          s := BoolToString(b);
+          BoolToString(b)
       }
     }
   }
@@ -118,23 +118,23 @@ module BoogieLang {
     | FunCall(fun_name, List<Expr>)
   */
   {
-    method ToString() returns (s: string) {
+    function method ToString() : string {
       match this {
-        case Var(x) => return x;
-        case ELit(lit) => s := lit.ToString(); return s;
+        case Var(x) => x
+        case ELit(lit) => lit.ToString()
         case UnOp(uop, e) =>
           var uopS := uop.ToString();
           var eS := e.ToString();
-          return "(" + uopS + eS + ")";
+          "(" + uopS + eS + ")"
         case BinOp(e1, bop, e2) => 
           var e1S := e1.ToString();
           var bopS := bop.ToString();
           var e2S := e2.ToString();
-          return "(" + e1S + " " + bopS + " " + e2S + ")";
+          "(" + e1S + " " + bopS + " " + e2S + ")"
         case Let(x, e1, e2) =>
           var e1S := e1.ToString();
           var e2S := e2.ToString();
-          return "(let " + x + " = " + e1S + " in " + e2S + ")";
+          "(let " + x + " = " + e1S + " in " + e2S + ")"
         /*
         case Binder(binderKind, x, t, e) => 
           var tS := t.ToString();
@@ -204,27 +204,24 @@ module BoogieLang {
        defined on SimpleCmd. This means a lot of the extra work imposed by adding a separate sequential composition
        constructor for SimpleCmd would have to be done anyway. */
   {
-    method ToString(indent: nat) returns (s: string) {
+    function method ToString(indent: nat) : string {
       match this {
-        case Skip => return "";
+        case Skip => "skip"
         case Assert(e) =>
           var eS := e.ToString();
-          return IndentString("assert " + eS + ";", indent);
+          IndentString("assert " + eS, indent)
         case Assume(e) =>
           var eS := e.ToString();
-          return IndentString("assert " + eS + ";", indent);
+          IndentString("assume " + eS, indent)
         case Assign(x, _, e) =>
           var eS := e.ToString();
-          return IndentString(x + " := " + eS + ";", indent);
+          IndentString(x + " := " + eS, indent)
         case Havoc(xs) =>
-          var declS := "";
-          var i := 0;
-          while i < |xs| {
-            declS := xs[0].0 + if i+1 < |xs| then ", " else "";
-            i := i+1;
-          }
-          return IndentString("havoc " + declS + ";", indent);
-        case SeqSimple(sc1, sc2) => return "TODO";
+          var declS := Sequences.FoldLeft((s, decl : VarDecl) => s+", "+decl.0, "", xs);
+          IndentString("havoc " + declS, indent)
+        case SeqSimple(sc1, sc2) => 
+          sc1.ToString(indent)+";\n "+
+          sc2.ToString(indent)
       }
     }
 
@@ -310,57 +307,44 @@ module BoogieLang {
         && c2.WellFormedVars(xs)
     }
 
-    method ToString(indent: nat) returns (s: string) {
+    function method ToString(indent: nat) : string {
       match this {
-        case SimpleCmd(simpleC) => s := simpleC.ToString(indent); return s;
+        case SimpleCmd(simpleC) => simpleC.ToString(indent)
         case Break(optLbl) =>
-          return IndentString("break" + (if optLbl.Some? then " " + optLbl.value else "") + ";", indent);
+          IndentString("break" + (if optLbl.Some? then " " + optLbl.value else "") + ";", indent)
         case Scope(optLbl, xs, c) =>
-          var i := 0;
-          var declS := "";
-          while i < |xs| {
-            var tS := xs[i].1.ToString();
-            declS := declS + " var " + xs[i].0 + ": " + tS + ";";
-            i := i+1;
-          }
+          var declS := Sequences.FoldLeft((s, decl : VarDecl) => s+", "+decl.0, "", xs);
           var cS := c.ToString(indent+2);
-          return 
-               IndentString("scope ", indent) + (if optLbl.Some? then optLbl.value else "") + "{ \n" +
-               IndentString(declS, indent+2) + "\n" + 
-               cS + "\n" +
-               IndentString("}", indent);
+          IndentString("scope ", indent) + (if optLbl.Some? then optLbl.value else "") + "{ \n" +
+          IndentString(declS, indent+2) + "\n" + 
+          cS + "\n" +
+          IndentString("}", indent)
         case Seq(c1, c2) =>
           var c1S := c1.ToString(indent);
           var c2S := c2.ToString(indent);
-          return c1S + "\n" + c2S;
+          c1S + ";\n" + c2S
         case Loop(invs, body) =>
           var i := 0;
-          var invS := "";
-          while i < |invs| {
-            var eS := invs[i].ToString();
-            invS := invS + "\n invariant "  + eS;
-            i := i+1;
-          }
+          var invS := Sequences.FoldLeft((s, inv: Expr) => s+"\n invariant "+ inv.ToString(), "", invs);
           var bodyS := body.ToString(indent+2);
-          s := IndentString("loop", indent) + invS + "\n" + 
-               IndentString("{ \n", indent) +
-               bodyS + 
-               IndentString("}", indent);
+          IndentString("loop", indent) + invS + "\n" + 
+          IndentString("{ \n", indent) +
+          bodyS + 
+          IndentString("}", indent)
         case If(optCond, thn, els) =>
-          var condS := "*";
-          if optCond.Some? {
-            condS := optCond.value.ToString();
-          }
+          var condS := 
+            if optCond.Some? then
+              optCond.value.ToString()
+            else 
+              "*";
           var thnS := thn.ToString(indent+2);
           var elsS := els.ToString(indent+2);
 
-          s := IndentString("if(", indent) + condS + ") { \n" +
-               thnS + "\n" +
-               IndentString("}", indent) + " else { \n" +
-               elsS + "\n" +
-               IndentString("}", indent);
-          
-          return s;
+          IndentString("if(", indent) + condS + ") { \n" +
+          thnS + "\n" +
+          IndentString("}", indent) + " else { \n" +
+          elsS + "\n" +
+          IndentString("}", indent)
       }
     }
 

@@ -124,8 +124,9 @@ module Passification
       
       (globalIncMap', output, Havoc(varDecls'))
     case SeqSimple(sc1, sc2) => 
-      var (globalIncMap1, inc1, b1) := OutputIncarnation(globalIncMap, input, sc1);
-      OutputIncarnation(globalIncMap1, inc1, sc2)
+      var (globalIncMap1, inc1, sc1') := OutputIncarnation(globalIncMap, input, sc1);
+      var (globalIncMap2, inc2, sc2') := OutputIncarnation(globalIncMap1, inc1, sc2);
+      (globalIncMap2, inc2, SeqSimple(sc1',sc2'))
   }
 
   datatype SSAResult = 
@@ -193,12 +194,12 @@ module Passification
       var incRes := InputIncarnation(prevResult.globalIncMap, predIncs);
 
       /* for each conflict add synchronization assignments */
-      var blocks' := if curId in pred.Keys then AddSynchronizationBlocks(cfg.blocks, prevResult.incMaps, preds, incRes.updatedInc) else cfg.blocks;
+      var blocks' := if curId in pred.Keys then AddSynchronizationBlocks(prevResult.blocks, prevResult.incMaps, preds, incRes.updatedInc) else prevResult.blocks;
       
       /* compute output incarnation of block */
       var (globalIncMap'', outputIncarnation, b') := OutputIncarnation(incRes.globalIncMap, incRes.localIncMap, cfg.blocks[curId]);
 
-      var ssaResult' := SSAResult_(prevResult.blocks[curId := b'], prevResult.incMaps[curId := outputIncarnation], globalIncMap'');
+      var ssaResult' := SSAResult_(blocks'[curId := b'], prevResult.incMaps[curId := outputIncarnation], globalIncMap'');
       assert ssaResult'.incMaps.Keys == prevResult.incMaps.Keys + {topo[idTopo]};
       assert (set i | 0 <= i < idTopo :: topo[i]) + {topo[idTopo]} == (set i | 0 <= i < idTopo+1 :: topo[i]);
 
