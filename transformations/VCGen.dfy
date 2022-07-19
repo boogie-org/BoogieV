@@ -41,6 +41,7 @@ module VCGen
     case SeqSimple(sc1, sc2) => WpSimpleCmdDeep(sc1, WpSimpleCmdDeep(sc2, post))
   }
 
+
   function method BlockToVC(g: Cfg,  blocks: seq<BlockId>) : map<BlockId, Expr>
     requires forall blockId | blockId in g.blocks.Keys :: IsPassive(g.blocks[blockId])
     requires forall blockId | blockId in blocks :: blockId in g.blocks.Keys

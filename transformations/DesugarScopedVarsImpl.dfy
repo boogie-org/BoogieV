@@ -187,11 +187,13 @@ module DesugarScopedVarsImpl {
   }
 
   /** TODO */
+  /*
   lemma UniqueVars(c: Cmd, substMap: map<var_name, var_name>, counter: nat)
     ensures 
       var (c', counter') := MakeScopedVarsUnique(c, substMap, counter);
       && Sequences.HasNoDuplicates(GetDecls(c'))
       && counter <= counter'
   { assume false; }
+  */
 
 }

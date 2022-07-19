@@ -27,7 +27,7 @@ module AllTransformations
   import VCGen
   import CfgHelper
 
-  function method AllTransformations(c: Cmd) : Expr
+  method AllTransformations(c: Cmd) returns (e: Expr)
     requires NoBreaks(c) //TODO: lift
   {
     /** Eliminate loops */
@@ -63,15 +63,10 @@ module AllTransformations
 
     var topo := CfgHelper.TopologicalOrder(g1);
 
-    assert (forall i | 0 <= i < |topo| :: topo[i] in pred.Keys ==> (set x | x in pred[topo[i]]) <= (set j | 0 <= j < i :: topo[j])) by {
-      CfgHelper.TopologicalOrderCorrect(g1, cover);
-      assume false;
-    }
-
-    Expr.TrueExpr
-
-    /*
-    assume (forall i | 0 <= i < |topo| :: topo[i] in pred.Keys ==> (set x | x in pred[topo[i]]) <= (set j | 0 <= j < i :: topo[j]));
+    //CfgHelper.TopologicalOrderCorrect(g1, cover);
+    
+    expect (forall i | 0 <= i < |topo| :: topo[i] in pred.Keys ==> 
+    (set x | x in pred[topo[i]]) <= (set j | 0 <= j < i :: topo[j]));
 
     /** Passification */
     var g2 := Passification.PassifyCfg(g1, topo, pred);
@@ -84,11 +79,7 @@ module AllTransformations
       else 
         VCGen.GenerateVC(g2, topo);
 
-    vc
-    */
+    return vc;
   }
-
-  //TODO
-  //lemma AllTransformationsCorrect(c: Cmd)
 
 }

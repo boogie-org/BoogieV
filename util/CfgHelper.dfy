@@ -46,6 +46,8 @@ module CfgHelper {
       && ((n !in visitedAndStack.0) ==> 
               && n in visited'
               && stack'[0] == n) 
+      //&& Sequences.HasNoDuplicates(stack')
+      //&& visitedStack.1 <= 
     decreases succ.Keys - visitedAndStack.0, 0
   {
     var (visited, stack) := visitedAndStack;
@@ -91,6 +93,7 @@ module CfgHelper {
       forall i | 0 <= i < |stack'| :: (set nSucc | nSucc in succ[stack'[i]]) <=  (set j | 0 < j < |stack'| :: stack'[j]) 
     */
 
+  /*
   lemma TopologicalOrderAuxCorrect(
     succ: Graph<BlockId>, 
     n: BlockId, 
@@ -125,6 +128,7 @@ module CfgHelper {
     TopologicalOrderAuxCorrect(cfg.successors, cfg.entry, ({}, []), cover);
     assume forall i | 0 <= i < |topo| :: (set nSucc | nSucc in cfg.successors[topo[i]]) <=  (set j | i < j < |topo| :: topo[j]);
   }
+  */
 
   
   /** Predecessor map */
@@ -170,6 +174,46 @@ module CfgHelper {
 
     var inv3 := (pred: Graph<T>, ns: seq<T>) => pred.Keys <= succ.Keys;
     Sequences.LemmaInvFoldLeft(inv3, stp, f, map [], ns);
+  }
+
+  lemma ConvertTopo(succ: map<BlockId, seq<BlockId>>, pred: map<BlockId, seq<BlockId>>, topo: seq<BlockId>)
+    requires forall n | n in topo :: n in succ.Keys
+    requires forall n | n in succ.Keys :: n in topo
+    requires forall i | 0 <= i < |topo| :: (set nSucc | nSucc in succ[topo[i]]) <=  (set j | i < j < |topo| :: topo[j]) 
+    requires Sequences.HasNoDuplicates(topo)
+    requires
+      && pred.Keys <= succ.Keys
+      /** only predecessors are recorded  */
+      && (forall n | n in pred.Keys :: forall p | p in pred[n] :: p in succ.Keys && n in succ[p])
+      /** every predecessor is recorded */
+      && (forall n | n in succ.Keys :: forall s | s in succ[n] :: s in pred.Keys && n in pred[s])
+    ensures forall i | 0 <= i < |topo| :: topo[i] in pred.Keys ==> (set x | x in pred[topo[i]]) <= (set j | 0 <= j < i :: topo[j])
+  {
+    forall i | 0 <= i < |topo| && topo[i] in pred.Keys
+    ensures (set x | x in pred[topo[i]]) <= (set j | 0 <= j < i :: topo[j])
+    {
+      forall x | x in pred[topo[i]]
+      ensures x in (set j | 0 <= j < i :: topo[j])
+      {
+
+        if x !in (set j | 0 <= j < i :: topo[j]) {
+          var xIdx :| i <= xIdx < |topo| && topo[xIdx] == x;
+          assert topo[i] in succ[topo[xIdx]];
+
+          var xs := (set nSucc | nSucc in succ[topo[xIdx]]);
+          var ys := (set j | xIdx < j < |topo| :: topo[j]);
+
+          assert xs <= ys;
+          assert topo[i] in xs;
+          assert topo[i] in ys;
+
+          assert false by {
+            var k :| xIdx < k < |topo| && topo[i] == topo[k];
+            reveal Sequences.HasNoDuplicates();
+          }
+        }
+      }
+    }
   }
 
 }
