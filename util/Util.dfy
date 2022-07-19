@@ -127,7 +127,6 @@ module Util {
   ensures 
     Seq.HasNoDuplicates(s1+s2)
   {
-
     reveal Seq.HasNoDuplicates();
 
     var s := s1+s2;
@@ -138,23 +137,16 @@ module Util {
         //use that s1 has no duplicates
       } else if |s1| <= i < |s| && |s1| <= j < |s| {
         //use that s2 has no duplicates
-      } else if 0 <= i < |s1| {
-        assert |s1| <= j < |s|;
-        assert s[i] in s1;
-        assert s[j] in s2;
+      } else {
+        var (i',j') := if 0 <= i < |s1| then (i,j) else (j,i);
+        assert 0 <= i' < |s1|;
+        assert |s1| <= j' < |s|;
         var xs := (set s | s in s1);
         var ys := (set s | s in s2);
-        assert s[i] in xs;
-        assert s[j] in ys;
         assert xs !! ys;
-        assert s[i] != s[j];
-        /** File issue */
-        //DISCUSS
-      } else {
-        assume false;
-      }
-
+        assert s[i'] in xs;
+        assert s[j'] in ys;
+      } 
     }
-
   }
 }
