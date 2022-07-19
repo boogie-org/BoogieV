@@ -142,10 +142,13 @@ module Util {
         assert |s1| <= j < |s|;
         assert s[i] in s1;
         assert s[j] in s2;
-        assert s[i] in (set s | s in s1);
-        assert s[j] in (set s | s in s2);
-        assert (set s | s in s1) !! (set s | s in s2);
+        var xs := (set s | s in s1);
+        var ys := (set s | s in s2);
+        assert s[i] in xs;
+        assert s[j] in ys;
+        assert xs !! ys;
         assert s[i] != s[j];
+        /** File issue */
         //DISCUSS
       } else {
         assume false;
