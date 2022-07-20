@@ -7,6 +7,8 @@ namespace SMTInterface
     {
         private VCExpressionGenerator exprGen;
 
+        ProverFactory proverFactory = ProverFactory.Load("SMTLib");
+
         /* keep a map from strings to var objects to make sure that we can return
         the same object for the same name (on the Dafny side variables are different
         iff their names are different) */
@@ -17,9 +19,36 @@ namespace SMTInterface
             this.exprGen = exprGen;
         }
 
-        public bool IsVCValid(VCExpr e)
+        public bool IsVCValid(VCExpr vc)
         {
-          SMTLibPro
+          var options = CommandLineOptions.FromArguments();
+          var proverOptions = proverFactory.BlankProverOptions(options);
+          var proverContext = proverFactory.NewProverContext(proverOptions);
+          ProverInterface proverInterface = 
+            proverFactory.SpawnProver(
+              options, 
+              proverOptions, 
+              proverContext
+            );
+          
+          var proverOutcomeTask = 
+            proverInterface.Check(
+              "vc_query",
+              vc,
+              new ProverInterface.ErrorHandler(options),
+              options.ErrorLimit,
+              CancellationToken.None
+            );
+
+          //TODO: should do something with async
+          proverOutcomeTask.Wait();
+          if(proverOutcomeTask.IsCompleted) {
+              //TODO give information on other outcomes
+              ProverInterface.Outcome proverOutcome = proverOutcomeTask.Result;
+              return proverOutcome == ProverInterface.Outcome.Valid;
+          } else {
+            return false;
+          }
         }
 
         public VCExpr VCIntVar(Dafny.ISequence<char> x) 
