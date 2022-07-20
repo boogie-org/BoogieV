@@ -81,6 +81,7 @@ module AllTransformations
     var g2 := Passification.PassifyCfg(g1, topo, pred);
 
     /** VCGen */
+    expect g2.entry == topo[0];
     if |topo| == 0 {
       print("no blocks");
     } else {

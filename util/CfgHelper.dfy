@@ -106,9 +106,14 @@ module CfgHelper {
     requires (forall n | n in visitedAndStack.1 :: n in succ.Keys)
     ensures
       var (visited', stack'):= TopologicalOrderAux(succ, n, visitedAndStack);
-      forall i | 0 <= i < |stack'| :: (set nSucc | nSucc in succ[stack'[i]]) <=  (set j | i < j < |stack'| :: stack'[j]) 
-  
-  
+      //forall i | 0 <= i < |stack'| :: (set nSucc | nSucc in succ[stack'[i]]) <=  (set j | i < j < |stack'| :: stack'[j]) 
+      forall i | 0 <= i < |stack'| :: test(succ[stack'[i]]) <=  test(stack'[i+1..|stack'|])
+
+  function test<T>(xs: seq<T>) : set<T>
+  {
+    set x | x in xs
+  }
+
   lemma TopologicalOrderCorrect(
     cfg: Cfg, 
     cover: set<BlockId>
@@ -122,14 +127,14 @@ module CfgHelper {
     ensures
       var succ := cfg.successors;
       var topo := TopologicalOrder(cfg);
-      forall i | 0 <= i < |topo| :: (set nSucc | nSucc in succ[topo[i]]) <=  (set j | i < j < |topo| :: topo[j]) 
+      forall i 
+        | 0 <= i < |topo| 
+        :: test(succ[topo[i]]) <=  test(topo[i+1..|topo|]) 
   {
     var (_, topo):= TopologicalOrderAux(cfg.successors, cfg.entry, ({}, []));
     TopologicalOrderAuxCorrect(cfg.successors, cfg.entry, ({}, []), cover);
-    assume forall i | 0 <= i < |topo| :: (set nSucc | nSucc in cfg.successors[topo[i]]) <=  (set j | i < j < |topo| :: topo[j]);
   }
   */
-
   
   /** Predecessor map */
   function method PredecessorMap<T>(succ: Graph<T>, ns: seq<T>) : Graph<T>
