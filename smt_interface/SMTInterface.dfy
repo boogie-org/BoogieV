@@ -13,7 +13,7 @@ module SMTInterface {
 
   class {:extern} VCExprInterface {
 
-    method IsVCValid(e: VCExpr) returns (b: bool)
+    method {:extern} IsVCValid(e: VCExpr) returns (b: bool)
 
     method {:extern} VCIntVar(x: string) returns (res: VCExpr)
     method {:extern} VCBoolVar(b: bool) returns (res: VCExpr)
@@ -44,6 +44,13 @@ module SMTInterface {
     method {:extern} VCUMinus(e: VCExpr) returns (res: VCExpr)
 
   }
+
+}
+
+module VCExprAdapter {
+
+  import opened BoogieLang
+  import opened SMTInterface
 
   method BinopToVCExpr(vcExprI: VCExprInterface, e1: VCExpr, bop: Binop, e2: VCExpr) returns (res: VCExpr)
   {

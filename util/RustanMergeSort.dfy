@@ -127,23 +127,22 @@ abstract module MergeSort {
       invariant IsSorted(dst, lo, k)
       invariant multiset(dst[lo..k]) == multiset(src[lo..i]) + multiset(src[mid..j])
     {
-      forall a: A.T, b: A.T | A.Leq(a,b) && A.Leq(b,a)
-      ensures a == b
+      forall a,b | A.Leq(a,b) && A.Leq(b,a)
       {
         A.Antisymmetry(a,b);
       }
 
-      forall a: A.T, b: A.T, c: A.T | A.Leq(a,b) && A.Leq(b,c)
-      ensures A.Leq(a,c)
+      forall a,b,c | A.Leq(a,b) && A.Leq(b,c)
       {
-        A.Transitivity(a,b,c );
+        A.Transitivity(a,b,c);
       }
 
-      forall a: A.T, b: A.T | true
+      forall a,b
       ensures A.Leq(a,b) || A.Leq(b,a)
       {
         A.Totality(a,b);
       }
+
       if i == mid || (j < hi && A.Leq(src[j], src[i])) {
         dst[k] := src[j];
         j, k := j + 1, k + 1;
