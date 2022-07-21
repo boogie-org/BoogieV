@@ -186,6 +186,26 @@ module DesugarScopedVarsImpl {
     case Loop(_, body) => GetDecls(body)
   }
 
+  lemma AuxVersionedName(c1: nat, c2: nat, c3: nat)
+  ensures (iset i: nat, s: string | c1 <= i < c2 :: VersionedName(s, i)) !! (iset i: nat, s: string | c2 <= i < c3 :: VersionedName(s, i));
+  {
+    var xs := (iset i: nat, s: string | c1 <= i < c2 :: VersionedName(s, i));
+    var ys := (iset i: nat, s: string | c2 <= i < c3 :: VersionedName(s, i));
+    forall x | x in xs
+    ensures x !in ys
+    {
+      var i:nat,s :| x == VersionedName(s, i) && c1 <= i < c2;
+      forall y | y in ys
+      ensures x != y
+      {
+        var j:nat,s' :| y == VersionedName(s', j) && c2 <= j < c3;
+        assert VersionedName(s,i) != VersionedName(s',j) by {
+          VersionedNameInjective(s, s', i, j);
+        }
+      }
+    }
+  }
+
   /** TODO */
   lemma UniqueVars(c: Cmd, substMap: map<var_name, var_name>, counter: nat)
     requires 
@@ -195,24 +215,20 @@ module DesugarScopedVarsImpl {
     ensures 
       var (c', counter') := MakeScopedVarsUnique(c, substMap, counter);
       && Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(c')))
-      && (iset s | s in GetVarNamesSeq(GetDecls(c'))) <= (iset i: nat, s: string | counter <= i < counter :: VersionedName(s, i))
+      && (iset s | s in GetVarNamesSeq(GetDecls(c'))) <= (iset i: nat, s: string | counter <= i < counter' :: VersionedName(s, i))
       && counter <= counter'
   { 
     match c
     case SimpleCmd(sc) =>   
       reveal Sequences.HasNoDuplicates();
-      //(SimpleCmd(sc.SubstSimpleCmd(substMap)), counter)
     case Break(_) => 
       reveal Sequences.HasNoDuplicates();
-      //(c, counter)
     case Seq(c1, c2) => 
-      /*
       var (c1', counter1') := MakeScopedVarsUnique(c1, substMap, counter);
       var (c2', counter2') := MakeScopedVarsUnique(c2, substMap, counter1');
-      (Seq(c1', c2'), counter2')
-      */
-      var (c1', counter1') := MakeScopedVarsUnique(c1, substMap, counter);
-      var (c2', counter2') := MakeScopedVarsUnique(c2, substMap, counter1');
+      AuxVersionedName(counter, counter1', counter2');
+
+      assert (iset i: nat, s: string | counter <= i < counter1' :: VersionedName(s, i)) !! (iset i: nat, s: string | counter1' <= i < counter2' :: VersionedName(s, i));
 
       assert (set s | s in GetVarNamesSeq(GetDecls(c1'))) !! (set s | s in GetVarNamesSeq(GetDecls(c2')));
         calc {
@@ -221,28 +237,63 @@ module DesugarScopedVarsImpl {
           GetVarNamesSeq(GetDecls(c1'))+GetVarNamesSeq(GetDecls(c2'));
         }
 
-      Util.HasNoDuplicatesAppDisj2(GetVarNamesSeq(GetDecls(c1')), GetVarNamesSeq(GetDecls(c2')));
+      assert Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(c1'))+GetVarNamesSeq(GetDecls(c2'))) by {
+        AuxVersionedName(counter, counter1', counter2');
+        Util.HasNoDuplicatesAppDisj2(GetVarNamesSeq(GetDecls(c1')), GetVarNamesSeq(GetDecls(c2')));
+      }
 
       var temp := (iset i: nat, s: string | counter <= i < counter2' :: VersionedName(s, i));
       assert (iset s | s in GetVarNamesSeq(GetDecls(c1')))+(iset s | s in GetVarNamesSeq(GetDecls(c2'))) <= temp;
     case Scope(optLabel, varDecls, body) =>
-      assume false;
-      /*
       var varDecls' := CreateUniqueVarDecls(varDecls, counter);
       var counter' := counter + |varDecls'|;
       var substMap' := substMap + ConvertVDeclsToSubstMap(varDecls, varDecls');
       var (body'', counter'') := MakeScopedVarsUnique(body, substMap', counter');
-      (Scope(optLabel, varDecls', body''), counter'')
-      */
+
+      assert Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(body'')));
+      assert Sequences.HasNoDuplicates(GetVarNamesSeq(varDecls')) by {
+        CreateUniqueVarDeclsNoDup(varDecls, counter);
+      }
+
+      var c' := Scope(optLabel, varDecls', body'');
+      calc {
+        GetVarNamesSeq(GetDecls(c'));
+        GetVarNamesSeq(varDecls'+GetDecls(body''));
+        GetVarNamesSeq(varDecls')+GetVarNamesSeq(GetDecls(body''));
+      }
+
+      assert Sequences.HasNoDuplicates(GetVarNamesSeq(varDecls')+GetVarNamesSeq(GetDecls(body''))) by {
+        AuxVersionedName(counter, counter', counter'');
+        Util.HasNoDuplicatesAppDisj2(GetVarNamesSeq(varDecls'), GetVarNamesSeq(GetDecls(body'')));
+      }
+
+      calc {
+        (iset s | s in GetVarNamesSeq(varDecls')+GetVarNamesSeq(GetDecls(body'')));
+        (iset s | s in GetVarNamesSeq(varDecls'))+(iset s | s in GetVarNamesSeq(GetDecls(body'')));
+      }
     case If(None, thn, els) => 
-      assume false;
-      /*
-      //TODO: make sure If(Some(...)) has been desugared
       var (thn', counter') := MakeScopedVarsUnique(thn, substMap, counter);
       var (els', counter'') := MakeScopedVarsUnique(els, substMap, counter');
-      (If(None, thn', els'), counter'')
-      */
+      
+
+      assert Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(thn')));
+      assert Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(els')));
+
+      calc {
+        GetVarNamesSeq(GetDecls(If(None, thn', els')));
+        GetVarNamesSeq(GetDecls(thn')+GetDecls(els'));
+        GetVarNamesSeq(GetDecls(thn'))+GetVarNamesSeq(GetDecls(els'));
+      }
   
+      assert Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(thn'))+GetVarNamesSeq(GetDecls(els'))) by {
+        AuxVersionedName(counter, counter', counter'');
+        Util.HasNoDuplicatesAppDisj2(GetVarNamesSeq(GetDecls(thn')), GetVarNamesSeq(GetDecls(els')));
+      }
+
+      calc {
+        (iset s | s in GetVarNamesSeq(GetDecls(thn'))+GetVarNamesSeq(GetDecls(els')));
+        (iset s | s in GetVarNamesSeq(GetDecls(thn')))+(iset s | s in GetVarNamesSeq(GetDecls(els')));
+      }
   }
 
 }
