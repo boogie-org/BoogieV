@@ -8,5 +8,7 @@
   <ItemGroup>
     <PackageReference Include="Boogie.Provers.SMTLib" Version="2.15.6"/>
     <PackageReference Include="Boogie.ExecutionEngine" Version="2.15.6"/>
+    <PackageReference Include="DafnyRuntime" Version="1.2.0"/>
+    <PackageReference Include="Boogie.VCExpr" Version="2.15.6"/>
   </ItemGroup>
 </Project>

@@ -10,6 +10,7 @@ include "VCGen.dfy"
 include "../lang/BoogieLang.dfy"
 include "../util/AstSubsetPredicates.dfy"
 include "../util/CfgHelper.dfy"
+include "../smt_interface/SMTInterface.dfy"
 
 module AllTransformations
 {
@@ -104,6 +105,7 @@ module AllTransformations
 
 import opened BoogieLang
 import opened Wrappers
+import opened SMTInterface
 
 method Main()
 {
@@ -119,6 +121,16 @@ method Main()
   
   var vc := AllTransformations.AllTransformations(c);
   var vcString := vc.ToString();
+  var vcExprInterface := VCExprInterface.Create();
+  
+  var vcExpr := VCExprAdapter.ExprToVCExpr(vcExprInterface, vc);
+  var vcValid := vcExprInterface.IsVCValid(vcExpr);
+
+  if vcValid {
+    print("Input program is correct.");
+  } else {
+    print("Input program might not be correct.");
+  }
 
   print(vcString);
 }

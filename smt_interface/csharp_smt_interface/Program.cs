@@ -1,11 +1,15 @@
 ﻿using Microsoft.Boogie.VCExprAST;
 using Microsoft.Boogie;
+using Microsoft.Boogie.SMTLib;
+using Dafny;
 
-namespace SMTInterface
+namespace SMTInterface_Compile
 {
-    class VCExprInterface
+    public class VCExprInterface
     {
         private VCExpressionGenerator exprGen;
+        private String proverPath;
+        private String logPath;
 
         ProverFactory proverFactory = ProverFactory.Load("SMTLib");
 
@@ -14,15 +18,43 @@ namespace SMTInterface
         iff their names are different) */
         private IDictionary<string, VCExprVar> nameToVar = new Dictionary<string, VCExprVar>();
 
-        public VCExprInterface(VCExpressionGenerator exprGen)
+        public VCExprInterface(VCExpressionGenerator exprGen, String proverPath, String logPath)
         {
             this.exprGen = exprGen;
+            this.proverPath = proverPath;
+            this.logPath = logPath;
+        }
+        
+        public static VCExprInterface Create(String proverPath, String logPath)
+        {
+          var exprGen = new VCExpressionGenerator();
+          return new VCExprInterface(exprGen, proverPath, logPath);
+        }
+
+        private async Task<ProverInterface.Outcome> InvokeProver(ProverInterface proverInterface, VCExpr vc, ProverInterface.ErrorHandler errorHandler, int errorLimit)
+        {
+          var proverOutcomeTask = 
+            proverInterface.Check(
+              "vc_query",
+              vc,
+              errorHandler,
+              errorLimit,
+              CancellationToken.None
+            );
+
+          var outcome = await proverOutcomeTask;
+          return outcome;
         }
 
         public bool IsVCValid(VCExpr vc)
         {
           var options = CommandLineOptions.FromArguments();
-          var proverOptions = proverFactory.BlankProverOptions(options);
+          options.SIBoolControlVC = true;
+          var proverOptions = (SMTLibSolverOptions) proverFactory.BlankProverOptions(options);
+          proverOptions.Parse(new List<string> { 
+            "PROVER_PATH="+proverPath,
+            "LOG_FILE="+logPath
+            });
           var proverContext = proverFactory.NewProverContext(proverOptions);
           ProverInterface proverInterface = 
             proverFactory.SpawnProver(
@@ -31,24 +63,16 @@ namespace SMTInterface
               proverContext
             );
           
-          var proverOutcomeTask = 
-            proverInterface.Check(
-              "vc_query",
+          var proverOutcome = 
+            InvokeProver(
+              proverInterface,
               vc,
               new ProverInterface.ErrorHandler(options),
-              options.ErrorLimit,
-              CancellationToken.None
-            );
+              options.ErrorLimit
+            ).Result;
 
-          //TODO: should do something with async
-          proverOutcomeTask.Wait();
-          if(proverOutcomeTask.IsCompleted) {
-              //TODO give information on other outcomes
-              ProverInterface.Outcome proverOutcome = proverOutcomeTask.Result;
-              return proverOutcome == ProverInterface.Outcome.Valid;
-          } else {
-            return false;
-          }
+          //TODO give information on other outcomes
+          return proverOutcome == ProverInterface.Outcome.Valid;
         }
 
         public VCExpr VCIntVar(Dafny.ISequence<char> x) 
@@ -109,6 +133,21 @@ namespace SMTInterface
           return exprGen.Function(VCExpressionGenerator.SubIOp, e1, e2);
         }
 
+        public VCExpr VCMul(VCExpr e1, VCExpr e2)
+        {
+          return exprGen.Function(VCExpressionGenerator.MulIOp, e1, e2);
+        }
+
+        public VCExpr VCDiv(VCExpr e1, VCExpr e2)
+        {
+          return exprGen.Function(VCExpressionGenerator.DivIOp, e1, e2);
+        }
+
+        public VCExpr VCMod(VCExpr e1, VCExpr e2)
+        {
+          return exprGen.Function(VCExpressionGenerator.ModOp, e1, e2);
+        }
+
         public VCExpr VCLt(VCExpr e1, VCExpr e2)
         {
           return exprGen.Function(VCExpressionGenerator.LtOp, e1, e2);
@@ -160,5 +199,35 @@ namespace SMTInterface
           //there is no unary minus in VCExpr --> Boogie 2 does the same encoding
           return exprGen.Function(VCExpressionGenerator.SubIOp, exprGen.Integer(Microsoft.BaseTypes.BigNum.ZERO), e);
         }
+
+        public VCExpr VCLet(Dafny.Sequence<char> varName, VCExpr binding, VCExpr body)
+        {
+          throw new NotImplementedException();
+        }
+
+    }
+
+    class MainClass {
+      static void Main(String [] args) {
+        if(args.Length < 2) {
+          Console.WriteLine("Not enough arguments (need at least two)");
+          return;
+        }
+
+        var vcExprGen = new VCExpressionGenerator();
+        var exprInterface = new VCExprInterface(vcExprGen, args[0], args[1]);
+
+        var x = vcExprGen.Variable("test", Microsoft.Boogie.Type.Int);
+
+        var vc = 
+          vcExprGen.Implies(vcExprGen.Gt(x, exprInterface.VCLitInt(4)), vcExprGen.Gt(x, exprInterface.VCLitInt(2)));
+
+        var isVCValid = exprInterface.IsVCValid(vc);
+        if(isVCValid) {
+          Console.Out.WriteLine("Input program is correct.");
+        } else {
+          Console.Out.WriteLine("Input program might not be correct.");
+        }
+      }
     }
 }

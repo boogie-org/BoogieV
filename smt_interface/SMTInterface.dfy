@@ -4,19 +4,25 @@ module {:extern "System"} {:compile false} System {
   class {:extern} {:compile false} String {}
 }
 
+module {:extern "Microsoft.Boogie.VCExprAST"} VCExprAST {
+  class {:extern} {:compile false} VCExpr {}
+}
+
 module SMTInterface {
 
   import opened BoogieLang
   import System
+  import opened VCExprAST
 
-  class {:extern "Microsoft.Boogie.VCExprAST.VCExpr"} VCExpr {}
 
   class {:extern} VCExprInterface {
+
+    static method {:extern} Create() returns (res: VCExprInterface)
 
     method {:extern} IsVCValid(e: VCExpr) returns (b: bool)
 
     method {:extern} VCIntVar(x: string) returns (res: VCExpr)
-    method {:extern} VCBoolVar(b: bool) returns (res: VCExpr)
+    method {:extern} VCBoolVar(x: string) returns (res: VCExpr)
     method {:extern} VCLitInt(i: int) returns (res: VCExpr)
     method {:extern} VCLitBool(b: bool) returns (res: VCExpr)
 
@@ -51,6 +57,7 @@ module VCExprAdapter {
 
   import opened BoogieLang
   import opened SMTInterface
+  import opened VCExprAST
 
   method BinopToVCExpr(vcExprI: VCExprInterface, e1: VCExpr, bop: Binop, e2: VCExpr) returns (res: VCExpr)
   {
