@@ -99,6 +99,7 @@ namespace SMTInterface_Compile
             return res;
         }
 
+        //TODO: change to BigInteger
         public VCExpr VCLitInt(int i) 
         {
             return exprGen.Integer(Microsoft.BaseTypes.BigNum.FromInt(i));
@@ -200,7 +201,7 @@ namespace SMTInterface_Compile
           return exprGen.Function(VCExpressionGenerator.SubIOp, exprGen.Integer(Microsoft.BaseTypes.BigNum.ZERO), e);
         }
 
-        public VCExpr VCLet(Dafny.Sequence<char> varName, VCExpr binding, VCExpr body)
+        public VCExpr VCLet(Dafny.ISequence<char> varName, VCExpr binding, VCExpr body)
         {
           throw new NotImplementedException();
         }

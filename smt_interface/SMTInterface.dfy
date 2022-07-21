@@ -17,7 +17,7 @@ module SMTInterface {
 
   class {:extern} VCExprInterface {
 
-    static method {:extern} Create() returns (res: VCExprInterface)
+    static method {:extern} Create(x1: string, x2: string) returns (res: VCExprInterface)
 
     method {:extern} IsVCValid(e: VCExpr) returns (b: bool)
 

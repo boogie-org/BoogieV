@@ -121,7 +121,7 @@ method Main()
   
   var vc := AllTransformations.AllTransformations(c);
   var vcString := vc.ToString();
-  var vcExprInterface := VCExprInterface.Create();
+  var vcExprInterface := VCExprInterface.Create("","");
   
   var vcExpr := VCExprAdapter.ExprToVCExpr(vcExprInterface, vc);
   var vcValid := vcExprInterface.IsVCValid(vcExpr);
