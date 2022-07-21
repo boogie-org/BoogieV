@@ -206,7 +206,6 @@ module DesugarScopedVarsImpl {
     }
   }
 
-  /** TODO */
   lemma UniqueVars(c: Cmd, substMap: map<var_name, var_name>, counter: nat)
     requires 
       var (c',_) := MakeScopedVarsUnique(c, substMap, counter);

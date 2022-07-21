@@ -40,7 +40,7 @@ module RemoveScopedVarsAuxUniqueProof {
     && (forall lbl | lbl in post.scopes.Keys :: PredDepend(post.scopes[lbl], depVars))
   }
 
-  lemma PredDependMonotone<A(!new)>(p: Predicate<A>, depVars: set<var_name>, depVars': set<var_name>)
+  lemma {:verify false} PredDependMonotone<A(!new)>(p: Predicate<A>, depVars: set<var_name>, depVars': set<var_name>)
   requires depVars <= depVars'
   requires PredDepend(p, depVars)
   ensures PredDepend(p, depVars')
@@ -49,7 +49,7 @@ module RemoveScopedVarsAuxUniqueProof {
     reveal PredDepend(); 
   }
 
-  lemma PostDependMonotone<A(!new)>(post: WpPost<A>, depVars: set<var_name>, depVars': set<var_name>)
+  lemma {:verify false} PostDependMonotone<A(!new)>(post: WpPost<A>, depVars: set<var_name>, depVars': set<var_name>)
   requires depVars <= depVars'
   requires PostDepend(post, depVars)
   ensures PostDepend(post, depVars')
@@ -61,7 +61,7 @@ module RemoveScopedVarsAuxUniqueProof {
     { PredDependMonotone(post.scopes[l], depVars, depVars'); }
   }
 
-  lemma RemoveScopedVarsAuxPreserveWf(c: Cmd, activeVars: set<var_name>)
+  lemma {:verify false} RemoveScopedVarsAuxPreserveWf(c: Cmd, activeVars: set<var_name>)
     requires 
      && c.WellFormedVars(activeVars)
      && NoLoopsNoIfGuard(c)
@@ -116,7 +116,7 @@ module RemoveScopedVarsAuxUniqueProof {
   }
 
 
-  lemma {:verify true} WpSimplePredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, sc: SimpleCmd, p: Predicate<A>)
+  lemma {:verify false} {:verify true} WpSimplePredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, sc: SimpleCmd, p: Predicate<A>)
     requires sc.WellFormedVars(xs)
     requires PredDepend(p, xs)
     ensures PredDepend(WpSimpleCmd(a, sc, p), xs)
@@ -156,7 +156,7 @@ module RemoveScopedVarsAuxUniqueProof {
     }
   }
 
-  lemma ResetVarsStateAux1<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, s: state<A>, s': state<A>)
+  lemma {:verify false} ResetVarsStateAux1<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, s: state<A>, s': state<A>)
   requires StateEqualOn(s1, s2, xs)
   requires StateEqualOn(s, s', xs)
   ensures StateEqualOn(ResetVarsState(d, s, s1), ResetVarsState(d, s', s2), xs)
@@ -170,14 +170,14 @@ module RemoveScopedVarsAuxUniqueProof {
     }
   }
 
-  lemma ResetVarsStateAux2<A(!new)>(s: state<A>, sOrig: state<A>, xs: set<var_name>, d: seq<VarDecl>)
+  lemma {:verify false} ResetVarsStateAux2<A(!new)>(s: state<A>, sOrig: state<A>, xs: set<var_name>, d: seq<VarDecl>)
   requires GetVarNames(d) !! xs
   ensures StateEqualOn(s, ResetVarsState(d, s, sOrig), xs)
   {
     reveal StateEqualOn();
   }
 
-  lemma ResetVarsPredAux1<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>, s: state<A>, s': state<A>)
+  lemma {:verify false} ResetVarsPredAux1<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>, s: state<A>, s': state<A>)
   requires PredDepend(p, xs)
   requires StateEqualOn(s1, s2, xs)
   requires StateEqualOn(s, s', xs)
@@ -203,7 +203,7 @@ module RemoveScopedVarsAuxUniqueProof {
     }
  }
 
-  lemma ResetVarsPredAux1'<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>)
+  lemma {:verify false} ResetVarsPredAux1'<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>)
   requires PredDepend(p, xs)
   requires StateEqualOn(s1, s2, xs)
   ensures forall s: state<A> :: ResetVarsPred(d, p, s1)(s) == ResetVarsPred(d, p, s2)(s)
@@ -215,7 +215,7 @@ module RemoveScopedVarsAuxUniqueProof {
     }
   }
 
-  lemma ResetVarsPredAux2<A(!new)>(s: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>)
+  lemma {:verify false} ResetVarsPredAux2<A(!new)>(s: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>)
   requires PredDepend(p, xs)
   ensures PredDepend(ResetVarsPred(d, p, s), xs)
   {
@@ -228,7 +228,7 @@ module RemoveScopedVarsAuxUniqueProof {
     reveal PredDepend();
   }
 
-  lemma ResetVarsPredAux3<A(!new)>(s: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>)
+  lemma {:verify false} ResetVarsPredAux3<A(!new)>(s: state<A>, xs: set<var_name>, d: seq<VarDecl>, p: Predicate<A>)
   requires PredDepend(p, xs)
   requires GetVarNames(d) !! xs
   ensures forall s' :: ResetVarsPred(d, p, s)(s') == p(s')
@@ -250,7 +250,7 @@ module RemoveScopedVarsAuxUniqueProof {
     }
   }
 
-  lemma ResetVarsPostAux1<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, post: WpPost<A>)
+  lemma {:verify false} ResetVarsPostAux1<A(!new)>(s1: state<A>, s2: state<A>, xs: set<var_name>, d: seq<VarDecl>, post: WpPost<A>)
   requires PostDepend(post, xs)
   requires StateEqualOn(s1, s2, xs)
   ensures PostPointwise(ResetVarsPost(d, post, s1), ResetVarsPost(d, post, s2))
@@ -262,7 +262,7 @@ module RemoveScopedVarsAuxUniqueProof {
     { ResetVarsPredAux1'(s1, s2, xs, d, post.scopes[l]); }
   }
 
-  lemma ResetVarsPostAux2<A(!new)>(s: state<A>, xs: set<var_name>, d: seq<VarDecl>, post: WpPost<A>)
+  lemma {:verify false} ResetVarsPostAux2<A(!new)>(s: state<A>, xs: set<var_name>, d: seq<VarDecl>, post: WpPost<A>)
   requires PostDepend(post, xs)
   ensures PostDepend(ResetVarsPost(d, post, s), xs)
   {
@@ -273,7 +273,7 @@ module RemoveScopedVarsAuxUniqueProof {
     { ResetVarsPredAux2(s, xs, d, post.scopes[l]); }
   }
 
-  lemma ResetVarsPostAux3<A(!new)>(s: state<A>, xs: set<var_name>, d: seq<VarDecl>, post: WpPost<A>)
+  lemma {:verify false} ResetVarsPostAux3<A(!new)>(s: state<A>, xs: set<var_name>, d: seq<VarDecl>, post: WpPost<A>)
   requires PostDepend(post, xs)
   requires GetVarNames(d) !! xs
   ensures PostPointwise(ResetVarsPost(d, post, s), post)
@@ -285,7 +285,7 @@ module RemoveScopedVarsAuxUniqueProof {
     { ResetVarsPredAux3(s, xs, d, post.scopes[l]); }
   }
 
-  lemma WpPredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, c: Cmd, post: WpPost<A>)
+  lemma {:verify false} WpPredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, c: Cmd, post: WpPost<A>)
     requires c.WellFormedVars(xs)
     requires NoLoopsNoIfGuard(c)
     requires LabelsWellDefAux(c, post.scopes.Keys)
@@ -378,13 +378,13 @@ module RemoveScopedVarsAuxUniqueProof {
       reveal PredDepend();
   }
 
-  lemma StateUpdVarDeclsEqOutsideDecls<A>(s: state<A>, decls: seq<VarDecl>, vs: seq<Val<A>>, x: var_name)
+  lemma {:verify false} StateUpdVarDeclsEqOutsideDecls<A>(s: state<A>, decls: seq<VarDecl>, vs: seq<Val<A>>, x: var_name)
     requires |decls| == |vs|
     requires x !in GetVarNames(decls)
     ensures Maps.Get(StateUpdVarDecls(s, decls, vs), x) == Maps.Get(s, x)
   { }
 
-  lemma StateUpdVarDeclsEqOnDecls<A>(s1: state<A>, s2: state<A>, decls: seq<VarDecl>, vs: seq<Val<A>>, x: var_name)
+  lemma {:verify false} StateUpdVarDeclsEqOnDecls<A>(s1: state<A>, s2: state<A>, decls: seq<VarDecl>, vs: seq<Val<A>>, x: var_name)
     requires |decls| == |vs|
     requires x in GetVarNames(decls)
     ensures  Maps.Get(StateUpdVarDecls(s1, decls, vs), x) == Maps.Get(StateUpdVarDecls(s2, decls, vs), x)
@@ -403,7 +403,7 @@ module RemoveScopedVarsAuxUniqueProof {
     }
   }
 
-  lemma ForallPredDepend<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, decls: seq<VarDecl>, p: Predicate<A>)
+  lemma {:verify false} ForallPredDepend<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, decls: seq<VarDecl>, p: Predicate<A>)
     requires PredDepend(p, activeVars+GetVarNames(decls))
     ensures PredDepend(ForallVarDecls(a, decls, p), activeVars)
   {
@@ -436,7 +436,7 @@ module RemoveScopedVarsAuxUniqueProof {
     }
   }
 
-  lemma ForallWpPredDepend<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, decls: seq<VarDecl>, c: Cmd, post: WpPost<A>)
+  lemma {:verify false} ForallWpPredDepend<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, decls: seq<VarDecl>, c: Cmd, post: WpPost<A>)
     requires c.WellFormedVars(activeVars+GetVarNames(decls))
     requires NoLoopsNoIfGuard(c)
     requires LabelsWellDefAux(c, post.scopes.Keys)
@@ -453,8 +453,7 @@ module RemoveScopedVarsAuxUniqueProof {
     ForallPredDepend(a, activeVars, decls, WpCmd(a, c, post));
   }
 
-  /*
-  lemma PullForallWpSimpleCmd<A(!new)>(a: absval_interp<A>, xs: set<var_name>, cxs: set<var_name>, d: seq<VarDecl>, sc: SimpleCmd, p: Predicate<A>, s: state<A>)
+  lemma {:verify false} PullForallWpSimpleCmd<A(!new)>(a: absval_interp<A>, xs: set<var_name>, cxs: set<var_name>, d: seq<VarDecl>, sc: SimpleCmd, p: Predicate<A>, s: state<A>)
     requires xs !! GetVarNames(d)
    // requires PredDepend(p, xs+GetVarNames(d))
     requires && sc.WellFormedVars(xs+cxs) /** needed to make sure that sc and d do not intefere */
@@ -463,7 +462,6 @@ module RemoveScopedVarsAuxUniqueProof {
       WpSimpleCmd(a, sc, ForallVarDecls(a, d, p))(s)
     ==
       ForallVarDecls(a, d, WpSimpleCmd(a, sc, p))(s)
-  */
   /*
   {
     match sc 
@@ -490,6 +488,43 @@ module RemoveScopedVarsAuxUniqueProof {
   }
   */
 
+  lemma ForallVarDeclsIndep<A(!new)>(a: absval_interp<A>, d: seq<VarDecl>, p: Predicate<A>, s: state<A>)
+    requires forall vs | ValuesRespectDecls(a, vs, d) :: p(StateUpdVarDecls(s, d, vs)) == p(s)
+    ensures ForallVarDecls(a, d, p)(s) == p(s)
+  {
+    if |d| == 0 {
+      reveal ForallVarDecls();
+    } else {
+      if ForallVarDecls(a, d, p)(s) == None {
+        NoneForallVarDecls(a, d, p, s);
+        var vs :| ValuesRespectDecls(a, vs, d) && p(StateUpdVarDecls(s, d, vs)) == None;
+        assert p(s) == None;
+      } else {
+        assert 
+          ForallVarDecls(a, d, p)(s) ==
+          Some(forall vs | ValuesRespectDecls(a, vs, d) :: p(StateUpdVarDecls(s, d, vs)) == Some(true)) by {
+            SomeForallVarDecls(a, d, p, s);
+          }
+
+          if ForallVarDecls(a, d, p)(s) == Some(false) {
+            SomeFalseForallVarDecls2(a, d, p, s);
+            var vs' :| ValuesRespectDecls(a, vs', d) && p(StateUpdVarDecls(s, d, vs')) == Some(false);
+            assert p(s) == Some(false);
+          } else {
+            assert exists vs':: ValuesRespectDecls(a, vs', d) by {
+              //TODO: for this need that the types in d are nonempty (need extra precondition due to uninterpreted types)
+              assume false;
+            }
+            var vs' :| ValuesRespectDecls(a, vs', d);
+            assert p(StateUpdVarDecls(s, d, vs')) == Some(true) by {
+              SomeTrueForallVarDecls(a, d, p, s);
+            }
+            assert p(s) == Some(true);
+          }
+      }
+    }
+  }
+
   lemma PullForallWp<A(!new)>(a: absval_interp<A>, xs: set<var_name>, cxs: set<var_name>, d: seq<VarDecl>, c: Cmd, p: Predicate<A>, post: WpPost<A>, s: state<A>)
     requires LabelsWellDefAux(c, post.scopes.Keys)
     requires && PostDepend(post, xs) /** needed to make sure that d is not captured in post */
@@ -501,10 +536,45 @@ module RemoveScopedVarsAuxUniqueProof {
       WpCmd(a, c, WpPost(ForallVarDecls(a, d, p), post.currentScope, post.scopes))(s)
     ==
       ForallVarDecls(a, d, WpCmd(a, c, WpPost(p, post.currentScope, post.scopes)))(s)
-  { assume false; }
+  { 
+    match c
+    case SimpleCmd(sc) => 
+      reveal WpCmd();
+      PullForallWpSimpleCmd(a, xs, cxs, d, sc, p, s);
+    case Break(optLabel) =>
+      reveal WpCmd();
+      var q := if optLabel == None then post.currentScope else post.scopes[optLabel.value];
+      calc {
+        WpCmd(a, Break(optLabel), WpPost(ForallVarDecls(a, d, p), post.currentScope, post.scopes))(s);
+        q(s);
+        {
+          forall vs | ValuesRespectDecls(a, vs, d) 
+          ensures q(StateUpdVarDecls(s, d, vs)) == q(s)
+          {
+            forall x | x in xs
+            ensures Maps.Get(StateUpdVarDecls(s, d, vs), x) == Maps.Get(s,x)
+            {
+              StateUpdVarDeclsEqOutsideDecls(s, d, vs, x);
+            }
 
+            assert StateEqualOn(StateUpdVarDecls(s, d, vs), s, xs) by {
+              reveal StateEqualOn();
+            }
 
-  lemma HasNoDuplicatesAppend<T>(s1: seq<T>, s2: seq<T>)
+            reveal PredDepend();
+          }
+          ForallVarDeclsIndep(a, d, q, s);
+        }
+        ForallVarDecls(a, d, q)(s);
+        ForallVarDecls(a, d, WpCmd(a, Break(optLabel), WpPost(p, post.currentScope, post.scopes)))(s);
+      }
+    case Scope(_, varDecls, body) => assume false;
+    case If(None, thn, els) => assume false;
+    case Seq(c1, c2) => assume false;
+    case _ => assume false; //TODO adjust precondition such that this case cannot occur
+  }
+
+  lemma {:verify false} HasNoDuplicatesAppend<T>(s1: seq<T>, s2: seq<T>)
   requires Sequences.HasNoDuplicates(s1+s2)
   ensures 
     && Sequences.HasNoDuplicates(s1)
@@ -526,7 +596,7 @@ module RemoveScopedVarsAuxUniqueProof {
     }
   }
 
-  lemma HasNoDuplicatesAppDisj(s1: seq<VarDecl>, s2: seq<VarDecl>)
+  lemma {:verify false} HasNoDuplicatesAppDisj(s1: seq<VarDecl>, s2: seq<VarDecl>)
   requires Sequences.HasNoDuplicates(GetVarNamesSeq(s1+s2))
   ensures GetVarNames(s1) !! GetVarNames(s2)
   {
@@ -547,14 +617,14 @@ module RemoveScopedVarsAuxUniqueProof {
     }
   }
 
-  lemma RemoveScopedVarsAuxGetDecls(c: Cmd)
+  lemma {:verify false} RemoveScopedVarsAuxGetDecls(c: Cmd)
     requires NoLoopsNoIfGuard(c)
     ensures
       var (c', decls) := RemoveScopedVarsAux(c);
       GetDecls(c) == decls
   { }
  
-  lemma {:verify true} RemoveScopedVarsAuxCorrect<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, c: Cmd, post: WpPost<A>)
+  lemma {:verify false} {:verify true} RemoveScopedVarsAuxCorrect<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, c: Cmd, post: WpPost<A>)
     requires 
       var (c', decls) := RemoveScopedVarsAux(c);
       && LabelsWellDefAux(c, post.scopes.Keys) 
@@ -694,7 +764,9 @@ module RemoveScopedVarsAuxUniqueProof {
 
           calc {
             ForallVarDecls(a, declsThn, WpCmd(a, thn', post))(s);
-            { assume false; }
+            { 
+              assume false; //TODO: reuse forall indep lemm 
+            }
             ForallVarDecls(a, declsThn, ForallVarDecls(a, declsEls, WpCmd(a, thn', post)))(s);
             { ForallAppend.ForallVarDeclsAppend(a, declsThn, declsEls, WpCmd(a, thn', post), s); }
             ForallVarDecls(a, declsThn+declsEls, WpCmd(a, thn', post))(s);
@@ -702,7 +774,9 @@ module RemoveScopedVarsAuxUniqueProof {
 
           calc {
             ForallVarDecls(a, declsEls, WpCmd(a, els', post))(s);
-            { assume false; }
+            { 
+              assume false; //TODO: reuse forall indep lemma  
+            }
             ForallVarDecls(a, declsThn, ForallVarDecls(a, declsEls, WpCmd(a, els', post)))(s);
             { ForallAppend.ForallVarDeclsAppend(a, declsThn, declsEls, WpCmd(a, els', post), s); }
             ForallVarDecls(a, declsThn+declsEls, WpCmd(a, els', post))(s);
