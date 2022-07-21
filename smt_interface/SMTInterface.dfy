@@ -4,7 +4,7 @@ module {:extern "System"} {:compile false} System {
   class {:extern} {:compile false} String {}
 }
 
-module {:extern "Microsoft.Boogie.VCExprAST"} VCExprAST {
+module {:extern "Microsoft.Boogie.VCExprAST"} {:compile false} VCExprAST {
   class {:extern} {:compile false} VCExpr {}
 }
 
