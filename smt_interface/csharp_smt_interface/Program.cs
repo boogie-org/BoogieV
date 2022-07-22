@@ -8,8 +8,13 @@ namespace SMTInterface_Compile
     public class VCExprInterface
     {
         private VCExpressionGenerator exprGen;
-        private String proverPath;
-        private String logPath;
+        private string proverPath;
+        private string logPath;
+
+        public string ToString(object o)
+        {
+          return o.ToString();
+        }
 
         ProverFactory proverFactory = ProverFactory.Load("SMTLib");
 
@@ -18,17 +23,17 @@ namespace SMTInterface_Compile
         iff their names are different) */
         private IDictionary<string, VCExprVar> nameToVar = new Dictionary<string, VCExprVar>();
 
-        public VCExprInterface(VCExpressionGenerator exprGen, String proverPath, String logPath)
+        public VCExprInterface(VCExpressionGenerator exprGen, string proverPath, string logPath)
         {
             this.exprGen = exprGen;
             this.proverPath = proverPath;
             this.logPath = logPath;
         }
         
-        public static VCExprInterface Create(String proverPath, String logPath)
+        public static VCExprInterface Create(ISequence<char> proverPath, ISequence<char> logPath)
         {
           var exprGen = new VCExpressionGenerator();
-          return new VCExprInterface(exprGen, proverPath, logPath);
+          return new VCExprInterface(exprGen, proverPath.ToString(), logPath.ToString());
         }
 
         private async Task<ProverInterface.Outcome> InvokeProver(ProverInterface proverInterface, VCExpr vc, ProverInterface.ErrorHandler errorHandler, int errorLimit)
@@ -99,10 +104,9 @@ namespace SMTInterface_Compile
             return res;
         }
 
-        //TODO: change to BigInteger
-        public VCExpr VCLitInt(int i) 
+        public VCExpr VCLitInt(System.Numerics.BigInteger i) 
         {
-            return exprGen.Integer(Microsoft.BaseTypes.BigNum.FromInt(i));
+            return exprGen.Integer(Microsoft.BaseTypes.BigNum.FromBigInt(i));
         }
 
         public VCExpr VCLitBool(bool b) 
@@ -209,7 +213,7 @@ namespace SMTInterface_Compile
     }
 
     class MainClass {
-      static void Main(String [] args) {
+      static void Main(string [] args) {
         if(args.Length < 2) {
           Console.WriteLine("Not enough arguments (need at least two)");
           return;

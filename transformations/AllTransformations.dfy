@@ -107,6 +107,10 @@ import opened BoogieLang
 import opened Wrappers
 import opened SMTInterface
 
+module Environment {
+  method {:extern "Shims", "GetCommandLineArguments"} GetCommandLineArguments() returns (args: seq<string>)
+}
+
 method Main()
 {
   var c := 
@@ -118,10 +122,20 @@ method Main()
         SimpleCmd(Assert(BinOp(Var("x"), Gt, ELit(LitInt(0)))))
       )
     );
+
+  
+  var args := Environment.GetCommandLineArguments();
+  if |args| != 2 {
+    print "Expecting exactly two arguments [prover_path] [prover_log_output]";
+    return;
+  }
+
+  var proverPath := args[0];
+  var proverLogPath := args[1];
   
   var vc := AllTransformations.AllTransformations(c);
   var vcString := vc.ToString();
-  var vcExprInterface := VCExprInterface.Create("","");
+  var vcExprInterface := VCExprInterface.Create(proverPath, proverLogPath);
   
   var vcExpr := VCExprAdapter.ExprToVCExpr(vcExprInterface, vc);
   var vcValid := vcExprInterface.IsVCValid(vcExpr);
