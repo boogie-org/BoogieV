@@ -11,11 +11,6 @@ namespace SMTInterface_Compile
         private string proverPath;
         private string logPath;
 
-        public string ToString(object o)
-        {
-          return o.ToString();
-        }
-
         ProverFactory proverFactory = ProverFactory.Load("SMTLib");
 
         /* keep a map from strings to var objects to make sure that we can return

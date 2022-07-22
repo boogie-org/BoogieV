@@ -19,7 +19,7 @@ module AstToCfgCorrectness
     nextVersion: BlockId)
     requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
     ensures 
-      var (cfg, nextVersion', exitOpt) := AstToCfgAux(c, nextVersion); 
+      var AstCfgResult(cfg, nextVersion', exitOpt) := AstToCfgAux(c, nextVersion); 
       var exit := exitOpt.value; //DISCUSS: does not work if replace {exit} by {exitOpt.value}
       IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', exit))
   {
@@ -141,7 +141,7 @@ module AstToCfgCorrectness
     requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
     requires LabelsWellDefAux(c, post.scopes.Keys)
     ensures 
-      var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
+      var AstCfgResult(cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
       var exit := exitOpt.value;
       var cover' := CoveringSet(nextVersion, nextVersion', exitOpt.value);
 
@@ -151,10 +151,10 @@ module AstToCfgCorrectness
     match c {
       case SimpleCmd(sc) => reveal WpCmd();
       case Seq(c1, c2) =>
-        var (cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
+        var AstCfgResult(cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
         var exit1 := exitOpt1.value;
         
-        var (cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
+        var AstCfgResult(cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
         var exit2 := exitOpt2.value; 
 
         var cover1 := CoveringSet(nextVersion, nextVersion1, exitOpt1.value);
@@ -215,7 +215,7 @@ module AstToCfgCorrectness
         }         
       case Scope(optLabel, varDecls, body) =>
         assert varDecls == []; 
-        var (bodyCfg, nextVersion', exitOpt) := AstToCfgAux(body, nextVersion);
+        var AstCfgResult(bodyCfg, nextVersion', exitOpt) := AstToCfgAux(body, nextVersion);
         var exit := exitOpt.value;
         var cover := CoveringSet(nextVersion, nextVersion', exit);
 
@@ -255,11 +255,11 @@ module AstToCfgCorrectness
       case If(optCond, thn, els) =>
         /** CFG thn branch */
         var (entry, entryBlock) := (nextVersion, Skip);
-        var (cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entry+1);
+        var AstCfgResult(cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entry+1);
 
 
         /** CFG els branch */
-        var (cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
+        var AstCfgResult(cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
 
         var (thnEntry, thnS) := (cfgThn.entry, cfgThn.successors);
         var thnExit := exitOpt1.value;

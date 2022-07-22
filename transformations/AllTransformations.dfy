@@ -36,12 +36,12 @@ module AllTransformations
 
     LoopElim.EliminateLoopsPreserveNoBreaks(c);
 
-    print("=====After loop elimination=====\n");
+    print("\n=====After loop elimination=====\n");
     print(c1.ToString(0));
 
     /** Eliminate if guards */
     var c2 := IfGuardElim.EliminateIfGuards(c1); 
-    print("=====After If guard elimination=====\n");
+    print("\n=====After If guard elimination=====\n");
     print(c2.ToString(0));
 
     IfGuardElim.EliminateIfGuardsNoLoops(c1);
@@ -49,13 +49,13 @@ module AllTransformations
     /** Remove scoped variables */
     var (c3, decls3) := DesugarScopedVarsImpl.RemoveScopedVars(c2);
     DesugarScopedVarsImpl.RemoveScopedVarsStructure(c2);
-    print("=====After removing scoped variables=====\n");
+    print("\n=====After removing scoped variables=====\n");
     print(c3.ToString(0));
 
     /** Normalize AST */
     var (c4Opt, scExitOpt) := NormalizeAst.NormalizeAst(c3, None);
     var c4 := NormalizeAst.SeqCmdSimpleOpt(c4Opt, scExitOpt);
-    print("=====After AST normalization=====\n");
+    print("\n=====After AST normalization=====\n");
     print(c4.ToString(0));
 
     NormalizeAst.NormalizeAstPreserveStructure(c3, None);
@@ -83,14 +83,6 @@ module AllTransformations
 
     /** VCGen */
     expect g2.entry == topo[0];
-    if |topo| == 0 {
-      print("no blocks");
-    } else {
-      print("g1:\n");
-      print(g1.blocks[topo[0]].ToString(0));
-      print("\n g2:\n");
-      print(g2.blocks[topo[0]].ToString(0));
-    }
 
     var vc := 
       if |topo| == 0 then
@@ -119,7 +111,7 @@ method Main()
       [("x", TPrim(TInt))], 
       Seq(
         SimpleCmd(Assume(BinOp(Var("x"), Gt, ELit(LitInt(0))))),
-        SimpleCmd(Assert(BinOp(Var("x"), Gt, ELit(LitInt(0)))))
+        SimpleCmd(Assert(BinOp(Var("x"), Gt, ELit(LitInt(1)))))
       )
     );
 
@@ -140,11 +132,16 @@ method Main()
   var vcExpr := VCExprAdapter.ExprToVCExpr(vcExprInterface, vc);
   var vcValid := vcExprInterface.IsVCValid(vcExpr);
 
+  print("\n=====VC Generation====\n");
+
+  print(vcString+"\n");
+
+  print("\n=====Result=====\n");
+
   if vcValid {
     print("Input program is correct.");
   } else {
     print("Input program might not be correct.");
   }
 
-  print(vcString);
 }
