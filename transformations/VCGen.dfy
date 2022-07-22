@@ -60,14 +60,18 @@ module VCGen
   function method GenerateVCAux(idTopo: nat, topo: seq<BlockId>, blockMapping: map<BlockId, Expr>, result: Expr) : Expr
     requires 0 <= idTopo <= |topo|
     requires forall b | b in topo :: b in blockMapping.Keys
+    decreases |topo|-idTopo
   {
     if idTopo == |topo| then
       result
     else
+
       var blockId := topo[idTopo];
       var blockVCId := VCBlockName(blockId);
       var blockVC := blockMapping[blockId];
-      Let(blockVCId, blockVC, result)
+      var newResult := Let(blockVCId, blockVC, result);
+
+      GenerateVCAux(idTopo+1, topo, blockMapping, newResult)
   }
 
   function method GenerateVC(g: Cfg, topo: seq<BlockId>) : Expr

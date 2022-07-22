@@ -88,7 +88,13 @@ module VCExprAdapter {
   method ExprToVCExpr(vcExprI: VCExprInterface, e: Expr) returns (res: VCExpr)
   {
     match e
-    case Var(x) => res := vcExprI.VCIntVar(x);
+    case Var(x) => 
+      //TODO: need to add type field variable, for now use hack to distinguish block variables from other variables
+      if x != [] && x[0] == 'B' {
+        res := vcExprI.VCBoolVar(x);
+      } else {
+        res := vcExprI.VCIntVar(x);
+      }
     case ELit(lit) => 
       match lit {
         case LitInt(i) => res := vcExprI.VCLitInt(i);
@@ -103,7 +109,7 @@ module VCExprAdapter {
       res := BinopToVCExpr(vcExprI, vcE1', bop, vcE2');
     case Let(x, e, body) => 
       var vcE := ExprToVCExpr(vcExprI, e);
-      var vcBody := ExprToVCExpr(vcExprI, e);
+      var vcBody := ExprToVCExpr(vcExprI, body);
       res := vcExprI.VCLet(x, vcE, vcBody);
   }
 

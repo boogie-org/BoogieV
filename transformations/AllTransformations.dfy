@@ -8,6 +8,7 @@ include "AstToCfg_simple.dfy"
 include "Passification.dfy"
 include "VCGen.dfy"
 include "../lang/BoogieLang.dfy"
+include "../lang/Cfg.dfy"
 include "../util/AstSubsetPredicates.dfy"
 include "../util/CfgHelper.dfy"
 include "../smt_interface/SMTInterface.dfy"
@@ -27,6 +28,7 @@ module AllTransformations
   import Passification
   import VCGen
   import CfgHelper
+  import BoogieCfg
 
   method AllTransformations(c: Cmd) returns (e: Expr)
     requires NoBreaks(c) //TODO: lift
@@ -65,6 +67,8 @@ module AllTransformations
     
     /** Ast-to-CFG */
     var (g1, blockSeq, cover) := AstToCfg.AstToCfg(c4);
+    print("\n=====After AST-to-CFG transformation=====\n");
+    print(CfgHelper.PrintCfg(g1, blockSeq));
 
     /** Compute auxiliary CFG data */
     var pred := CfgHelper.PredecessorMap(g1.successors, blockSeq);
@@ -80,6 +84,10 @@ module AllTransformations
 
     /** Passification */
     var g2 := Passification.PassifyCfg(g1, topo, pred);
+    print("\n=====After Passification=====\n");
+    expect BoogieCfg.CfgWf(g2);
+
+    print(CfgHelper.PrintCfg(g2, topo));
 
     /** VCGen */
     expect g2.entry == topo[0];
@@ -105,6 +113,7 @@ module Environment {
 
 method Main()
 {
+  /*
   var c := 
     Scope(
       None,
@@ -114,7 +123,48 @@ method Main()
         SimpleCmd(Assert(BinOp(Var("x"), Gt, ELit(LitInt(1)))))
       )
     );
+  */
+  /*
+  var c :=
+    Scope(
+      None,
+      [("x", TPrim(TInt)), ("y", TPrim(TInt))], 
+      If(Some(BinOp(Var("x"), Gt, ELit(LitInt(0)))),
+        SimpleCmd(Assert(BinOp(Var("x"), Gt, ELit(LitInt(0))))),
+        SimpleCmd(Assert(BinOp(Var("x"), Le, ELit(LitInt(0)))))
+      )
+    );
+  */
+  /*
+  var c :=
+    Scope(
+      None,
+      [("x", TPrim(TInt)), ("y", TPrim(TInt))], 
+      Seq(
+        SimpleCmd(Assign("x", TPrim(TInt), ELit(LitInt(0)))),
+        Seq(
+          SimpleCmd(Assign("x", TPrim(TInt), BinOp(Var("x"), Add, ELit(LitInt(1))))),
+          SimpleCmd(Assert(BinOp(Var("x"), Gt, ELit(LitInt(0)))))
+        )
+      )
+    );
+  */
 
+  var c :=
+    Scope(
+      None,
+      [("x", TPrim(TInt)), ("y", TPrim(TInt))], 
+      Seq(
+        Seq(
+          SimpleCmd(Assign("x", TPrim(TInt), ELit(LitInt(0)))),
+          If(Some(BinOp(Var("x"), Gt, ELit(LitInt(0)))),
+            SimpleCmd(Assign("x", TPrim(TInt), BinOp(Var("x"), Add, ELit(LitInt(1))))),
+            SimpleCmd(Assign("x", TPrim(TInt), BinOp(Var("x"), Add, ELit(LitInt(2)))))
+          )
+        ),
+        SimpleCmd(Assert(BinOp(Var("x"), Gt, ELit(LitInt(0)))))
+      )
+    );
   
   var args := Environment.GetCommandLineArguments();
   if |args| != 2 {
@@ -127,16 +177,17 @@ method Main()
   
   var vc := AllTransformations.AllTransformations(c);
   var vcString := vc.ToString();
-  var vcExprInterface := VCExprInterface.Create(proverPath, proverLogPath);
-  
-  var vcExpr := VCExprAdapter.ExprToVCExpr(vcExprInterface, vc);
-  var vcValid := vcExprInterface.IsVCValid(vcExpr);
 
   print("\n=====VC Generation====\n");
 
   print(vcString+"\n");
 
   print("\n=====Result=====\n");
+
+  var vcExprInterface := VCExprInterface.Create(proverPath, proverLogPath);
+  
+  var vcExpr := VCExprAdapter.ExprToVCExpr(vcExprInterface, vc);
+  var vcValid := vcExprInterface.IsVCValid(vcExpr);
 
   if vcValid {
     print("Input program is correct.");

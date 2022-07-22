@@ -91,8 +91,8 @@ namespace SMTInterface_Compile
         {
             string xS = x.ToString();
             if(!nameToVar.TryGetValue(xS, out var res)) {
-                var intType = Microsoft.Boogie.Type.Bool;
-                res = exprGen.Variable(xS, intType);
+                var boolType = Microsoft.Boogie.Type.Bool;
+                res = exprGen.Variable(xS, boolType);
                 nameToVar.Add(xS, res);
             }
 
@@ -202,7 +202,10 @@ namespace SMTInterface_Compile
 
         public VCExpr VCLet(Dafny.ISequence<char> varName, VCExpr binding, VCExpr body)
         {
-          throw new NotImplementedException();
+          //we only support boolean variables
+          var vcExprVar = (VCExprVar) VCBoolVar(varName);
+          var letBinding = exprGen.LetBinding(vcExprVar, binding);
+          return exprGen.Let(new List<VCExprLetBinding> { letBinding }, body);
         }
 
     }

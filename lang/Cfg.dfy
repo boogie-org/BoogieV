@@ -21,13 +21,13 @@ module BoogieCfg {
   }
   */
 
-  predicate GraphWf<T>(succRel: map<T, seq<T>>)
+  predicate method GraphWf<T>(succRel: map<T, seq<T>>)
   {
     (forall blockId :: blockId in succRel.Keys ==> 
       (forall i :: 0 <= i < |succRel[blockId]| ==> succRel[blockId][i] in succRel.Keys))
   }
 
-  predicate CfgWf(g: Cfg)
+  predicate method CfgWf(g: Cfg)
   {
     && g.blocks.Keys == g.successors.Keys
     && g.entry in g.blocks.Keys

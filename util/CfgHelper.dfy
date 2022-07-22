@@ -1,9 +1,11 @@
 include "../lang/Cfg.dfy"
 include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
+include "Util.dfy"
 
 module CfgHelper {
   import opened BoogieCfg
   import Sequences = Seq
+  import Util
 
   type Graph<T> = map<T, seq<T>>
 
@@ -219,6 +221,41 @@ module CfgHelper {
         }
       }
     }
+  }
+
+  function method PrintCfgAux(cfg: Cfg, blockIds: seq<BlockId>, idx: BlockId) : string
+    requires CfgWf(cfg)
+    requires forall id | id in blockIds :: id in cfg.blocks.Keys && id in cfg.successors.Keys
+    decreases |blockIds|-idx
+  {
+    if idx >= |blockIds| then
+      ""
+    else
+      var bId := blockIds[idx];
+      var blockName := "B"+Util.NatToString(bId);
+      var blockString := cfg.blocks[bId].ToString(0);
+      var successors := cfg.successors[bId];
+
+      "\n"+blockName+":\n"+
+      blockString+"\n"+
+      (
+      if successors == [] then 
+        "return;\n"
+      else
+        Sequences.FoldLeft( 
+            (s: string, bSucc: BlockId) => 
+              if bSucc in cfg.blocks.Keys then s+", B"+ Util.NatToString(bSucc) else "block not in successors",
+            "targets: ",
+            successors)+"\n"
+      ) +
+      PrintCfgAux(cfg, blockIds, idx+1)
+  }
+
+  function method PrintCfg(cfg: Cfg, blockIds: seq<BlockId>) : string
+    requires CfgWf(cfg)
+    requires forall id | id in blockIds :: id in cfg.blocks.Keys
+  {
+    PrintCfgAux(cfg, blockIds, 0)
   }
 
 }
