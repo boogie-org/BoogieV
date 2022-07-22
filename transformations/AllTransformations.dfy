@@ -156,7 +156,7 @@ method Main()
       [("x", TPrim(TInt)), ("y", TPrim(TInt))], 
       Seq(
         Seq(
-          SimpleCmd(Assign("x", TPrim(TInt), ELit(LitInt(0)))),
+          SimpleCmd(Assign("x", TPrim(TInt), ELit(LitInt(1234)))),
           If(Some(BinOp(Var("x"), Gt, ELit(LitInt(0)))),
             SimpleCmd(Assign("x", TPrim(TInt), BinOp(Var("x"), Add, ELit(LitInt(1))))),
             SimpleCmd(Assign("x", TPrim(TInt), BinOp(Var("x"), Add, ELit(LitInt(2)))))

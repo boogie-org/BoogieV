@@ -30,46 +30,48 @@ module Util {
       var digit := n % 10;
       var digitString := ['0' + digit as char];
       var remainder := n/10;
-      digitString + if remainder > 0 then NatToString(n/10) else ""
+      (if remainder > 0 then NatToString(n/10) else "") + digitString
   }
 
   lemma HashTagNotInNatString(n: nat)
     ensures '#' !in NatToString(n)
   { }
 
-  lemma test(n: nat, c1: char, c2: char)
-  {
-    var digit := n % 10;
-    var c3 := '0' + (digit as char);
-  }
   lemma NatToStringInjective(n1: nat, n2: nat)
     requires n1 != n2
     ensures NatToString(n1) != NatToString(n2)
   {
-    assume false; //TODO adjust proof
     if n1 == 0 {
-      //trivial
+      assert n2 != 0;
+      var digit2 := n2 % 10;
+
+      var digitString2 := ['0' + digit2 as char];
+      var remainder2 := n2/10;
+
+      assert "0"[0] == '0'+ 0 as char;
     } else {
       var digit1 := n1 % 10;
       var digitString1 := ['0' + digit1 as char];
-      var res1 := digitString1 + NatToString(n1/10);
+      var remainder1 := n1/10;
+      var res1 := (if remainder1 > 0 then NatToString(n1/10) else "") + digitString1;
 
       var digit2 := n2 % 10;
       var digitString2 := ['0' + digit2 as char];
-      var res2 := digitString2 + NatToString(n2/10);
+      var remainder2 := n2/10;
+      var res2 := (if remainder2 > 0 then NatToString(n2/10) else "")+ digitString2;
 
       assert |digitString1| == |digitString2|;
 
       if digit1 != digit2 {
         assert ('0'+ digit1 as char) != ('0'+ digit2 as char);
         assert digitString1 != digitString2;
-        assert res1[0] != res2[0];
+        assert res1[|res1|-1] != res2[|res2|-1];
       } else {
         assert NatToString(n1/10) != NatToString(n2/10) by {
           assert n1/10 != n2/10;
           NatToStringInjective(n1/10, n2/10);
         }
-        assert res1[1..] != res2[1..];
+        assert res1[0..|res1|-1] != res2[0..|res2|-1];
       }
     }
   }
