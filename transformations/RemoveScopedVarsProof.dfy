@@ -586,7 +586,7 @@ module RemoveScopedVarsAuxUniqueProof {
     requires NoScopedVars(c) //might be able to remove this, but currently the only applications of the lemma satisfy this precondition
     ensures 
       ( assert post.scopes.Keys == ForallScopes(a, d, post.scopes).Keys; 
-      WpCmd(a, c, ForallVarDeclsPost(a, d, post))
+      WpCmd(a, c, ForallVarDeclsPost(a, d, post))(s)
       //WpCmd(a, c, WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes)))(s)
     ==
       ForallVarDecls(a, d, WpCmd(a, c, post))(s))
@@ -599,7 +599,8 @@ module RemoveScopedVarsAuxUniqueProof {
       reveal WpCmd();
     case Scope(optLabel, varDecls, body) => 
       assert varDecls == [];
-      var post1 := WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes));
+      //var post1 := WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes));
+      var post1 := ForallVarDeclsPost(a, d, post);
 
       var updatedScopes := 
         if optLabel.Some? then 
@@ -613,7 +614,7 @@ module RemoveScopedVarsAuxUniqueProof {
 
       var updatedScopes' := 
         if optLabel.Some? then 
-          post.scopes[optLabel.value := p]
+          post.scopes[optLabel.value := post.normal]
         else post.scopes;
       
       calc {
@@ -623,15 +624,15 @@ module RemoveScopedVarsAuxUniqueProof {
         { ResetVarsPostEmpty(post', s); reveal ForallVarDecls(); }
         WpCmd(a, body, post')(s);
         { reveal WpCmd(); }
-        WpCmd(a, body, WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, p), updatedScopes))(s);
+        WpCmd(a, body, WpPost(ForallVarDecls(a, d, post.normal), ForallVarDecls(a, d, post.normal), updatedScopes))(s);
         { 
           assert body.WellFormedVars((xs+cxs)+GetVarNames(varDecls));
           assert (xs+cxs)+GetVarNames(varDecls) == xs+cxs;
           //assume optLabel == None;
-          assert optLabel.Some? ==> updatedScopes == ForallScopes(a, d, post.scopes[optLabel.value := p]);
-          PullForallWp(a, xs, cxs, d, body, p, WpPost(p, p, updatedScopes'), s);  
+          assert optLabel.Some? ==> updatedScopes == ForallScopes(a, d, post.scopes[optLabel.value := post.normal]);
+          PullForallWp(a, xs, cxs, d, body, WpPost(post.normal, post.normal, updatedScopes'), s);  
         }
-        ForallVarDecls(a, d, WpCmd(a, body, WpPost(p, p, updatedScopes')))(s); //TODO: currently only makes sense for optLabel == None
+        ForallVarDecls(a, d, WpCmd(a, body, WpPost(post.normal, post.normal, updatedScopes')))(s); //TODO: currently only makes sense for optLabel == None
         /*
         {
           assert forall post' :: ResetVarsPost(varDecls, post', s) == post';
@@ -644,51 +645,50 @@ module RemoveScopedVarsAuxUniqueProof {
           //reveal WpCmd();
           /*
           */
-          var post1' := ForallVarDecls(a, [], WpCmd(a, body, WpPost(p, p, updatedScopes')));
-          var post2' := WpCmd(a, Scope(optLabel, [], body), WpPost(p, post.currentScope, post.scopes));
+          var post1' := ForallVarDecls(a, [], WpCmd(a, body, WpPost(post.normal, post.normal, updatedScopes')));
+          var post2' := WpCmd(a, Scope(optLabel, [], body), WpPost(post.normal, post.currentScope, post.scopes));
           forall s' 
           ensures post1'(s') == post2'(s')
           { 
             calc {
               post1'(s');
-              { ResetVarsPostEmpty(WpPost(p, p, updatedScopes'), s'); }
-              ForallVarDecls(a, [], WpCmd(a, body, ResetVarsPost([], WpPost(p, p, updatedScopes'), s')))(s');
-              { WpCmdScopeAux(a, optLabel, [], body, WpPost(p, post.currentScope, post.scopes), s'); }
+              { ResetVarsPostEmpty(WpPost(post.normal, post.normal, updatedScopes'), s'); }
+              ForallVarDecls(a, [], WpCmd(a, body, ResetVarsPost([], WpPost(post.normal, post.normal, updatedScopes'), s')))(s');
+              { WpCmdScopeAux(a, optLabel, [], body, WpPost(post.normal, post.currentScope, post.scopes), s'); }
               post2'(s');
             }
           }
           //ForallVarDeclsPointwise(a, varDecls, post1', post2', s);
           reveal ForallVarDecls(); //opaque bug? --> ForalVarDeclsPointwise on its own does not suffice
         }
-        ForallVarDecls(a, d, WpCmd(a, Scope(optLabel, varDecls, body), WpPost(p, post.currentScope, post.scopes)))(s);
+        ForallVarDecls(a, d, WpCmd(a, Scope(optLabel, varDecls, body), WpPost(post.normal, post.currentScope, post.scopes)))(s);
       }
     case If(None, thn, els) =>
       calc {
-        WpCmd(a, If(None, thn, els), WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes)))(s);
+        WpCmd(a, If(None, thn, els), ForallVarDeclsPost(a, d, post))(s);
         { reveal WpCmd(); }
         Util.AndOpt(
-          WpCmd(a, thn, WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes)))(s),
-          WpCmd(a, els, WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes)))(s)
+          WpCmd(a, thn, ForallVarDeclsPost(a, d, post))(s),
+          WpCmd(a, els, ForallVarDeclsPost(a, d, post))(s)
         );
         Util.AndOpt(
-          ForallVarDecls(a, d, WpCmd(a, thn, WpPost(p, post.currentScope, post.scopes)))(s),
-          ForallVarDecls(a, d, WpCmd(a, els, WpPost(p, post.currentScope, post.scopes)))(s)
+          ForallVarDecls(a, d, WpCmd(a, thn, post))(s),
+          ForallVarDecls(a, d, WpCmd(a, els, post))(s)
         );
         /**TODO */
       }
       assume false;
     case Seq(c1, c2) => 
-      assume false;
       calc {
-        WpCmd(a, Seq(c1, c2), WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes)))(s);
+        WpCmd(a, Seq(c1, c2), ForallVarDeclsPost(a, d, post))(s);
         { reveal WpCmd(); }
-        WpCmd(a, c1, WpPost(WpCmd(a, c2, WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes))), ForallVarDecls(a, d, post.currentScope), post.scopes))(s);
+        WpCmd(a, c1, WpPost(WpCmd(a, c2, ForallVarDeclsPost(a, d, post)), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes)))(s);
         { assume false; }
-        WpCmd(a, c1, WpPost(ForallVarDecls(a, d, WpCmd(a, c2, WpPost(p, post.currentScope, post.scopes))), post.currentScope, post.scopes))(s);
+        WpCmd(a, c1, WpPost(ForallVarDecls(a, d, WpCmd(a, c2, post)), ForallVarDecls(a, d ,post.currentScope), ForallScopes(a, d, post.scopes)))(s);
         { assume false; }
-        ForallVarDecls(a, d, WpCmd(a, c1, WpPost(WpCmd(a, c2, WpPost(p, post.currentScope, post.scopes)), post.currentScope, post.scopes)))(s);
+        ForallVarDecls(a, d, WpCmd(a, c1, WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes)))(s);
         { reveal WpCmd(); }
-        ForallVarDecls(a, d, WpCmd(a, Seq(c1, c2), WpPost(p, post.currentScope, post.scopes)))(s);
+        ForallVarDecls(a, d, WpCmd(a, Seq(c1, c2), post))(s);
       }
     case _ => assume false; //TODO adjust precondition such that this case cannot occur
   }
@@ -995,7 +995,7 @@ module RemoveScopedVarsAuxUniqueProof {
                   WpCmd(a, c1', WpPost(ForallVarDecls(a, decls2, WpCmd(a, c2',post)), ForallVarDecls(a, decls2, post.currentScope), ForallScopes(a, decls2, post.scopes)))(s');
                   { 
                     assert PredDepend(post.currentScope, activeVars);
-                    PullForallWp(a, activeVars, GetVarNames(decls1), decls2, c1', WpCmd(a, c2',post), post, s');
+                    PullForallWp(a, activeVars, GetVarNames(decls1), decls2, c1', WpPost(WpCmd(a, c2',post), post.currentScope, post.scopes), s');
                   }
                   ForallVarDecls(a, decls2, WpCmd(a, c1', post2NoQuant'))(s') ;
                 }
