@@ -328,6 +328,17 @@ module BoogieSemantics {
           None
   }
 
+  function ForallScopes<A(!new)>(a: absval_interp<A>, d: seq<VarDecl>, scopes: map<lbl_name, Predicate<A>>) : (result: map<lbl_name, Predicate<A>>)
+  ensures result.Keys == scopes.Keys
+  {
+    map l | l in scopes.Keys :: ForallVarDecls(a, d, scopes[l])
+  }
+
+  function ForallVarDeclsPost<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, post: WpPost<A>) : WpPost<A>
+  {
+    WpPost(ForallVarDecls(a, varDecls, post.normal), ForallVarDecls(a, varDecls, post.currentScope),ForallScopes(a, varDecls, post.scopes))
+  }
+
   function {:opaque} ForallVarDeclsOld<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
   {
     if |varDecls| == 0 then p
@@ -565,19 +576,13 @@ module BoogieSemantics {
   ensures ForallVarDecls(a, varDecls, P)(s) == ForallVarDecls(a, varDecls, Q)(s)
   {
     reveal ForallVarDecls();
-      /* proof below needed when using the recursive version of ForallVarDecls
-      reveal ForallVarDecls();
-      if |varDecls| == 0 {
-          //trivial from precondition P(s) == Q(s)
-      } else {
-          var (x,t) := varDecls[0];
-          forall v: Val<A> | true
-              ensures ForallVarDecls(a, varDecls[1..], P)(s[x := v]) == ForallVarDecls(a, varDecls[1..], Q)(s[x := v])
-          {
-              ForallVarDeclsPointwise(a, varDecls[1..], P, Q, s[x := v]);
-          }
-      }
-      */
+  }
+  
+  lemma ForallVarDeclsPointwise2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, P: Predicate<A>, Q: Predicate<A>)
+  requires forall s: state<A> :: P(s) == Q(s)
+  ensures forall s :: ForallVarDecls(a, varDecls, P)(s) == ForallVarDecls(a, varDecls, Q)(s)
+  {
+    reveal ForallVarDecls();
   }
 
   lemma WpSimpleCmdPointwise<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, P: Predicate<A>, Q: Predicate<A>, s: state<A>)
