@@ -587,9 +587,9 @@ module RemoveScopedVarsAuxUniqueProof {
     ensures 
       ( assert post.scopes.Keys == ForallScopes(a, d, post.scopes).Keys; 
       WpCmd(a, c, ForallVarDeclsPost(a, d, post))(s)
-      //WpCmd(a, c, WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes)))(s)
     ==
       ForallVarDecls(a, d, WpCmd(a, c, post))(s))
+    decreases c
   { 
     match c
     case SimpleCmd(sc) => 
@@ -599,7 +599,6 @@ module RemoveScopedVarsAuxUniqueProof {
       reveal WpCmd();
     case Scope(optLabel, varDecls, body) => 
       assert varDecls == [];
-      //var post1 := WpPost(ForallVarDecls(a, d, p), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes));
       var post1 := ForallVarDeclsPost(a, d, post);
 
       var updatedScopes := 
@@ -607,8 +606,6 @@ module RemoveScopedVarsAuxUniqueProof {
           post1.scopes[optLabel.value := post1.normal]
         else post1.scopes;
       
-      //assume optLabel == None;
-
       assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post1.scopes.Keys else post1.scopes.Keys;
       var post' := WpPost(post1.normal, post1.normal, updatedScopes);
 
@@ -628,23 +625,11 @@ module RemoveScopedVarsAuxUniqueProof {
         { 
           assert body.WellFormedVars((xs+cxs)+GetVarNames(varDecls));
           assert (xs+cxs)+GetVarNames(varDecls) == xs+cxs;
-          //assume optLabel == None;
           assert optLabel.Some? ==> updatedScopes == ForallScopes(a, d, post.scopes[optLabel.value := post.normal]);
           PullForallWp(a, xs, cxs, d, body, WpPost(post.normal, post.normal, updatedScopes'), s);  
         }
         ForallVarDecls(a, d, WpCmd(a, body, WpPost(post.normal, post.normal, updatedScopes')))(s); //TODO: currently only makes sense for optLabel == None
-        /*
-        {
-          assert forall post' :: ResetVarsPost(varDecls, post', s) == post';
-        }
-        ForallVarDecls(a, d, WpCmd(a, body, ResetVarsPost(varDecls, WpPost(p, p, updatedScopes'), s)))(s); //TODO: currently only makes sense for optLabel == None
-        */
         { 
-          /*
-          */
-          //reveal WpCmd();
-          /*
-          */
           var post1' := ForallVarDecls(a, [], WpCmd(a, body, WpPost(post.normal, post.normal, updatedScopes')));
           var post2' := WpCmd(a, Scope(optLabel, [], body), WpPost(post.normal, post.currentScope, post.scopes));
           forall s' 
@@ -683,9 +668,20 @@ module RemoveScopedVarsAuxUniqueProof {
         WpCmd(a, Seq(c1, c2), ForallVarDeclsPost(a, d, post))(s);
         { reveal WpCmd(); }
         WpCmd(a, c1, WpPost(WpCmd(a, c2, ForallVarDeclsPost(a, d, post)), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes)))(s);
-        { assume false; }
+        { 
+          forall s 
+          ensures WpCmd(a, c2, ForallVarDeclsPost(a, d, post))(s) == ForallVarDecls(a, d, WpCmd(a, c2, post))(s)
+          {
+            PullForallWp(a, xs, cxs, d, c2, post, s); 
+          }
+          var post1 := WpPost(WpCmd(a, c2, ForallVarDeclsPost(a, d, post)), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes));
+          var post2 := WpPost(ForallVarDecls(a, d, WpCmd(a, c2, post)), ForallVarDecls(a, d ,post.currentScope), ForallScopes(a, d, post.scopes));
+          WpCmdPointwise(a, c1, post1, post2, s);
+        }
         WpCmd(a, c1, WpPost(ForallVarDecls(a, d, WpCmd(a, c2, post)), ForallVarDecls(a, d ,post.currentScope), ForallScopes(a, d, post.scopes)))(s);
-        { assume false; }
+        { 
+          PullForallWp(a, xs, cxs, d, c1, WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes), s); 
+        }
         ForallVarDecls(a, d, WpCmd(a, c1, WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes)))(s);
         { reveal WpCmd(); }
         ForallVarDecls(a, d, WpCmd(a, Seq(c1, c2), post))(s);
