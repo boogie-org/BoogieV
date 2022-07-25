@@ -472,6 +472,10 @@ module BoogieSemantics {
     WpPost(ResetVarsPred(varDecls, p.normal, s), ResetVarsPred(varDecls, p.currentScope, s), newScopes)
   }
 
+  lemma ResetVarsPostEmpty<A(!new)>(p: WpPost<A>, s: state<A>) 
+  ensures ResetVarsPost([], p, s) == p
+  { }
+
   function ResetVarsState<A(!new)>(varDecls: seq<(var_name,Ty)>, s: state<A>, sOrig: state<A>) : state<A>
   {
     if |varDecls| == 0 then 
@@ -680,23 +684,6 @@ module BoogieSemantics {
   {
       a.None? || (a.Some? && b.Some? && (a.value ==> b.value))
   }
-
-  /*
-  lemma WpShallowSimpleCmdMono<A(!new)>(a: absval_interp<A>, c: SimpleCmd, s: state<A>, P: Predicate<A>, Q: Predicate<A>)
-  requires (forall s' :: ImpliesOpt(P(s'), Q(s'))) 
-  ensures ImpliesOpt(WpSimpleCmd(a, c, P)(s), WpSimpleCmd(a, c, Q)(s))
-
-  lemma WpShallowSimpleCmdSeqMono<A(!new)>(a: absval_interp<A>, scs: seq<SimpleCmd>, s: state<A>, P: Predicate<A>, Q: Predicate<A>)
-  requires (forall s' :: ImpliesOpt(P(s'), Q(s'))) 
-  ensures ImpliesOpt(WpShallowSimpleCmdSeq(a, scs, P)(s), WpShallowSimpleCmdSeq(a, scs, Q)(s))
-  */
-  
-  /*
-    lemma WpShallowNormalMono<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, P: WpPost, Q: WpPost)
-    requires LabelsWellDefAux(c, P.scopes.Keys) && LabelsWellDefAux(c, Q.scopes.Keys)
-    requires (forall s' :: ImpliesOpt<A>(P.normal(s'), Q.normal(s'))) && P.currentScope == Q.currentScope && P.scopes == Q.scopes
-    ensures ImpliesOpt<A>(WpCmd(a, c, P)(s), WpCmd(a, c, Q)(s))
-  */
 
   /** operational semantics */
   datatype ExtState<A> = NormalState(state<A>) | MagicState | FailureState
