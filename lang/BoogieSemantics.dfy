@@ -317,6 +317,13 @@ module BoogieSemantics {
     ensures Maps.Get(StateUpdVarDecls(s, varDecls, vs), k) == Maps.Get(s, k)
   { }
 
+  lemma StateUpdVarDeclsLookup2<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>)
+    requires |varDecls| == |vs| 
+    ensures forall k 
+            | k !in GetVarNames(varDecls) 
+            :: Maps.Get(StateUpdVarDecls(s, varDecls, vs), k) == Maps.Get(s, k)
+  { }
+
   function {:opaque} ForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
   {
     if |varDecls| == 0 then p
@@ -475,6 +482,34 @@ module BoogieSemantics {
         }
       }
     }
+  
+  /*
+  lemma  ForallVarDeclsEquiv2<A(!new)>(
+      a: absval_interp<A>, 
+      varDecls: seq<VarDecl>, 
+      varDecls': seq<VarDecl>, 
+      f: seq<Val<A>> -> seq<Val<A>>,
+      p1: Predicate<A>, 
+      p2: Predicate<A>,
+      s1: state<A>,
+      s2: state<A>)
+    requires 
+      && |varDecls| == |varDecls'|
+      && (forall vs :: ValuesRespectDecls(a, vs, varDecls) == ValuesRespectDecls(a, f(vs), varDecls'))
+      && (forall vs | ValuesRespectDecls(a, vs, varDecls) :: 
+          p1(StateUpdVarDecls(s1, varDecls, vs)) == p2(StateUpdVarDecls(s2, varDecls', f(vs))))
+    ensures 
+      ForallVarDecls(a, varDecls, p1)(s1) == ForallVarDecls(a, varDecls', p2)(s2)
+    {
+      reveal ForallVarDecls();
+      if |varDecls| == 0 {
+        assert p1(s1) == p2(s2) by {
+          //need this for Dafny to trigger the quantifier
+          assert ValuesRespectDecls(a, [], []);  
+        }
+      }
+    }
+    */
   
   function ResetVarsPost<A(!new)>(varDecls: seq<(var_name,Ty)>, p: WpPost<A>, s: state<A>) : WpPost<A>
     ensures p.scopes.Keys == ResetVarsPost(varDecls, p, s).scopes.Keys
