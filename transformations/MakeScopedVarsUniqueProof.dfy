@@ -189,6 +189,7 @@ module MakeScopedVarsUniqueProof {
 
   lemma {:induction false} SubstSimpleCmdCorrect<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, varMapping: map<var_name, var_name>, 
       post1: Predicate<A>, post2: Predicate<A>, s2Orig: MapOrig<Val<A>>)
+      requires sc.NoBinders()
       requires RelPred(varMapping, post1, post2, s2Orig)
       requires sc.WellFormedVars(varMapping.Keys)
       requires Maps.Injective(varMapping)
@@ -726,9 +727,10 @@ module MakeScopedVarsUniqueProof {
         names: set<string>)
       requires c.WellFormedVars(substMap.Keys)
       requires Maps.Injective(substMap)
+      requires c.NoBinders()
       requires 
         var (c', counter') := MakeScopedVarsUnique(c, substMap, counter);
-        && NoLoopsNoIfCond(c)
+        && NoLoopsNoIfGuard(c)
         && LabelsWellDefAux(c, post1.scopes.Keys) 
         && LabelsWellDefAux(c', post2.scopes.Keys)
         && RelPost(substMap, post1, post2, s2Orig)

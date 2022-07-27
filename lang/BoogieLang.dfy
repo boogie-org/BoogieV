@@ -17,12 +17,12 @@ module BoogieLang {
 
     static const FalseLit: Lit := LitBool(false);
 
-    method ToString() returns (s: string) {
+    function method ToString() : string {
       match this {
         case LitInt(i) => 
-          s := IntToString(i);
+          IntToString(i)
         case LitBool(b) => 
-          s := BoolToString(b);
+          BoolToString(b)
       }
     }
   }
@@ -100,8 +100,9 @@ module BoogieLang {
   {
     function method ToString() : string {
       match this 
-      case ForallQ => "forall"
-      case ExistsQ => "exists"
+      case Let => "let"
+      //case ForallQ => "forall"
+      //case ExistsQ => "exists"
     }
   }
     
@@ -110,25 +111,30 @@ module BoogieLang {
     | ELit(Lit)
     | UnOp(Unop, Expr)
     | BinOp(Expr, Binop, Expr)
-  // | Binder(BinderKind, var_name, Ty, Expr) //switch to DeBruijn?
+    | Let(var_name, Expr, Expr)
+    //| Binder(BinderKind, var_name, Ty, Expr) //switch to DeBruijn?
   /** TODO 
     | Old(Expr)
     | FunCall(fun_name, List<Expr>)
   */
   {
-    method ToString() returns (s: string) {
+    function method ToString() : string {
       match this {
-        case Var(x) => return x;
-        case ELit(lit) => s := lit.ToString(); return s;
+        case Var(x) => x
+        case ELit(lit) => lit.ToString()
         case UnOp(uop, e) =>
           var uopS := uop.ToString();
           var eS := e.ToString();
-          return "(" + uopS + eS + ")";
+          "(" + uopS + eS + ")"
         case BinOp(e1, bop, e2) => 
           var e1S := e1.ToString();
           var bopS := bop.ToString();
           var e2S := e2.ToString();
-          return "(" + e1S + " " + bopS + " " + e2S + ")";
+          "(" + e1S + " " + bopS + " " + e2S + ")"
+        case Let(x, e1, e2) =>
+          var e1S := e1.ToString();
+          var e2S := e2.ToString();
+          "(let " + x + " = " + e1S + " in " + e2S + ")"
         /*
         case Binder(binderKind, x, t, e) => 
           var tS := t.ToString();
@@ -146,16 +152,32 @@ module BoogieLang {
         case ELit(lit) => {}
         case UnOp(uop, e) => e.FreeVars()
         case BinOp(e1, bop, e2) => e1.FreeVars() + e2.FreeVars()
+        case Let(x, e, body) => e.FreeVars() + (body.FreeVars() - {x})
         /*
-        case Binder(binderKind, x, t, e) => 
-          e.FreeVars() - {x}
-        */
+          case Binder(binderKind, x, t, e) => 
+          e.FreeVars() - {x} */
       }
     }
 
     static const TrueExpr: Expr := ELit(LitBool(true));
 
     static const FalseExpr: Expr := ELit(LitBool(false));
+
+    predicate method PredicateRec(pred: Expr -> bool)
+    {
+      pred(this) &&
+      match this
+      case Var(x) => true
+      case ELit(_) => true
+      case UnOp(uop, e') => e'.PredicateRec(pred)
+      case BinOp(e1, bop, e2) => e1.PredicateRec(pred) && e2.PredicateRec(pred)
+      case Let(x, e, body) => e.PredicateRec(pred) && body.PredicateRec(pred)
+    }
+
+    predicate method NoBinders()
+    {
+      PredicateRec((e:Expr) => !e.Let?)
+    }
 
     function method MultiSubstExpr(varMapping: map<var_name, var_name>): Expr
     {
@@ -164,6 +186,7 @@ module BoogieLang {
       case ELit(_) => this
       case UnOp(uop, e') => UnOp(uop, e'.MultiSubstExpr(varMapping))
       case BinOp(e1, bop, e2) => BinOp(e1.MultiSubstExpr(varMapping), bop, e2.MultiSubstExpr(varMapping))
+      case Let(x, e, body) => Let(x, e, body.MultiSubstExpr(varMapping-{x})) //TODO: does not take variable capturing into account
     }
   }
 
@@ -181,27 +204,24 @@ module BoogieLang {
        defined on SimpleCmd. This means a lot of the extra work imposed by adding a separate sequential composition
        constructor for SimpleCmd would have to be done anyway. */
   {
-    method ToString(indent: nat) returns (s: string) {
+    function method ToString(indent: nat) : string {
       match this {
-        case Skip => return "";
+        case Skip => "skip"
         case Assert(e) =>
           var eS := e.ToString();
-          return IndentString("assert " + eS + ";", indent);
+          IndentString("assert " + eS, indent)
         case Assume(e) =>
           var eS := e.ToString();
-          return IndentString("assert " + eS + ";", indent);
+          IndentString("assume " + eS, indent)
         case Assign(x, _, e) =>
           var eS := e.ToString();
-          return IndentString(x + " := " + eS + ";", indent);
+          IndentString(x + " := " + eS, indent)
         case Havoc(xs) =>
-          var declS := "";
-          var i := 0;
-          while i < |xs| {
-            declS := xs[0].0 + if i+1 < |xs| then ", " else "";
-            i := i+1;
-          }
-          return IndentString("havoc " + declS + ";", indent);
-        case SeqSimple(sc1, sc2) => return "TODO";
+          var declS := Sequences.FoldLeft((s, decl : VarDecl) => s+", "+decl.0, "", xs);
+          IndentString("havoc " + declS, indent)
+        case SeqSimple(sc1, sc2) => 
+          sc1.ToString(indent)+";\n "+
+          sc2.ToString(indent)
       }
     }
 
@@ -214,6 +234,23 @@ module BoogieLang {
       case Assign(x, t, e) => x in xs && e.FreeVars() <= xs
       case Havoc(varDecls) => GetVarNames(varDecls) <= xs
       case SeqSimple(sc1, sc2) => sc1.WellFormedVars(xs) && sc2.WellFormedVars(xs)
+    }
+
+    predicate method PredicateRec(pred: SimpleCmd -> bool, predE: Expr -> bool)
+    {
+      pred(this) &&
+      match this
+      case Skip => true
+      case Assert(e) => predE(e)
+      case Assume(e) => predE(e)
+      case Assign(x, t, e) => predE(e)
+      case Havoc(varDecls) => true
+      case SeqSimple(sc1, sc2) => sc1.PredicateRec(pred, predE) && sc2.PredicateRec(pred, predE)
+    }
+
+    predicate method NoBinders()
+    {
+      PredicateRec((sc: SimpleCmd) => true, (e: Expr) => e.NoBinders())
     }
 
     function method SubstSimpleCmd(varMapping: map<var_name, var_name>) : SimpleCmd
@@ -243,7 +280,7 @@ module BoogieLang {
     | Seq(Cmd, Cmd)
     | Scope(labelName: Option<lbl_name>, varDecls: seq<VarDecl>, body: Cmd)
     | Loop(invariants: seq<Expr>, body: Cmd) 
-    //cond = None represents a non-deterministic if-statement (if(*) {...} else {...})
+    //guard = None represents a non-deterministic if-statement (if(*) {...} else {...})
     | If(guard: Option<Expr>, thn: Cmd, els: Cmd)
   
   /*
@@ -270,58 +307,65 @@ module BoogieLang {
         && c2.WellFormedVars(xs)
     }
 
-    method ToString(indent: nat) returns (s: string) {
+    function method ToString(indent: nat) : string {
       match this {
-        case SimpleCmd(simpleC) => s := simpleC.ToString(indent); return s;
+        case SimpleCmd(simpleC) => simpleC.ToString(indent)
         case Break(optLbl) =>
-          return IndentString("break" + (if optLbl.Some? then " " + optLbl.value else "") + ";", indent);
+          IndentString("break" + (if optLbl.Some? then " " + optLbl.value else "") + ";", indent)
         case Scope(optLbl, xs, c) =>
-          var i := 0;
-          var declS := "";
-          while i < |xs| {
-            var tS := xs[i].1.ToString();
-            declS := declS + " var " + xs[i].0 + ": " + tS + ";";
-            i := i+1;
-          }
+          var declS := Sequences.FoldLeft((s, decl : VarDecl) => s+", "+decl.0, "", xs);
           var cS := c.ToString(indent+2);
-          return 
-               IndentString("scope ", indent) + (if optLbl.Some? then optLbl.value else "") + "{ \n" +
-               IndentString(declS, indent+2) + "\n" + 
-               cS + "\n" +
-               IndentString("}", indent);
+          IndentString("scope ", indent) + (if optLbl.Some? then optLbl.value else "") + "{ \n" +
+          IndentString(declS, indent+2) + "\n" + 
+          cS + "\n" +
+          IndentString("}", indent)
         case Seq(c1, c2) =>
           var c1S := c1.ToString(indent);
           var c2S := c2.ToString(indent);
-          return c1S + "\n" + c2S;
+          c1S + ";\n" + c2S
         case Loop(invs, body) =>
           var i := 0;
-          var invS := "";
-          while i < |invs| {
-            var eS := invs[i].ToString();
-            invS := invS + "\n invariant "  + eS;
-            i := i+1;
-          }
+          var invS := Sequences.FoldLeft((s, inv: Expr) => s+"\n invariant "+ inv.ToString(), "", invs);
           var bodyS := body.ToString(indent+2);
-          s := IndentString("loop", indent) + invS + "\n" + 
-               IndentString("{ \n", indent) +
-               bodyS + 
-               IndentString("}", indent);
+          IndentString("loop", indent) + invS + "\n" + 
+          IndentString("{ \n", indent) +
+          bodyS + 
+          IndentString("}", indent)
         case If(optCond, thn, els) =>
-          var condS := "*";
-          if optCond.Some? {
-            condS := optCond.value.ToString();
-          }
+          var condS := 
+            if optCond.Some? then
+              optCond.value.ToString()
+            else 
+              "*";
           var thnS := thn.ToString(indent+2);
           var elsS := els.ToString(indent+2);
 
-          s := IndentString("if(", indent) + condS + ") { \n" +
-               thnS + "\n" +
-               IndentString("}", indent) + " else { \n" +
-               elsS + "\n" +
-               IndentString("}", indent);
-          
-          return s;
+          IndentString("if(", indent) + condS + ") { \n" +
+          thnS + "\n" +
+          IndentString("}", indent) + " else { \n" +
+          elsS + "\n" +
+          IndentString("}", indent)
       }
+    }
+
+    predicate method PredicateRec(pred: Cmd -> bool, predSimple: SimpleCmd -> bool, predE: Expr -> bool)
+    {
+      pred(this)
+      &&
+      match this
+      case SimpleCmd(sc) => predSimple(sc) 
+      case Break(optLbl) => true
+      case Seq(c1, c2) => c1.PredicateRec(pred, predSimple, predE) && c2.PredicateRec(pred, predSimple, predE)
+      case Loop(invs, body) => (forall inv | inv in invs :: predE(inv)) && body.PredicateRec(pred, predSimple, predE)
+      case Scope(_, varDecls, body) => body.PredicateRec(pred, predSimple, predE)
+      case If(guardOpt, thn, els) => 
+        && (guardOpt.Some? ==> predE(guardOpt.value))
+        && thn.PredicateRec(pred, predSimple, predE) 
+        && els.PredicateRec(pred, predSimple, predE)
+    }
+
+    predicate method NoBinders() {
+      PredicateRec( (c: Cmd) => true, (sc: SimpleCmd) => sc.NoBinders(), (e: Expr) => e.NoBinders() )
     }
   }
 
@@ -394,7 +438,7 @@ module BoogieLang {
       SeqSimple(simpleCmds[0], SeqToSimpleCmd(simpleCmds[1..]))
   }
 
-  function NAryBinOp(bop: Binop, exprIfEmpty: Expr, es: seq<Expr>): Expr
+  function method NAryBinOp(bop: Binop, exprIfEmpty: Expr, es: seq<Expr>): Expr
   {
     if |es| == 0 then
       exprIfEmpty
@@ -423,18 +467,18 @@ module BoogieLang {
     assert GetVarNamesSeq(vs)[i] == vs[i].0;
   }
 
-  function ModifiedVars(c: Cmd): seq<(var_name, Ty)>
+  function method ModifiedVars(c: Cmd): seq<(var_name, Ty)>
   {
     RemoveDuplicates(ModifiedVarsAux(c, {}))
   }
 
-  function ModifiedVarDecls(decls: seq<(var_name, Ty)>, exclude: set<var_name>) : seq<(var_name, Ty)>
+  function method ModifiedVarDecls(decls: seq<(var_name, Ty)>, exclude: set<var_name>) : seq<(var_name, Ty)>
   {
     if |decls| == 0 then []
     else (if decls[0].0 in exclude then [] else [decls[0]]) + ModifiedVarDecls(decls[1..], exclude)
   }
 
-  function ModifiedVarsAux(c: Cmd, exclude: set<var_name>): seq<(var_name, Ty)>
+  function method ModifiedVarsAux(c: Cmd, exclude: set<var_name>): seq<(var_name, Ty)>
   {
     match c 
     case SimpleCmd(Assign(x,t,_)) => if x in exclude then [] else [(x,t)]

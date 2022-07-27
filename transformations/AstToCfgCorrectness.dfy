@@ -1,6 +1,7 @@
 include "AstToCfg_simple.dfy"
 include "../util/Util.dfy"
 include "../util/SemanticsUtil.dfy"
+include "../util/AstSubsetPredicates.dfy"
 
 
 module AstToCfgCorrectness
@@ -11,24 +12,19 @@ module AstToCfgCorrectness
   import opened BoogieCfg
   import opened Wrappers
   import opened SemanticsUtil
+  import opened AstSubsetPredicates
 
   lemma AstToCfgAcyclic2(
     c: Cmd, 
     nextVersion: BlockId)
-    requires NoBreaksScopedVarsLoops(c)
+    requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
     ensures 
-      var (cfg, nextVersion', exitOpt) := AstToCfgAux(c, nextVersion); 
+      var AstCfgResult(cfg, nextVersion', exitOpt) := AstToCfgAux(c, nextVersion); 
       var exit := exitOpt.value; //DISCUSS: does not work if replace {exit} by {exitOpt.value}
       IsAcyclic(cfg.successors, cfg.entry, CoveringSet(nextVersion, nextVersion', exit))
   {
     AstToCfgAcyclic(c, nextVersion);
   }
-
-  lemma WpCfgCoverIndep<A(!new)>(a: absval_interp<A>, cfg: Cfg, n: BlockId, post: Predicate<A>, cover1: set<BlockId>, cover2: set<BlockId>)
-    requires cfg.successors.Keys <= cfg.blocks.Keys
-    requires IsAcyclic(cfg.successors, n, cover1)
-    requires IsAcyclic(cfg.successors, n, cover2)
-    ensures WpCfg(a, cfg, n, post, cover1) == WpCfg(a, cfg, n, post, cover2)
 
   lemma  LiftWpFromBranchToFull<A(!new)>(a: absval_interp<A>, entry: BlockId, branchTarget: seq<BlockId>, cfgThn: Cfg, cfgEls: Cfg, thnExit: BlockId, elsExit: BlockId, joinId: BlockId, post: Predicate<A>, cover: set<BlockId>, cover': set<BlockId>)
   requires IsAcyclic(cfgThn.successors, cfgThn.entry, cover)
@@ -142,10 +138,10 @@ module AstToCfgCorrectness
     nextVersion: BlockId,
     post: WpPost<A>,
     s: state<A>)
-    requires NoBreaksScopedVarsLoops(c)
+    requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
     requires LabelsWellDefAux(c, post.scopes.Keys)
     ensures 
-      var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
+      var AstCfgResult(cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
       var exit := exitOpt.value;
       var cover' := CoveringSet(nextVersion, nextVersion', exitOpt.value);
 
@@ -155,10 +151,10 @@ module AstToCfgCorrectness
     match c {
       case SimpleCmd(sc) => reveal WpCmd();
       case Seq(c1, c2) =>
-        var (cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
+        var AstCfgResult(cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
         var exit1 := exitOpt1.value;
         
-        var (cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
+        var AstCfgResult(cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
         var exit2 := exitOpt2.value; 
 
         var cover1 := CoveringSet(nextVersion, nextVersion1, exitOpt1.value);
@@ -219,7 +215,7 @@ module AstToCfgCorrectness
         }         
       case Scope(optLabel, varDecls, body) =>
         assert varDecls == []; 
-        var (bodyCfg, nextVersion', exitOpt) := AstToCfgAux(body, nextVersion);
+        var AstCfgResult(bodyCfg, nextVersion', exitOpt) := AstToCfgAux(body, nextVersion);
         var exit := exitOpt.value;
         var cover := CoveringSet(nextVersion, nextVersion', exit);
 
@@ -259,11 +255,11 @@ module AstToCfgCorrectness
       case If(optCond, thn, els) =>
         /** CFG thn branch */
         var (entry, entryBlock) := (nextVersion, Skip);
-        var (cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entry+1);
+        var AstCfgResult(cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entry+1);
 
 
         /** CFG els branch */
-        var (cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
+        var AstCfgResult(cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
 
         var (thnEntry, thnS) := (cfgThn.entry, cfgThn.successors);
         var thnExit := exitOpt1.value;

@@ -7,7 +7,7 @@ include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
 include "../util/AstSubsetPredicates.dfy"
 
-module RemoveScopedVarsUniqueProof {
+module RemoveScopedVarsAuxUniqueProof {
 
   import opened BoogieLang
   import opened BoogieSemantics
@@ -61,22 +61,22 @@ module RemoveScopedVarsUniqueProof {
     { PredDependMonotone(post.scopes[l], depVars, depVars'); }
   }
 
-  lemma RemoveScopedVarsPreserveWf(c: Cmd, activeVars: set<var_name>)
+  lemma RemoveScopedVarsAuxPreserveWf(c: Cmd, activeVars: set<var_name>)
     requires 
      && c.WellFormedVars(activeVars)
-     && NoLoopsNoIfCond(c)
+     && NoLoopsNoIfGuard(c)
     ensures 
-      var (c', decls) := RemoveScopedVars(c);
+      var (c', decls) := RemoveScopedVarsAux(c);
       c'.WellFormedVars(activeVars+GetVarNames(decls))
   {
-    var (c', decls) := RemoveScopedVars(c);
+    var (c', decls) := RemoveScopedVarsAux(c);
     match c
     case SimpleCmd(sc) => SimpleCmdWellFormedVarsLarger(sc, activeVars, activeVars+GetVarNames(decls));
     case Break(_) => 
     case Scope(optLabel, varDecls, body) => 
-      var (body', declsBody) := RemoveScopedVars(body);
+      var (body', declsBody) := RemoveScopedVarsAux(body);
       assert body'.WellFormedVars((activeVars+GetVarNames(varDecls))+GetVarNames(declsBody)) by {
-        RemoveScopedVarsPreserveWf(body, activeVars+GetVarNames(varDecls));
+        RemoveScopedVarsAuxPreserveWf(body, activeVars+GetVarNames(varDecls));
       }
 
       calc {
@@ -96,8 +96,8 @@ module RemoveScopedVarsUniqueProof {
         body'.WellFormedVars(activeVars+GetVarNames(varDecls+declsBody));
       }
     case If(None, thn, els) => 
-      var (thn', declsThn) := RemoveScopedVars(thn);
-      var (els', declsEls) := RemoveScopedVars(els);
+      var (thn', declsThn) := RemoveScopedVarsAux(thn);
+      var (els', declsEls) := RemoveScopedVarsAux(els);
 
       assert 
         && thn'.WellFormedVars(activeVars+GetVarNames(declsThn))
@@ -108,8 +108,8 @@ module RemoveScopedVarsUniqueProof {
       CmdWellFormedVarsLarger(thn', activeVars+GetVarNames(declsThn), activeVars+GetVarNames(decls));
       CmdWellFormedVarsLarger(els', activeVars+GetVarNames(declsEls), activeVars+GetVarNames(decls));
     case Seq(c1, c2) =>
-      var (c1', decls1) := RemoveScopedVars(c1);
-      var (c2', decls2) := RemoveScopedVars(c2);
+      var (c1', decls1) := RemoveScopedVarsAux(c1);
+      var (c2', decls2) := RemoveScopedVarsAux(c2);
 
       CmdWellFormedVarsLarger(c1', activeVars+GetVarNames(decls1), activeVars+GetVarNames(decls));
       CmdWellFormedVarsLarger(c2', activeVars+GetVarNames(decls2), activeVars+GetVarNames(decls));
@@ -287,7 +287,7 @@ module RemoveScopedVarsUniqueProof {
 
   lemma WpPredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, c: Cmd, post: WpPost<A>)
     requires c.WellFormedVars(xs)
-    requires NoLoopsNoIfCond(c)
+    requires NoLoopsNoIfGuard(c)
     requires LabelsWellDefAux(c, post.scopes.Keys)
     requires PostDepend(post, xs)
     ensures PredDepend(WpCmd(a, c, post), xs)
@@ -438,7 +438,7 @@ module RemoveScopedVarsUniqueProof {
 
   lemma ForallWpPredDepend<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, decls: seq<VarDecl>, c: Cmd, post: WpPost<A>)
     requires c.WellFormedVars(activeVars+GetVarNames(decls))
-    requires NoLoopsNoIfCond(c)
+    requires NoLoopsNoIfGuard(c)
     requires LabelsWellDefAux(c, post.scopes.Keys)
     requires PostDepend(post, activeVars)
     ensures PredDepend(ForallVarDecls(a, decls, WpCmd(a, c, post)), activeVars)
@@ -547,31 +547,31 @@ module RemoveScopedVarsUniqueProof {
     }
   }
 
-  lemma RemoveScopedVarsGetDecls(c: Cmd)
-    requires NoLoopsNoIfCond(c)
+  lemma RemoveScopedVarsAuxGetDecls(c: Cmd)
+    requires NoLoopsNoIfGuard(c)
     ensures
-      var (c', decls) := RemoveScopedVars(c);
+      var (c', decls) := RemoveScopedVarsAux(c);
       GetDecls(c) == decls
   { }
  
-  lemma {:verify true} RemoveScopedVarsCorrect<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, c: Cmd, post: WpPost<A>)
+  lemma {:verify true} RemoveScopedVarsAuxCorrect<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, c: Cmd, post: WpPost<A>)
     requires 
-      var (c', decls) := RemoveScopedVars(c);
+      var (c', decls) := RemoveScopedVarsAux(c);
       && LabelsWellDefAux(c, post.scopes.Keys) 
       && LabelsWellDefAux(c', post.scopes.Keys) 
       && c.WellFormedVars(activeVars) 
       && PostDepend(post, activeVars)
       && Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(c)))
-      && NoLoopsNoIfCond(c)
+      && NoLoopsNoIfGuard(c)
       && activeVars !! GetVarNames(decls)
     ensures 
-      var (c', decls) := RemoveScopedVars(c);
+      var (c', decls) := RemoveScopedVarsAux(c);
       (forall s :: WpCmd(a, c, post)(s) == ForallVarDecls(a, decls, WpCmd(a, c', post))(s))
     decreases c
     {
-      var (c', decls) := RemoveScopedVars(c);
+      var (c', decls) := RemoveScopedVarsAux(c);
       assert GetDecls(c) == decls by {
-        RemoveScopedVarsGetDecls(c);
+        RemoveScopedVarsAuxGetDecls(c);
       }
 
       forall s | true
@@ -583,7 +583,7 @@ module RemoveScopedVarsUniqueProof {
         case Break(_) => ForallVarDeclsEmpty(a, WpCmd(a, c', post)); 
         case Scope(optLabel, varDecls, body) => 
 
-          var (body', declsBody) := RemoveScopedVars(body);
+          var (body', declsBody) := RemoveScopedVarsAux(body);
 
           var updatedScopes := 
             if optLabel.Some? then 
@@ -617,10 +617,10 @@ module RemoveScopedVarsUniqueProof {
                 HasNoDuplicatesAppend(GetVarNamesSeq(varDecls), GetVarNamesSeq(declsBody));
               }
               assert declsBody == GetDecls(body) by {
-                RemoveScopedVarsGetDecls(body);
+                RemoveScopedVarsAuxGetDecls(body);
               }
 
-              RemoveScopedVarsCorrect(a, activeVars+GetVarNames(varDecls), body, post'); 
+              RemoveScopedVarsAuxCorrect(a, activeVars+GetVarNames(varDecls), body, post'); 
               ForallVarDeclsPointwise(a, varDecls, WpCmd(a, body, post'), ForallVarDecls(a, declsBody, WpCmd(a, body', post')), s);
             }
             ForallVarDecls( a, varDecls, ForallVarDecls(a, declsBody, WpCmd(a, body', post') ))(s);
@@ -660,8 +660,8 @@ module RemoveScopedVarsUniqueProof {
             ForallVarDecls( a, varDecls+declsBody, WpCmd(a, Scope(optLabel, [], body'), post) )(s);
           }
         case If(None, thn, els) => 
-          var (thn', declsThn) := RemoveScopedVars(thn);
-          var (els', declsEls) := RemoveScopedVars(els);
+          var (thn', declsThn) := RemoveScopedVarsAux(thn);
+          var (els', declsEls) := RemoveScopedVarsAux(els);
 
           assert 
             && Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(thn))) 
@@ -682,8 +682,8 @@ module RemoveScopedVarsUniqueProof {
               WpCmd(a, els, post)(s)
             );
             { 
-              RemoveScopedVarsCorrect(a, activeVars, thn, post); 
-              RemoveScopedVarsCorrect(a, activeVars, els, post);
+              RemoveScopedVarsAuxCorrect(a, activeVars, thn, post); 
+              RemoveScopedVarsAuxCorrect(a, activeVars, els, post);
             }
             Util.AndOpt(
               ForallVarDecls(a, declsThn, WpCmd(a, thn', post))(s),
@@ -722,15 +722,15 @@ module RemoveScopedVarsUniqueProof {
           }
         case Seq(c1, c2) => 
           // WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes)
-          var (c1', decls1) := RemoveScopedVars(c1);
-          var (c2', decls2) := RemoveScopedVars(c2);
+          var (c1', decls1) := RemoveScopedVarsAux(c1);
+          var (c2', decls2) := RemoveScopedVarsAux(c2);
 
           var post2 := WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes);
           var post2' := WpPost(ForallVarDecls(a, decls2, WpCmd(a, c2',post)), post.currentScope, post.scopes);
           var post2NoQuant' := WpPost(WpCmd(a, c2',post), post.currentScope, post.scopes);
 
           assert c2'.WellFormedVars(activeVars+GetVarNames(decls2)) by {
-            RemoveScopedVarsPreserveWf(c2, activeVars);
+            RemoveScopedVarsAuxPreserveWf(c2, activeVars);
           }
 
           assert GetVarNames(decls1) !! GetVarNames(decls2) by {
@@ -746,13 +746,13 @@ module RemoveScopedVarsUniqueProof {
                 assert GetVarNamesSeq(GetDecls(c1)+GetDecls(c2)) == GetVarNamesSeq(GetDecls(c1)) + GetVarNamesSeq(GetDecls(c2));
                 HasNoDuplicatesAppend(GetVarNamesSeq(GetDecls(c1)), GetVarNamesSeq(GetDecls(c2)));
               }
-              RemoveScopedVarsCorrect(a, activeVars, c2, post); 
+              RemoveScopedVarsAuxCorrect(a, activeVars, c2, post); 
               WpCmdPointwise(a, c1, post2, post2', s);
             }
             WpCmd(a, c1, post2')(s);
             { 
               assert PredDepend(ForallVarDecls(a, decls2, WpCmd(a, c2',post)), activeVars) by {
-                assume NoLoopsNoIfCond(c2'); //TODO
+                assume NoLoopsNoIfGuard(c2'); //TODO
                 ForallWpPredDepend(a, activeVars, decls2, c2', post);
               }
 
@@ -760,7 +760,7 @@ module RemoveScopedVarsUniqueProof {
                 assert GetVarNamesSeq(GetDecls(c1)+GetDecls(c2)) == GetVarNamesSeq(GetDecls(c1)) + GetVarNamesSeq(GetDecls(c2));
                 HasNoDuplicatesAppend(GetVarNamesSeq(GetDecls(c1)), GetVarNamesSeq(GetDecls(c2)));
               }
-              RemoveScopedVarsCorrect(a, activeVars, c1, post2'); 
+              RemoveScopedVarsAuxCorrect(a, activeVars, c1, post2'); 
 
               //reveal due to opaque bug
               reveal WpCmd();
@@ -778,7 +778,7 @@ module RemoveScopedVarsUniqueProof {
                 ForallVarDecls(a, decls2, WpCmd(a, c1', post2NoQuant'))(s')
               {
                 assert c1'.WellFormedVars(activeVars+GetVarNames(decls1)) by {
-                  RemoveScopedVarsPreserveWf(c1, activeVars);
+                  RemoveScopedVarsAuxPreserveWf(c1, activeVars);
                 }
                 PullForallWp(a, activeVars, GetVarNames(decls1), decls2, c1', WpCmd(a, c2',post), post, s');
               }
@@ -789,8 +789,8 @@ module RemoveScopedVarsUniqueProof {
             ForallVarDecls(a, decls1, ForallVarDecls(a, decls2, WpCmd(a, c1', post2NoQuant')))(s);
             { 
               assert decls1 == GetDecls(c1) && decls2 == GetDecls(c2) by {
-                RemoveScopedVarsGetDecls(c1);
-                RemoveScopedVarsGetDecls(c2);
+                RemoveScopedVarsAuxGetDecls(c1);
+                RemoveScopedVarsAuxGetDecls(c2);
               }
               
               ForallAppend.ForallVarDeclsAppend(a, decls1, decls2, WpCmd(a, c1', post2NoQuant'), s); }
