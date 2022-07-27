@@ -11,15 +11,6 @@ module BoogieCfg {
   type BlockId = nat 
 
   datatype Cfg = Cfg(entry: BlockId, blocks: map<BlockId, BasicBlock>, successors: map<BlockId, seq<BlockId>>)
-  /* TODO
-  {
-    function method ToString(n: BlockId) : string
-    {
-      if n in blocks.Keys then
-        ""
-    }
-  }
-  */
 
   predicate method GraphWf<T>(succRel: map<T, seq<T>>)
   {
