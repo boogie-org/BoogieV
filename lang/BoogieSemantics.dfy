@@ -12,6 +12,8 @@ module BoogieSemantics {
   import Sequences = Seq
   import Maps
 
+  /************************** Evaluation of expressions ***********************/
+
   function EvalExpr<A(!new)>(a: absval_interp<A>, e: Expr, s: state<A>) : Option<Val<A>>
   {
     match e
@@ -185,7 +187,21 @@ module BoogieSemantics {
       }
   }
 
+  /************ Weakest precondition semantics of commands *******************/
+
+  /** A predicate is a function from states optional booleans. The reason for using
+  optional booleans is to represent ill-typed cases. For example, a predicate representing
+  the assertion "x+2 > 0" would map any state to `None` that maps x to a non-integer value
+  */
   type Predicate<!A> = state<A> -> Option<bool>
+
+  /** A postcondition consists of three components: 
+    - The predicate that must hold when control flow exits normally
+    - The predicate that must hold when control flow exists the current (i.e., most inner) 
+    scope (via a break statement without a label)
+    - A predicate for every active named scope that must hold when the corresponding 
+    scope is exited 
+   */
   datatype WpPost<!A> = WpPost(normal: Predicate<A>, currentScope: Predicate<A>, scopes: map<lbl_name, Predicate<A>>)
 
   /** Note that for the weakest precondition definition making changes such as rewriting a predicate P
@@ -265,6 +281,8 @@ module BoogieSemantics {
       assert updatedScopes.Keys == if optLabel.Some? then {optLabel.value} + post.scopes.Keys else post.scopes.Keys;
       var post' := WpPost(post.normal, post.normal, updatedScopes);
       
+      /** The semantics ensures that the quantification over `varDecls` does not 
+      get captured in the postcondition by using `ResetVarsPost`. */
       s => ForallVarDecls( a, varDecls, WpCmd(a, body, ResetVarsPost(varDecls, post', s)) )(s)
     case If(optCond, thn, els) =>
       match optCond {
@@ -293,6 +311,20 @@ module BoogieSemantics {
       WpCmd(a, SeqToCmd(body'), post)
   }
 
+  /**  Definition of when a command representing a full program is correct. 
+       Note that this definition implicitly requires that all used variables 
+       must be introduced via a scope first in c, since the definition quantifies
+       over all states.
+  */
+  predicate CmdIsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd)
+    requires LabelsWellDefAux(c, {})
+  {
+    var truePred := s' => Some(true);
+    //assert ((map[]): map<lbl_name, Predicate<Cmd>>).Keys == {};
+    var emptyMap : map<lbl_name, Predicate<A>> := map [];
+    assert emptyMap.Keys == {};
+    forall s: state<A> :: WpCmd(a, c, WpPost(truePred, truePred, emptyMap))(s) == Some(true)
+  }
 
   predicate ValuesRespectDecls<A>(a: absval_interp<A>, vs: seq<Val<A>>, varDecls: seq<(var_name, Ty)>)
   {
@@ -464,13 +496,6 @@ module BoogieSemantics {
         }
       }
     }
-  
-  function ResetVarsPost<A(!new)>(varDecls: seq<(var_name,Ty)>, p: WpPost<A>, s: state<A>) : WpPost<A>
-    ensures p.scopes.Keys == ResetVarsPost(varDecls, p, s).scopes.Keys
-  {
-    var newScopes := map lbl | lbl in p.scopes.Keys :: ResetVarsPred(varDecls, p.scopes[lbl], s);
-    WpPost(ResetVarsPred(varDecls, p.normal, s), ResetVarsPred(varDecls, p.currentScope, s), newScopes)
-  }
 
   function ResetVarsState<A(!new)>(varDecls: seq<(var_name,Ty)>, s: state<A>, sOrig: state<A>) : state<A>
   {
@@ -485,12 +510,21 @@ module BoogieSemantics {
         s'-{x}
   }
 
+  /** ResetVarsPred turns the predicate `p` into a predicate that resets the variables
+  in `varDecls` to be those from the state `s`. **/
   function ResetVarsPred<A(!new)>(varDecls: seq<(var_name,Ty)>, p: Predicate<A>, s: state<A>) : Predicate<A>
   {
     /* then-branch is used to keep the exact same predicate in the empty case 
        (the else branch would work for the empty case, but then one only gets 
        pointwise equality to p) */
     if |varDecls| == 0 then p else s' => p(ResetVarsState(varDecls, s', s))
+  }
+
+  function ResetVarsPost<A(!new)>(varDecls: seq<(var_name,Ty)>, p: WpPost<A>, s: state<A>) : WpPost<A>
+    ensures p.scopes.Keys == ResetVarsPost(varDecls, p, s).scopes.Keys
+  {
+    var newScopes := map lbl | lbl in p.scopes.Keys :: ResetVarsPred(varDecls, p.scopes[lbl], s);
+    WpPost(ResetVarsPred(varDecls, p.normal, s), ResetVarsPred(varDecls, p.currentScope, s), newScopes)
   }
 
   //earlier resets override later resets
@@ -698,7 +732,8 @@ module BoogieSemantics {
     ensures ImpliesOpt<A>(WpCmd(a, c, P)(s), WpCmd(a, c, Q)(s))
   */
 
-  /** operational semantics */
+  /************************** operational semantics ***************************/
+
   datatype ExtState<A> = NormalState(state<A>) | MagicState | FailureState
 
   function SequentialMapUpdate<K,V>(m: map<K,V>, keys: seq<K>, values: seq<V>) : map<K,V>
