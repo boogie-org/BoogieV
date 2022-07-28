@@ -38,6 +38,9 @@ module AllTransformations
 
     LoopElim.EliminateLoopsPreserveNoBreaks(c);
 
+    print("\n=====Input program=====\n");
+    print(c1.ToString(0));
+
     print("\n=====After loop elimination=====\n");
     print(c1.ToString(0));
 
@@ -57,8 +60,10 @@ module AllTransformations
     /** Normalize AST */
     var (c4Opt, scExitOpt) := NormalizeAst.NormalizeAst(c3, None);
     var c4 := NormalizeAst.SeqCmdSimpleOpt(c4Opt, scExitOpt);
+    /*
     print("\n=====After AST normalization=====\n");
     print(c4.ToString(0));
+    */
 
     NormalizeAst.NormalizeAstPreserveStructure(c3, None);
 
@@ -150,6 +155,7 @@ method Main()
     );
   */
 
+  /*
   var c :=
     Scope(
       None,
@@ -160,6 +166,29 @@ method Main()
           If(Some(BinOp(Var("x"), Gt, ELit(LitInt(0)))),
             SimpleCmd(Assign("x", TPrim(TInt), BinOp(Var("x"), Add, ELit(LitInt(1))))),
             SimpleCmd(Assign("x", TPrim(TInt), BinOp(Var("x"), Add, ELit(LitInt(2)))))
+          )
+        ),
+        SimpleCmd(Assert(BinOp(Var("x"), Gt, ELit(LitInt(0)))))
+      )
+    );
+  */
+  var c :=
+    Scope(
+      None,
+      [("x", TPrim(TInt))], 
+      Seq(
+        Seq(
+          SimpleCmd(Assume(BinOp(Var("x"), Gt, ELit(LitInt(0))))),
+          Scope(
+            None,
+            [("x", TPrim(TInt))],
+            Seq(
+              If(Some(BinOp(Var("x"), Gt, ELit(LitInt(0)))),
+                SimpleCmd(Assign("x", TPrim(TInt), UnOp(UMinus, Var("x")))),
+                SimpleCmd(Skip)
+              ),
+              SimpleCmd(Assert(BinOp(Var("x"), Le, ELit(LitInt(0)))))
+            )
           )
         ),
         SimpleCmd(Assert(BinOp(Var("x"), Gt, ELit(LitInt(0)))))

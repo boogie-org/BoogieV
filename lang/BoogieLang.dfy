@@ -206,21 +206,21 @@ module BoogieLang {
   {
     function method ToString(indent: nat) : string {
       match this {
-        case Skip => "skip"
+        case Skip => IndentString("skip;", indent)
         case Assert(e) =>
           var eS := e.ToString();
-          IndentString("assert " + eS, indent)
+          IndentString("assert " + eS + ";", indent)
         case Assume(e) =>
           var eS := e.ToString();
-          IndentString("assume " + eS, indent)
+          IndentString("assume " + eS + ";", indent)
         case Assign(x, _, e) =>
           var eS := e.ToString();
-          IndentString(x + " := " + eS, indent)
+          IndentString(x + " := " + eS + ";", indent)
         case Havoc(xs) =>
           var declS := Sequences.FoldLeft((s, decl : VarDecl) => s+", "+decl.0, "", xs);
-          IndentString("havoc " + declS, indent)
+          IndentString("havoc " + declS + ";", indent)
         case SeqSimple(sc1, sc2) => 
-          sc1.ToString(indent)+";\n "+
+          sc1.ToString(indent)+"\n"+
           sc2.ToString(indent)
       }
     }
@@ -273,6 +273,11 @@ module BoogieLang {
     }
   }
 
+  function method VarDeclToString(d: VarDecl) : string
+  {
+    "var " + d.0 + ":" + d.1.ToString()
+  }
+
 /** TODO: add return */
   datatype Cmd =
     | SimpleCmd(SimpleCmd)
@@ -313,7 +318,9 @@ module BoogieLang {
         case Break(optLbl) =>
           IndentString("break" + (if optLbl.Some? then " " + optLbl.value else "") + ";", indent)
         case Scope(optLbl, xs, c) =>
-          var declS := Sequences.FoldLeft((s, decl : VarDecl) => s+", "+decl.0, "", xs);
+          var declS := 
+            if |xs| == 0 then ""
+            else Sequences.FoldLeft((s, decl : VarDecl) => s+", "+VarDeclToString(decl), VarDeclToString(xs[0]), xs[1..]);
           var cS := c.ToString(indent+2);
           IndentString("scope ", indent) + (if optLbl.Some? then optLbl.value else "") + "{ \n" +
           IndentString(declS, indent+2) + "\n" + 
@@ -322,7 +329,7 @@ module BoogieLang {
         case Seq(c1, c2) =>
           var c1S := c1.ToString(indent);
           var c2S := c2.ToString(indent);
-          c1S + ";\n" + c2S
+          c1S + "\n" + c2S
         case Loop(invs, body) =>
           var i := 0;
           var invS := Sequences.FoldLeft((s, inv: Expr) => s+"\n invariant "+ inv.ToString(), "", invs);

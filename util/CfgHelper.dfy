@@ -245,8 +245,8 @@ module CfgHelper {
         Sequences.FoldLeft( 
             (s: string, bSucc: BlockId) => 
               if bSucc in cfg.blocks.Keys then s+", B"+ Util.NatToString(bSucc) else "block not in successors",
-            "targets: ",
-            successors)+"\n"
+              "targets: " + "B"+ Util.NatToString(successors[0]),
+              successors[1..])+"\n"
       ) +
       PrintCfgAux(cfg, blockIds, idx+1)
   }
