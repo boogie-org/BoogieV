@@ -4,25 +4,25 @@ implemented in the Dafny language. The goal is to prove different parts of Boogi
 correct in Dafny. The prototype is under development.
 
 ## Folder structure
-* lang: Contains the formalization of the BoogieV language including its semantics 
+* `lang`: Contains the formalization of the BoogieV language including its semantics 
 (BoogieSemantics.dfy), which is expressed as a weakest precondition semantics.
 Formalizations for both the BoogieV abstract syntax tree and BoogieV CFG are
 included.
-* transformations: Contains the implementation of the BoogieV verifier translation,
+* `transformations`: Contains the implementation of the BoogieV verifier translation,
 which is implemented as a series of BoogieV program transformations until a verification
 condition is generated.
-Proofs (currently still being developed) for some of the of the transformations
+Proofs (currently still being developed) for some of the transformations
 are also in this folder.
-* util: Contains helper lemmas and definitions.
-* smt_interface: Contains the SMT solver interface expressed as a extern Dafny class
-and also the C# implementation of C# Dafny class.
+* `util`: Contains helper lemmas and definitions.
+* `smt_interface`: Contains the SMT solver interface expressed as an extern Dafny class
+and also the C# implementation of the C# Dafny class.
 
 ## Using the tool
 ### Dependencies
 To use the tool, you need:
 * [Dafny](https://github.com/dafny-lang/dafny) on the command line
 * .NET core 6
-* A Z3 version (we have tested BoogieV on version 4.8.5)
+* A [Z3](https://github.com/Z3Prover/z3) binary (we have tested BoogieV on version 4.8.5)
 
 ### Verify, compile, run
 The `Makefile` contains useful commands to verify and compile `BoogieV`:
@@ -46,4 +46,6 @@ run it on a different program, you need to changed that program and recompile
 BoogieV.
 
 The output after running BoogieV includes many of the intermediate programs
-obtained via BoogieV's transformations.
+obtained via BoogieV's transformations followed by the VC (which is represented
+as a Boolean BoogieV expression). The SMTLIB representation of the VC is stored 
+at the input file path given to BoogieV.
