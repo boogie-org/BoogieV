@@ -42,7 +42,7 @@ the file in which the SMTLIB file that is given to Z3 is stored.
 We do not have a BoogieV parser yet (we are working on it). So, running the above
 command runs BoogieV on the hardcoded program in the Dafny `AllTransformations`
 method in the file `transformations/AllTransformations.dfy`. So, if you want to 
-run it on a different program, you need to changed that program and recompile
+run it on a different program, you need to change that program and recompile
 BoogieV.
 
 The output after running BoogieV includes many of the intermediate programs
