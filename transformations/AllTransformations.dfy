@@ -30,7 +30,7 @@ module AllTransformations
   import CfgHelper
   import BoogieCfg
 
-  method AllTransformations(c: Cmd) returns (e: Expr)
+  method AllTransformations(c: Cmd, printTrace: bool) returns (e: Expr)
     requires NoBreaks(c) //TODO: lift
   {
     /** Eliminate loops */
@@ -38,24 +38,34 @@ module AllTransformations
 
     LoopElim.EliminateLoopsPreserveNoBreaks(c);
 
-    print("\n=====Input program=====\n");
-    print(c1.ToString(0));
+    if(printTrace) {
+      print("\n=====Input program=====\n");
+      print(c1.ToString(0));
+    }
 
-    print("\n=====After loop elimination=====\n");
-    print(c1.ToString(0));
+    if(printTrace) {
+      print("\n=====After loop elimination=====\n");
+      print(c1.ToString(0));
+    }
 
     /** Eliminate if guards */
     var c2 := IfGuardElim.EliminateIfGuards(c1); 
-    print("\n=====After If guard elimination=====\n");
-    print(c2.ToString(0));
+    
+    if(printTrace) {
+      print("\n=====After If guard elimination=====\n");
+      print(c2.ToString(0));
+    }
 
     IfGuardElim.EliminateIfGuardsNoLoops(c1);
 
     /** Remove scoped variables */
     var (c3, decls3) := DesugarScopedVarsImpl.RemoveScopedVars(c2);
     DesugarScopedVarsImpl.RemoveScopedVarsStructure(c2);
-    print("\n=====After removing scoped variables=====\n");
-    print(c3.ToString(0));
+    
+    if(printTrace) {
+      print("\n=====After removing scoped variables=====\n");
+      print(c3.ToString(0));
+    }
 
     /** Normalize AST */
     var (c4Opt, scExitOpt) := NormalizeAst.NormalizeAst(c3, None);
@@ -72,8 +82,11 @@ module AllTransformations
     
     /** Ast-to-CFG */
     var (g1, blockSeq, cover) := AstToCfg.AstToCfg(c4);
-    print("\n=====After AST-to-CFG transformation=====\n");
-    print(CfgHelper.PrintCfg(g1, blockSeq));
+
+    if(printTrace) {
+      print("\n=====After AST-to-CFG transformation=====\n");
+      print(CfgHelper.PrintCfg(g1, blockSeq));
+    }
 
     /** Compute auxiliary CFG data */
     var pred := CfgHelper.PredecessorMap(g1.successors, blockSeq);
@@ -89,10 +102,12 @@ module AllTransformations
 
     /** Passification */
     var g2 := Passification.PassifyCfg(g1, topo, pred);
-    print("\n=====After Passification=====\n");
     expect BoogieCfg.CfgWf(g2);
 
-    print(CfgHelper.PrintCfg(g2, topo));
+    if(printTrace) {
+      print("\n=====After Passification=====\n");
+      print(CfgHelper.PrintCfg(g2, topo));
+    }
 
     /** VCGen */
     expect g2.entry == topo[0];
@@ -108,13 +123,48 @@ module AllTransformations
   
 }
 
-import opened BoogieLang
-import opened Wrappers
-import opened SMTInterface
+module BoogieRunner {
+  import opened BoogieLang
+  import SMTInterface
+  import VCExprAdapter
+  import opened AstSubsetPredicates
+  import AllTransformations
+
+  /**
+    c: input BoogieV program 
+    proverPath: absolute path to Z3 binary
+    proverLogPath: path to which SMTLIB file handed to Z3 should be stored
+    printTrace: indicates whether intermediate representations of the programs
+                should be printed
+   */
+  method RunBoogie(c: Cmd, proverPath: string, proverLogPath: string, printTrace: bool) returns (vcIsValid: bool)
+    requires NoBreaks(c)
+  {
+    var vc := AllTransformations.AllTransformations(c, printTrace);
+    var vcString := vc.ToString();
+
+    if(printTrace) {
+      print("\n=====VC Generation====\n");
+      print(vcString+"\n");
+      print("\n=====Result=====\n");
+    }
+
+    var vcExprInterface := SMTInterface.VCExprInterface.Create(proverPath, proverLogPath);
+    
+    var vcExpr := VCExprAdapter.ExprToVCExpr(vcExprInterface, vc);
+    var smtResult := vcExprInterface.IsVCValid(vcExpr);
+
+    return smtResult;
+  } 
+}
+
 
 module Environment {
   method {:extern "Shims", "GetCommandLineArguments"} GetCommandLineArguments() returns (args: seq<string>)
 }
+
+import opened BoogieLang
+import opened Wrappers
 
 method Main()
 {
@@ -203,22 +253,11 @@ method Main()
 
   var proverPath := args[0];
   var proverLogPath := args[1];
+
+  var vcIsValid := BoogieRunner.RunBoogie(c, proverPath, proverLogPath, false);
   
-  var vc := AllTransformations.AllTransformations(c);
-  var vcString := vc.ToString();
 
-  print("\n=====VC Generation====\n");
-
-  print(vcString+"\n");
-
-  print("\n=====Result=====\n");
-
-  var vcExprInterface := VCExprInterface.Create(proverPath, proverLogPath);
-  
-  var vcExpr := VCExprAdapter.ExprToVCExpr(vcExprInterface, vc);
-  var vcValid := vcExprInterface.IsVCValid(vcExpr);
-
-  if vcValid {
+  if vcIsValid {
     print("Input program is correct.");
   } else {
     print("Input program might not be correct.");
