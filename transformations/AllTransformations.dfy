@@ -136,8 +136,10 @@ module BoogieRunner {
     proverLogPath: path to which SMTLIB file handed to Z3 should be stored
     printTrace: indicates whether intermediate representations of the programs
                 should be printed
-   */
-  method RunBoogie(c: Cmd, proverPath: string, proverLogPath: string, printTrace: bool) returns (vcIsValid: bool)
+
+    returns whether input program has no failing assertions (result true) or 
+    may have failing assertions (result false)*/
+  method RunBoogieV(c: Cmd, proverPath: string, proverLogPath: string, printTrace: bool) returns (noFailingAssertions: bool)
     requires NoBreaks(c)
   {
     var vc := AllTransformations.AllTransformations(c, printTrace);
@@ -254,7 +256,7 @@ method Main()
   var proverPath := args[0];
   var proverLogPath := args[1];
 
-  var vcIsValid := BoogieRunner.RunBoogie(c, proverPath, proverLogPath, false);
+  var vcIsValid := BoogieRunner.RunBoogieV(c, proverPath, proverLogPath, false);
   
 
   if vcIsValid {
