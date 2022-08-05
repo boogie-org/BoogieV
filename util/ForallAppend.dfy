@@ -323,6 +323,33 @@ module ForallAppend {
         }
       }
     }
+  
+  lemma ValuesRespectDeclsAppendSwap<A(!new)>(a: absval_interp<A>, d1: seq<VarDecl>, d2: seq<VarDecl>, vs1: seq<Val<A>>, vs2: seq<Val<A>>)
+    requires 
+      && |vs1| == |d1|
+      && ValuesRespectDecls(a, vs1+vs2, d1+d2)
+    ensures
+      ValuesRespectDecls(a, vs2+vs1, d2+d1)
+  {
+    var vs := vs1+vs2;
+    var d := d1+d2;
+    var d' := d2+d1;
+
+    assert vs1 == vs[0..|d1|];
+    assert vs2 == vs[|d1|..|d|];
+
+    assert ValuesRespectDecls(a, vs1, d1) by {
+      ValuesRespectDeclsSlice(a, vs, d, 0, |d1|);
+    }
+
+    assert ValuesRespectDecls(a, vs2, d2) by {
+      ValuesRespectDeclsSlice(a, vs, d, |d1|, |d|);
+    }
+
+    assert ValuesRespectDecls(a, vs2+vs1, d') by {
+      ValuesRespectDeclsAppend(a, d2, d1, vs2, vs1);
+    }
+  }
 
   lemma ForallVarDeclsSwap<A(!new)>(
       a: absval_interp<A>, 
@@ -334,7 +361,6 @@ module ForallAppend {
     ensures    ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s)
             == ForallVarDecls(a, varDecls2, ForallVarDecls(a, varDecls1, p))(s)
   {
-    assume false; //TODO
     calc {
       ForallVarDecls(a, varDecls1, ForallVarDecls(a, varDecls2, p))(s);
       { ForallVarDeclsAppend(a, varDecls1, varDecls2, p, s); }
@@ -345,18 +371,94 @@ module ForallAppend {
           assert varDecls1+varDecls2 == d == varDecls2+varDecls1;
         } else {
           var res1 := ForallVarDecls(a, varDecls1+varDecls2, p)(s);
-          var d1 := varDecls1+varDecls2;
-          var d2 := varDecls2+varDecls1;
+          var d := varDecls1+varDecls2;
+          var d' := varDecls2+varDecls1;
 
           if res1 == None {
-            assume false;
-            var vs :| ValuesRespectDecls(a, vs, d1) && p(StateUpdVarDecls(s, d1, vs)) == None;
-            var vs1, vs2 :| vs1+vs2 == vs && |vs1| == |varDecls1| && |vs2| == |varDecls2|;
+            NoneForallVarDecls(a, d, p, s);
+            var vs :| ValuesRespectDecls(a, vs, d) && p(StateUpdVarDecls(s, d, vs)) == None;
+
+            var vs1 := vs[0..|varDecls1|];
+            var vs2 := vs[|varDecls1|..|d|];
+
+            assert vs == vs1+vs2;
+
+            assert ValuesRespectDecls(a, vs2+vs1, d') by {
+              ValuesRespectDeclsAppendSwap(a, varDecls1, varDecls2, vs1, vs2);
+            }
+
+            assert StateUpdVarDecls(s, d, vs) == StateUpdVarDecls(s, d', vs2+vs1) by {
+              StateUpdVarDeclsSplit3(s, varDecls1, varDecls2, vs1, vs2);
+            }
+
+            NoneForallVarDecls2(a, d', vs2+vs1, p, s);
           } else if res1 == Some(true) {
-            assume false;
+            forall vs | ValuesRespectDecls(a, vs, d')
+            ensures p(StateUpdVarDecls(s, d', vs)) == Some(true)
+            {
+              var vs2 := vs[0..|varDecls2|];
+              var vs1 := vs[|varDecls2|..|d|];
+
+              assert vs == vs2+vs1;
+
+              assert ValuesRespectDecls(a, vs1+vs2, d) by {
+                ValuesRespectDeclsAppendSwap(a, varDecls2, varDecls1, vs2, vs1);
+              }
+
+              assert StateUpdVarDecls(s, d', vs) == StateUpdVarDecls(s, d, vs1+vs2) by {
+                StateUpdVarDeclsSplit3(s, varDecls1, varDecls2, vs1, vs2);
+              }
+
+              SomeTrueForallVarDecls2(a, d, p, s, vs1+vs2);
+            }
+            SomeTrueForallVarDecls(a, d', p, s);
           } else {
-            assert res1 == Some(false);
-            assume false;
+            assert res1 == Some(false) by {
+              reveal ForallVarDecls();
+            }
+
+            forall vs | ValuesRespectDecls(a, vs, d')
+            ensures p(StateUpdVarDecls(s, d', vs)).Some?
+            {
+              var vs2 := vs[0..|varDecls2|];
+              var vs1 := vs[|varDecls2|..|d|];
+
+              assert vs == vs2+vs1;
+
+              assert ValuesRespectDecls(a, vs1+vs2, d) by {
+                ValuesRespectDeclsAppendSwap(a, varDecls2, varDecls1, vs2, vs1);
+              }
+
+              assert StateUpdVarDecls(s, d', vs) == StateUpdVarDecls(s, d, vs1+vs2) by {
+                StateUpdVarDeclsSplit3(s, varDecls1, varDecls2, vs1, vs2);
+              }
+
+              assert p(StateUpdVarDecls(s, d, vs1+vs2)).Some? by {
+                SomeForallVarDecls2(a, d, p, s, vs1+vs2);
+              }
+            }
+
+            assert ForallVarDecls(a, d', p)(s).Some? by {
+              SomeForallVarDecls3(a, d', p, s);
+            }
+
+            SomeFalseForallVarDecls2(a, d, p, s);
+
+            var vs :| ValuesRespectDecls(a, vs, d) && p(StateUpdVarDecls(s, d, vs)) == Some(false);
+            var vs1 := vs[0..|varDecls1|];
+            var vs2 := vs[|varDecls1|..|d|];
+
+            assert vs == vs1+vs2;
+
+            assert ValuesRespectDecls(a, vs2+vs1, d') by {
+              ValuesRespectDeclsAppendSwap(a, varDecls1, varDecls2, vs1, vs2);
+            }
+
+            assert StateUpdVarDecls(s, d, vs) == StateUpdVarDecls(s, d', vs2+vs1) by {
+              StateUpdVarDeclsSplit3(s, varDecls1, varDecls2, vs1, vs2);
+            }
+
+            SomeFalseForallVarDecls(a, d', p, s, vs2+vs1);
           }
         }
       }

@@ -2,6 +2,7 @@ include "../lang/BoogieSemantics.dfy"
 include "../transformations/DesugarScopedVarsImpl.dfy"
 include "../transformations/MakeScopedVarsUniqueProof.dfy"
 include "../util/Naming.dfy"
+include "../util/SemanticsUtil.dfy"
 include "../util/ForallAppend.dfy"
 include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
@@ -14,6 +15,7 @@ module RemoveScopedVarsAuxUniqueProof {
   import Sequences = Seq
   import Maps
   import Util
+  import SemanticsUtil
   import opened Wrappers
   import opened DesugarScopedVarsImpl
   import MakeScopedVarsUniqueProof
@@ -795,9 +797,19 @@ module RemoveScopedVarsAuxUniqueProof {
           ForallVarDecls(a, d, WpCmd(a, thn, post))(s),
           ForallVarDecls(a, d, WpCmd(a, els, post))(s)
         );
-        /**TODO */
+        { SemanticsUtil.ForallVarDeclsAnd(a, d, WpCmd(a, thn, post), WpCmd(a, els, post), s); }
+        ForallVarDecls(a, d, s' => Util.AndOpt(WpCmd(a, thn, post)(s'), WpCmd(a, els, post)(s')))(s);
+        { 
+          SemanticsUtil.WpIfEquivAnd(a, thn, els, post);
+          ForallVarDeclsPointwise(
+            a, 
+            d,
+            s' => Util.AndOpt(WpCmd(a, thn, post)(s'), WpCmd(a, els, post)(s')),
+            WpCmd(a, If(None, thn, els), post),
+            s);
+        }
+        ForallVarDecls(a, d, WpCmd(a, If(None, thn, els), post))(s);
       }
-      assume false;
     case Seq(c1, c2) => 
       calc {
         WpCmd(a, Seq(c1, c2), ForallVarDeclsPost(a, d, post))(s);
@@ -1037,7 +1049,7 @@ module RemoveScopedVarsAuxUniqueProof {
               ForallVarDecls(a, declsThn+declsEls, WpCmd(a, thn', post))(s),
               ForallVarDecls(a, declsThn+declsEls, WpCmd(a, els', post))(s)
             );
-            { assume false; }
+            { SemanticsUtil.ForallVarDeclsAnd(a, declsThn+declsEls, WpCmd(a, thn', post), WpCmd(a, els', post), s); }
             ForallVarDecls(a, declsThn+declsEls, p')(s);
             { reveal WpCmd(); 
               ForallVarDeclsPointwise(a, declsThn+declsEls, p', WpCmd(a, c', post), s);
@@ -1045,7 +1057,6 @@ module RemoveScopedVarsAuxUniqueProof {
             ForallVarDecls(a, declsThn+declsEls, WpCmd(a, c', post))(s);
           }
         case Seq(c1, c2) => 
-          // WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes)
           var (c1', decls1) := RemoveScopedVarsAux(c1);
           var (c2', decls2) := RemoveScopedVarsAux(c2);
 
