@@ -1026,39 +1026,20 @@ module RemoveScopedVarsAuxUniqueProof {
           calc {
             ForallVarDecls(a, declsThn, WpCmd(a, thn', post))(s);
             { 
-              /*
-                lemma ForallVarDeclsIndep2<A(!new)>(a: absval_interp<A>, d: seq<VarDecl>, p: Predicate<A>, xs: set<var_name>)
-                  //TODO: need to add precondition that the types in d are inhabited
-                  requires 
-                    && PredDepend(p, xs)
-                    && xs !! GetVarNames(d)
-                  ensures forall s :: p(s) == ForallVarDecls(a, d, p)(s)
-              */
-              /*
-                lemma WpPredDepend<A(!new)>(a: absval_interp<A>, xs: set<var_name>, c: Cmd, post: WpPost<A>)
-                  requires c.WellFormedVars(xs)
-                  requires NoLoopsNoIfGuard(c)
-                  requires LabelsWellDefAux(c, post.scopes.Keys)
-                  requires PostDepend(post, xs)
-                  ensures PredDepend(WpCmd(a, c, post), xs)
-              */
-
- 
-              //test
-              /*
-                lemma RemoveScopedVarsAuxPreserveWf(c: Cmd, activeVars: set<var_name>)
-                  requires 
-                  && c.WellFormedVars(activeVars)
-                  && NoLoopsNoIfGuard(c)
-                  ensures 
-                    var (c', decls) := RemoveScopedVarsAux(c);
-                    c'.WellFormedVars(activeVars+GetVarNames(decls))
-              */
               assert thn'.WellFormedVars(activeVars+GetVarNames(declsThn)) by {
                 RemoveScopedVarsAuxPreserveWf(thn, activeVars);
               }
 
-              assume false; //TODO: reuse forall indep lemm 
+              assert PredDepend(WpCmd(a, thn', post), activeVars+GetVarNames(declsThn)) by {
+                assert PostDepend(post, activeVars+GetVarNames(declsThn)) by {
+                  PostDependMonotone(post, activeVars, activeVars+GetVarNames(declsThn));
+                }
+                WpPredDepend(a, activeVars+GetVarNames(declsThn), thn', post);
+              }
+
+              ForallVarDeclsIndep2(a, declsEls, WpCmd(a, thn', post), activeVars+GetVarNames(declsThn));
+              
+              ForallVarDeclsPointwise(a, declsThn, WpCmd(a, thn', post), ForallVarDecls(a, declsEls, WpCmd(a, thn', post)), s);
             }
             ForallVarDecls(a, declsThn, ForallVarDecls(a, declsEls, WpCmd(a, thn', post)))(s);
             { ForallAppend.ForallVarDeclsAppend(a, declsThn, declsEls, WpCmd(a, thn', post), s); }
@@ -1068,7 +1049,12 @@ module RemoveScopedVarsAuxUniqueProof {
           calc {
             ForallVarDecls(a, declsEls, WpCmd(a, els', post))(s);
             { 
-              assume false; //TODO: reuse forall indep lemma  
+              assert els'.WellFormedVars(activeVars+GetVarNames(declsEls)) by {
+                RemoveScopedVarsAuxPreserveWf(els, activeVars);
+              }
+
+              ForallWpPredDepend(a, activeVars, declsEls, els', post);
+              ForallVarDeclsIndep2(a, declsThn, ForallVarDecls(a, declsEls, WpCmd(a, els', post)), activeVars);
             }
             ForallVarDecls(a, declsThn, ForallVarDecls(a, declsEls, WpCmd(a, els', post)))(s);
             { ForallAppend.ForallVarDeclsAppend(a, declsThn, declsEls, WpCmd(a, els', post), s); }
