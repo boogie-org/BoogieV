@@ -77,8 +77,8 @@ module BoogieLang {
   /** no type variables, because there is no polymorphism. Since there is no polymorphism, it is sufficient for type 
   constructors to not have any parameters */
   datatype Ty =
-    | TPrim(PrimTy)
-    | TCon(tcon_name)
+    | TPrim(primType: PrimTy)
+    | TCon(constrName: tcon_name)
   {
     function method ToString() : string {
       match this
@@ -195,7 +195,7 @@ module BoogieLang {
     | Assert(Expr)
     | Assume(Expr)
     | Assign(var_name, Ty, Expr) 
-    | Havoc(seq<VarDecl>)
+    | Havoc(varDecls: seq<VarDecl>)
     | SeqSimple(SimpleCmd, SimpleCmd) 
     /* The reason for adding a separate sequential composition for simple commands is to be able to transform the AST
        into a form that more directly represents the desired CFG block structure.
@@ -237,6 +237,13 @@ module BoogieLang {
       case Assign(x, t, e) => x in xs && e.FreeVars() <= xs
       case Havoc(varDecls) => GetVarNames(varDecls) <= xs
       case SeqSimple(sc1, sc2) => sc1.WellFormedVars(xs) && sc2.WellFormedVars(xs)
+    }
+
+    predicate WellFormedTypes(tcons: set<tcon_name>)
+    {
+      PredicateRec(
+        (sc : SimpleCmd) => (sc.Havoc? ==> GetTypeConstr(sc.varDecls) <= tcons), e => true
+      )
     }
 
     predicate method PredicateRec(pred: SimpleCmd -> bool, predE: Expr -> bool)
@@ -308,6 +315,15 @@ module BoogieLang {
       case Seq(c1, c2) =>
         && c1.WellFormedVars(xs)
         && c2.WellFormedVars(xs)
+    }
+
+    predicate WellFormedTypes(tcons: set<tcon_name>)
+    {
+      this.PredicateRec(
+        (c : Cmd) => c.Scope? && GetTypeConstr(c.varDecls) <= tcons,
+        (sc : SimpleCmd) => sc.WellFormedTypes(tcons), 
+        e => true
+      )
     }
 
     method ToString(indent: nat) returns (s: string) {
@@ -416,6 +432,13 @@ module BoogieLang {
   represent this T_all (since T_all would depend on the abstract Value interpretation, taking only those abstract Values 
   into account that map to some Value) */
 
+  /** an abstract value interpretation is well formed w.r.t. a set of type constructors,
+    if each type constructor in the given set is inhabited by at least one abstract value  */
+  predicate {:opaque} WfAbsvalInterp<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>)
+  {
+    forall t | t in tcons :: exists absVal :: t == a(absVal) 
+  } 
+
   function TypeOfVal<A>(a: absval_interp<A>, v: Val<A>) : Ty
   {
     match v
@@ -471,6 +494,16 @@ module BoogieLang {
   function method GetVarNamesSeq(vs: seq<(var_name,Ty)>):seq<var_name>
   {
     seq(|vs|, i requires 0 <= i < |vs| => vs[i].0)
+  }
+
+  function method GetTypes(vs: seq<VarDecl>) : set<Ty>
+  {
+    set varDecl | varDecl in vs :: varDecl.1
+  }
+
+  function method GetTypeConstr(vs: seq<VarDecl>) : set<tcon_name>
+  {
+    set varDecl | varDecl in vs && varDecl.1.TCon? :: varDecl.1.constrName
   }
 
   lemma GetVarNamesContainedSeq(v: var_name, vs: seq<(var_name,Ty)>)

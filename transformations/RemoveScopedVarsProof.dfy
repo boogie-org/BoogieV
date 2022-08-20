@@ -885,12 +885,13 @@ module RemoveScopedVarsAuxUniqueProof {
       GetDecls(c) == decls
   { }
  
-  lemma {:verify true} RemoveScopedVarsAuxCorrect<A(!new)>(a: absval_interp<A>, activeVars: set<var_name>, c: Cmd, post: WpPost<A>)
+  lemma {:verify true} RemoveScopedVarsAuxCorrect<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>, activeVars: set<var_name>, c: Cmd, post: WpPost<A>)
     requires 
       var (c', decls) := RemoveScopedVarsAux(c);
       && LabelsWellDefAux(c, post.scopes.Keys) 
       && LabelsWellDefAux(c', post.scopes.Keys) 
       && c.WellFormedVars(activeVars) 
+      && c.WellFormedTypes(tcons)
       && PostDepend(post, activeVars)
       && Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(c)))
       && NoLoopsNoIfGuard(c)
@@ -952,7 +953,7 @@ module RemoveScopedVarsAuxUniqueProof {
                 RemoveScopedVarsAuxGetDecls(body);
               }
 
-              RemoveScopedVarsAuxCorrect(a, activeVars+GetVarNames(varDecls), body, post'); 
+              RemoveScopedVarsAuxCorrect(a, tcons, activeVars+GetVarNames(varDecls), body, post'); 
               ForallVarDeclsPointwise(a, varDecls, WpCmd(a, body, post'), ForallVarDecls(a, declsBody, WpCmd(a, body', post')), s);
             }
             ForallVarDecls( a, varDecls, ForallVarDecls(a, declsBody, WpCmd(a, body', post') ))(s);
@@ -1014,8 +1015,8 @@ module RemoveScopedVarsAuxUniqueProof {
               WpCmd(a, els, post)(s)
             );
             { 
-              RemoveScopedVarsAuxCorrect(a, activeVars, thn, post); 
-              RemoveScopedVarsAuxCorrect(a, activeVars, els, post);
+              RemoveScopedVarsAuxCorrect(a, tcons, activeVars, thn, post); 
+              RemoveScopedVarsAuxCorrect(a, tcons, activeVars, els, post);
             }
             Util.AndOpt(
               ForallVarDecls(a, declsThn, WpCmd(a, thn', post))(s),
@@ -1099,7 +1100,7 @@ module RemoveScopedVarsAuxUniqueProof {
                 assert GetVarNamesSeq(GetDecls(c1)+GetDecls(c2)) == GetVarNamesSeq(GetDecls(c1)) + GetVarNamesSeq(GetDecls(c2));
                 HasNoDuplicatesAppend(GetVarNamesSeq(GetDecls(c1)), GetVarNamesSeq(GetDecls(c2)));
               }
-              RemoveScopedVarsAuxCorrect(a, activeVars, c2, post); 
+              RemoveScopedVarsAuxCorrect(a, tcons, activeVars, c2, post); 
               WpCmdPointwise(a, c1, post2, post2', s);
             }
             WpCmd(a, c1, post2')(s);
@@ -1112,7 +1113,7 @@ module RemoveScopedVarsAuxUniqueProof {
                 assert GetVarNamesSeq(GetDecls(c1)+GetDecls(c2)) == GetVarNamesSeq(GetDecls(c1)) + GetVarNamesSeq(GetDecls(c2));
                 HasNoDuplicatesAppend(GetVarNamesSeq(GetDecls(c1)), GetVarNamesSeq(GetDecls(c2)));
               }
-              RemoveScopedVarsAuxCorrect(a, activeVars, c1, post2'); 
+              RemoveScopedVarsAuxCorrect(a, tcons, activeVars, c1, post2'); 
 
               //reveal due to opaque bug
               reveal WpCmd();

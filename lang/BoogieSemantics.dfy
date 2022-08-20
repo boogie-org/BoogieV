@@ -293,11 +293,45 @@ module BoogieSemantics {
       WpCmd(a, SeqToCmd(body'), post)
   }
 
-
   predicate ValuesRespectDecls<A>(a: absval_interp<A>, vs: seq<Val<A>>, varDecls: seq<(var_name, Ty)>)
   {
     TypeOfValues(a, vs) == seq(|varDecls|, i requires 0 <= i < |varDecls| => varDecls[i].1)
   }
+
+  lemma temp<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>, t: tcon_name)
+    requires WfAbsvalInterp(a, tcons)
+    requires t in tcons
+    ensures exists v :: a(v) == t
+  {
+    reveal WfAbsvalInterp();
+  }
+
+  lemma TypeInhabitedWfInterpAux<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>, d: seq<VarDecl>)
+    requires WfAbsvalInterp(a, tcons)
+    requires GetTypeConstr(d) <= tcons
+    ensures 
+      exists vs :: ValuesRespectDecls(a, vs, d)
+  {
+      var vs := seq(|d|, i requires 0 <= i < |d| => 
+        var ty := d[i].1;
+        if ty.TPrim? then
+          if ty.primType == TInt then LitV(LitInt(0)) else LitV(LitBool(false))
+        else
+          temp(a, tcons, ty.constrName);
+          var absVal :| a(absVal) == ty.constrName;
+          AbsV(absVal)
+      );
+
+      assert ValuesRespectDecls(a, vs, d) by {
+        assume fals; //TODO, also rename temp
+      }
+  }
+
+  lemma TypeInhabitedWfInterp<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>, d: seq<VarDecl>)
+    requires WfAbsvalInterp(a, tcons)
+    requires GetTypeConstr(d) <= tcons
+    ensures exists vs :: ValuesRespectDecls(a, vs, d) 
+  
 
   function StateUpdVarDecls<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>) : state<A>
     requires |varDecls| == |vs|
