@@ -455,9 +455,12 @@ module RemoveScopedVarsAuxUniqueProof {
     ForallPredDepend(a, activeVars, decls, WpCmd(a, c, post));
   }
 
-  lemma PullForallWpSimpleCmd<A(!new)>(a: absval_interp<A>, xs: set<var_name>, cxs: set<var_name>, d: seq<VarDecl>, sc: SimpleCmd, p: Predicate<A>, s: state<A>)
+  lemma PullForallWpSimpleCmd<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>, xs: set<var_name>, cxs: set<var_name>, d: seq<VarDecl>, sc: SimpleCmd, p: Predicate<A>, s: state<A>)
    // requires PredDepend(p, xs+GetVarNames(d))
-    requires && xs !! GetVarNames(d)
+    requires 
+             && WfAbsvalInterp(a, tcons)
+             && GetTypeConstr(d) <= tcons
+             && xs !! GetVarNames(d)
              && cxs !! GetVarNames(d)
              && sc.WellFormedVars(xs+cxs) 
     ensures 
@@ -469,7 +472,7 @@ module RemoveScopedVarsAuxUniqueProof {
       reveal ForallVarDecls();
     } else {
       assert exists vs :: ValuesRespectDecls(a, vs, d) by {
-        assume false; //TODO: need to ensure d only refers to inhabited types in precondition
+        TypeInhabitedWfInterpAux(a, tcons, d);
       }
       match sc 
       case Skip =>
@@ -612,7 +615,7 @@ module RemoveScopedVarsAuxUniqueProof {
             forall s' 
             ensures WpSimpleCmd(a, sc2, ForallVarDecls(a, d, p))(s') == ForallVarDecls(a, d, WpSimpleCmd(a, sc2, p))(s')
             {
-              PullForallWpSimpleCmd(a, xs, cxs, d, sc2, p, s');
+              PullForallWpSimpleCmd(a, tcons, xs, cxs, d, sc2, p, s');
             }
             WpSimpleCmdPointwise(a, sc1, WpSimpleCmd(a, sc2, ForallVarDecls(a, d, p)), ForallVarDecls(a, d, WpSimpleCmd(a, sc2, p)), s); 
           }
@@ -622,8 +625,10 @@ module RemoveScopedVarsAuxUniqueProof {
     }
   }
 
-  lemma ForallVarDeclsIndep<A(!new)>(a: absval_interp<A>, d: seq<VarDecl>, p: Predicate<A>, s: state<A>)
-    //TODO: need to add precondition that the types in d are inhabited
+  lemma ForallVarDeclsIndep<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>, d: seq<VarDecl>, p: Predicate<A>, s: state<A>)
+    requires 
+        && WfAbsvalInterp(a, tcons)
+        && GetTypeConstr(d) <= tcons
     requires forall vs | ValuesRespectDecls(a, vs, d) :: p(StateUpdVarDecls(s, d, vs)) == p(s)
     ensures ForallVarDecls(a, d, p)(s) == p(s)
   {
@@ -647,8 +652,7 @@ module RemoveScopedVarsAuxUniqueProof {
             assert p(s) == Some(false);
           } else {
             assert exists vs':: ValuesRespectDecls(a, vs', d) by {
-              //TODO: for this need that the types in d are nonempty (need extra precondition due to uninterpreted types)
-              assume false;
+              TypeInhabitedWfInterpAux(a, tcons, d);
             }
             var vs' :| ValuesRespectDecls(a, vs', d);
             assert p(StateUpdVarDecls(s, d, vs')) == Some(true) by {
@@ -660,9 +664,10 @@ module RemoveScopedVarsAuxUniqueProof {
     }
   }
 
-  lemma ForallVarDeclsIndep2<A(!new)>(a: absval_interp<A>, d: seq<VarDecl>, p: Predicate<A>, xs: set<var_name>)
-    //TODO: need to add precondition that the types in d are inhabited
+  lemma ForallVarDeclsIndep2<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>, d: seq<VarDecl>, p: Predicate<A>, xs: set<var_name>)
     requires 
+      && WfAbsvalInterp(a, tcons)
+      && GetTypeConstr(d) <= tcons
       && PredDepend(p, xs)
       && xs !! GetVarNames(d)
     ensures forall s :: p(s) == ForallVarDecls(a, d, p)(s)
@@ -688,7 +693,7 @@ module RemoveScopedVarsAuxUniqueProof {
 
             reveal PredDepend();
           }
-          ForallVarDeclsIndep(a, d, p, s);
+          ForallVarDeclsIndep(a, tcons, d, p, s);
         }
         ForallVarDecls(a, d, p)(s);
       }
@@ -713,11 +718,13 @@ module RemoveScopedVarsAuxUniqueProof {
     reveal WpCmd();
   }
 
-  lemma PullForallWp<A(!new)>(a: absval_interp<A>, xs: set<var_name>, cxs: set<var_name>, d: seq<VarDecl>, c: Cmd, post: WpPost<A>, s: state<A>)
+  lemma PullForallWp<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>, xs: set<var_name>, cxs: set<var_name>, d: seq<VarDecl>, c: Cmd, post: WpPost<A>, s: state<A>)
     requires LabelsWellDefAux(c, post.scopes.Keys)
     requires && xs !! GetVarNames(d)
              && cxs !! GetVarNames(d)
              && c.WellFormedVars(xs+cxs) 
+             && WfAbsvalInterp(a, tcons)
+             && GetTypeConstr(d) <= tcons
     //requires PredDepend(p, xs+GetVarNames(d))
     requires && NoLoopsNoIfGuard(c)
              && NoScopedVars(c) //might be able to remove this, but currently the only applications of the lemma satisfy this precondition
@@ -731,7 +738,7 @@ module RemoveScopedVarsAuxUniqueProof {
     match c
     case SimpleCmd(sc) => 
       reveal WpCmd();
-      PullForallWpSimpleCmd(a, xs, cxs, d, sc, post.normal, s);
+      PullForallWpSimpleCmd(a, tcons, xs, cxs, d, sc, post.normal, s);
     case Break(optLabel) =>
       reveal WpCmd();
     case Scope(optLabel, varDecls, body) => 
@@ -763,7 +770,7 @@ module RemoveScopedVarsAuxUniqueProof {
           assert body.WellFormedVars((xs+cxs)+GetVarNames(varDecls));
           assert (xs+cxs)+GetVarNames(varDecls) == xs+cxs;
           assert optLabel.Some? ==> updatedScopes == ForallScopes(a, d, post.scopes[optLabel.value := post.normal]);
-          PullForallWp(a, xs, cxs, d, body, WpPost(post.normal, post.normal, updatedScopes'), s);  
+          PullForallWp(a, tcons, xs, cxs, d, body, WpPost(post.normal, post.normal, updatedScopes'), s);  
         }
         ForallVarDecls(a, d, WpCmd(a, body, WpPost(post.normal, post.normal, updatedScopes')))(s); //TODO: currently only makes sense for optLabel == None
         { 
@@ -819,7 +826,7 @@ module RemoveScopedVarsAuxUniqueProof {
           forall s 
           ensures WpCmd(a, c2, ForallVarDeclsPost(a, d, post))(s) == ForallVarDecls(a, d, WpCmd(a, c2, post))(s)
           {
-            PullForallWp(a, xs, cxs, d, c2, post, s); 
+            PullForallWp(a, tcons, xs, cxs, d, c2, post, s); 
           }
           var post1 := WpPost(WpCmd(a, c2, ForallVarDeclsPost(a, d, post)), ForallVarDecls(a, d, post.currentScope), ForallScopes(a, d, post.scopes));
           var post2 := WpPost(ForallVarDecls(a, d, WpCmd(a, c2, post)), ForallVarDecls(a, d ,post.currentScope), ForallScopes(a, d, post.scopes));
@@ -827,7 +834,7 @@ module RemoveScopedVarsAuxUniqueProof {
         }
         WpCmd(a, c1, WpPost(ForallVarDecls(a, d, WpCmd(a, c2, post)), ForallVarDecls(a, d ,post.currentScope), ForallScopes(a, d, post.scopes)))(s);
         { 
-          PullForallWp(a, xs, cxs, d, c1, WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes), s); 
+          PullForallWp(a, tcons, xs, cxs, d, c1, WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes), s); 
         }
         ForallVarDecls(a, d, WpCmd(a, c1, WpPost(WpCmd(a, c2, post), post.currentScope, post.scopes)))(s);
         { reveal WpCmd(); }
@@ -891,6 +898,7 @@ module RemoveScopedVarsAuxUniqueProof {
       && LabelsWellDefAux(c, post.scopes.Keys) 
       && LabelsWellDefAux(c', post.scopes.Keys) 
       && c.WellFormedVars(activeVars) 
+      && WfAbsvalInterp(a, tcons)
       && c.WellFormedTypes(tcons)
       && PostDepend(post, activeVars)
       && Sequences.HasNoDuplicates(GetVarNamesSeq(GetDecls(c)))
@@ -1038,7 +1046,7 @@ module RemoveScopedVarsAuxUniqueProof {
                 WpPredDepend(a, activeVars+GetVarNames(declsThn), thn', post);
               }
 
-              ForallVarDeclsIndep2(a, declsEls, WpCmd(a, thn', post), activeVars+GetVarNames(declsThn));
+              ForallVarDeclsIndep2(a, tcons, declsEls, WpCmd(a, thn', post), activeVars+GetVarNames(declsThn));
               
               ForallVarDeclsPointwise(a, declsThn, WpCmd(a, thn', post), ForallVarDecls(a, declsEls, WpCmd(a, thn', post)), s);
             }
@@ -1055,7 +1063,7 @@ module RemoveScopedVarsAuxUniqueProof {
               }
 
               ForallWpPredDepend(a, activeVars, declsEls, els', post);
-              ForallVarDeclsIndep2(a, declsThn, ForallVarDecls(a, declsEls, WpCmd(a, els', post)), activeVars);
+              ForallVarDeclsIndep2(a, tcons, declsThn, ForallVarDecls(a, declsEls, WpCmd(a, els', post)), activeVars);
             }
             ForallVarDecls(a, declsThn, ForallVarDecls(a, declsEls, WpCmd(a, els', post)))(s);
             { ForallAppend.ForallVarDeclsAppend(a, declsThn, declsEls, WpCmd(a, els', post), s); }
@@ -1143,10 +1151,10 @@ module RemoveScopedVarsAuxUniqueProof {
                 calc {
                   WpCmd(a, c1', WpPost(ForallVarDecls(a, decls2, WpCmd(a, c2',post)), post.currentScope, post.scopes))(s');
                   { 
-                    ForallVarDeclsIndep2(a, decls2, post.currentScope, activeVars);
+                    ForallVarDeclsIndep2(a, tcons, decls2, post.currentScope, activeVars);
                     forall lbl | lbl in post.scopes
                     {
-                      ForallVarDeclsIndep2(a, decls2, post.scopes[lbl], activeVars);
+                      ForallVarDeclsIndep2(a, tcons, decls2, post.scopes[lbl], activeVars);
                     }
                     WpCmdPointwise(a, c1', WpPost(ForallVarDecls(a, decls2, WpCmd(a, c2',post)), post.currentScope, post.scopes),
                                            WpPost(ForallVarDecls(a, decls2, WpCmd(a, c2',post)), ForallVarDecls(a, decls2, post.currentScope), ForallScopes(a, decls2, post.scopes)),
@@ -1155,7 +1163,7 @@ module RemoveScopedVarsAuxUniqueProof {
                   WpCmd(a, c1', WpPost(ForallVarDecls(a, decls2, WpCmd(a, c2',post)), ForallVarDecls(a, decls2, post.currentScope), ForallScopes(a, decls2, post.scopes)))(s');
                   { 
                     assert PredDepend(post.currentScope, activeVars);
-                    PullForallWp(a, activeVars, GetVarNames(decls1), decls2, c1', WpPost(WpCmd(a, c2',post), post.currentScope, post.scopes), s');
+                    PullForallWp(a, tcons, activeVars, GetVarNames(decls1), decls2, c1', WpPost(WpCmd(a, c2',post), post.currentScope, post.scopes), s');
                   }
                   ForallVarDecls(a, decls2, WpCmd(a, c1', post2NoQuant'))(s') ;
                 }
