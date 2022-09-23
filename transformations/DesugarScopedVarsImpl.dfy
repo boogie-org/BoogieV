@@ -168,34 +168,6 @@ module DesugarScopedVarsImpl {
     RemoveScopedVarsAuxPreserveStructure(cUnique);
   }
 
-  function method RemoveScopedVars(c: Cmd) : (Cmd, seq<VarDecl>)
-  {
-    var (cUnique, _) := MakeScopedVarsUnique(c, map[], 0);
-    var (c', decls) := RemoveScopedVarsAux(cUnique);
-    (c', decls)
-  }
-
-  lemma MakeScopedVarsUniquePreserveStructure(c: Cmd, substMap: map<var_name, var_name>, counter: nat)
-    requires NoLoopsNoIfGuard(c) && NoBreaks(c)
-    ensures 
-      var (c', _) := MakeScopedVarsUnique(c, substMap, counter);
-      NoLoopsNoIfGuard(c') && NoBreaks(c')
-  { }
-
-  lemma RemoveScopedVarsAuxPreserveStructure(c: Cmd)
-    requires NoLoopsNoIfGuard(c) && NoBreaks(c)
-    ensures NoLoopsNoIfGuardNoScopedVars(RemoveScopedVarsAux(c).0) && NoBreaks(RemoveScopedVarsAux(c).0)
-  { }
-
-  lemma RemoveScopedVarsStructure(c: Cmd)
-    requires NoLoopsNoIfGuard(c) && NoBreaks(c)
-    ensures NoLoopsNoIfGuardNoScopedVars(RemoveScopedVars(c).0) && NoBreaks(RemoveScopedVars(c).0)
-  { 
-    var (cUnique, _) := MakeScopedVarsUnique(c, map[], 0);
-    MakeScopedVarsUniquePreserveStructure(c, map[], 0);
-    RemoveScopedVarsAuxPreserveStructure(cUnique);
-  }
-
   function GetDecls(c: Cmd) : seq<VarDecl>
   {
     match c

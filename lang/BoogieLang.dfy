@@ -328,7 +328,7 @@ module BoogieLang {
       )
     }
 
-    method ToString(indent: nat) returns (s: string) {
+    function method ToString(indent: nat) : string {
       match this {
         case SimpleCmd(simpleC) => simpleC.ToString(indent)
         case Break(optLbl) =>
@@ -369,26 +369,6 @@ module BoogieLang {
           elsS + "\n" +
           IndentString("}", indent)
       }
-    }
-
-    predicate method PredicateRec(pred: Cmd -> bool, predSimple: SimpleCmd -> bool, predE: Expr -> bool)
-    {
-      pred(this)
-      &&
-      match this
-      case SimpleCmd(sc) => predSimple(sc) 
-      case Break(optLbl) => true
-      case Seq(c1, c2) => c1.PredicateRec(pred, predSimple, predE) && c2.PredicateRec(pred, predSimple, predE)
-      case Loop(invs, body) => (forall inv | inv in invs :: predE(inv)) && body.PredicateRec(pred, predSimple, predE)
-      case Scope(_, varDecls, body) => body.PredicateRec(pred, predSimple, predE)
-      case If(guardOpt, thn, els) => 
-        && (guardOpt.Some? ==> predE(guardOpt.value))
-        && thn.PredicateRec(pred, predSimple, predE) 
-        && els.PredicateRec(pred, predSimple, predE)
-    }
-
-    predicate method NoBinders() {
-      PredicateRec( (c: Cmd) => true, (sc: SimpleCmd) => sc.NoBinders(), (e: Expr) => e.NoBinders() )
     }
 
     predicate method PredicateRec(pred: Cmd -> bool, predSimple: SimpleCmd -> bool, predE: Expr -> bool)

@@ -168,45 +168,7 @@ module AstToCfg {
     (g', blocksSeq, ghost cover+{exit.value})
   }
 
-  function method AstToCfg(c: Cmd) : (Cfg, seq<BlockId>)
-    requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
-    ensures 
-      var (g, blocks) := AstToCfg(c);
-      && (set n | n in blocks) == g.blocks.Keys
-      && CfgWf(g)
-      /*
-      && g.blocks.Keys == g.successors.Keys
-      && (forall n :: n in g.successors.Keys ==>   
-          (forall i :: 0 <= i < |g.successors[n]| ==> (g.successors[n][i] in g.successors.Keys))) 
-      */
-  {
-    var (g, nextVersion, exit) := AstToCfgAux(c, 0);
-    var blocksSeq := seq(nextVersion, i => i);
-    var ns1 := (set n | 0 <= n < nextVersion);
-    var ns2 := (set n | n in blocksSeq);
-
-    calc {
-      g.blocks.Keys;
-      ns1;
-      {
-        forall n | n in ns1
-        ensures n in ns2
-        { 
-          assert blocksSeq[n] == n;
-        }
-
-        forall n | n in ns2
-        ensures n in ns1
-        { }
-      }
-      ns2;
-    }
-
-    AstToCfgAcyclic(c, 0);
-    (Cfg(g.entry, g.blocks, g.successors[exit.value := []]), blocksSeq)
-  }
-
-  lemma {:verify false} AstToCfgAcyclic(
+  lemma AstToCfgAcyclic(
     c: Cmd, 
     nextVersion: BlockId)
     requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
