@@ -30,10 +30,10 @@ module BoogieOp {
 
   /** binary operation Evaluation */
 
-  function BoogieDiv(a: int, b: int): int
+  function {:axiom} BoogieDiv(a: int, b: int): int
     ensures b != 0 ==> BoogieDiv(a,b) == a/b
 
-  function BoogieMod(a: int, b: int): int
+  function {:axiom} BoogieMod(a: int, b: int): int
     ensures b != 0 ==> BoogieMod(a,b) == a % b
 
   /** integer binary operations */

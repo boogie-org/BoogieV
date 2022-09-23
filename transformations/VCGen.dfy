@@ -41,6 +41,7 @@ module VCGen
     case SeqSimple(sc1, sc2) => WpSimpleCmdDeep(sc1, WpSimpleCmdDeep(sc2, post))
   }
 
+
   function method BlockToVC(g: Cfg,  blocks: seq<BlockId>) : map<BlockId, Expr>
     requires forall blockId | blockId in g.blocks.Keys :: IsPassive(g.blocks[blockId])
     requires forall blockId | blockId in blocks :: blockId in g.blocks.Keys
@@ -59,14 +60,18 @@ module VCGen
   function method GenerateVCAux(idTopo: nat, topo: seq<BlockId>, blockMapping: map<BlockId, Expr>, result: Expr) : Expr
     requires 0 <= idTopo <= |topo|
     requires forall b | b in topo :: b in blockMapping.Keys
+    decreases |topo|-idTopo
   {
     if idTopo == |topo| then
       result
     else
+
       var blockId := topo[idTopo];
       var blockVCId := VCBlockName(blockId);
       var blockVC := blockMapping[blockId];
-      Let(blockVCId, blockVC, result)
+      var newResult := Let(blockVCId, blockVC, result);
+
+      GenerateVCAux(idTopo+1, topo, blockMapping, newResult)
   }
 
   function method GenerateVC(g: Cfg, topo: seq<BlockId>) : Expr

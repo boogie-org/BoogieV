@@ -20,29 +20,7 @@ module Util {
         [s[0]] + RemoveDuplicatesAux(s[1..], {s[0]}+alreadyIncluded)
   }
 
-  method IntToString(i: int) returns (s: string) {
-    if i == 0 {
-      return "0";
-    } 
-
-    s := "";
-    var j := i;
-
-    if i < 0 {
-      s := "-";
-      j := -i;
-    }
-
-    while j != 0
-      invariant j >= 0;
-    {
-      var d := j % 10;
-      s := ['0' + d as char] + s;
-      j := j / 10;
-    }
-  }
-
-  function method IntToString2(i: int) : string {
+  function method IntToString(i: int) : string {
     if i < 0 then "-"+NatToString(-i) else NatToString(i)
   }
 
@@ -51,7 +29,8 @@ module Util {
     else 
       var digit := n % 10;
       var digitString := ['0' + digit as char];
-      digitString + NatToString(n/10)
+      var remainder := n/10;
+      (if remainder > 0 then NatToString(n/10) else "") + digitString
   }
 
   lemma HashTagNotInNatString(n: nat)
@@ -61,32 +40,41 @@ module Util {
   lemma NatToStringInjective(n1: nat, n2: nat)
     requires n1 != n2
     ensures NatToString(n1) != NatToString(n2)
-  /*
   {
     if n1 == 0 {
-      //trivial
+      assert n2 != 0;
+      var digit2 := n2 % 10;
+
+      var digitString2 := ['0' + digit2 as char];
+      var remainder2 := n2/10;
+
+      assert "0"[0] == '0'+ 0 as char;
     } else {
       var digit1 := n1 % 10;
       var digitString1 := ['0' + digit1 as char];
+      var remainder1 := n1/10;
+      var res1 := (if remainder1 > 0 then NatToString(n1/10) else "") + digitString1;
 
       var digit2 := n2 % 10;
       var digitString2 := ['0' + digit2 as char];
+      var remainder2 := n2/10;
+      var res2 := (if remainder2 > 0 then NatToString(n2/10) else "")+ digitString2;
 
       assert |digitString1| == |digitString2|;
 
-      assume NatToString(n1/10) != NatToString(n2/10);
-
       if digit1 != digit2 {
-        //assert ('0'+ digit1 as char) != ('1'+ digit2 as char);
-        assume false;
+        assert ('0'+ digit1 as char) != ('0'+ digit2 as char);
+        assert digitString1 != digitString2;
+        assert res1[|res1|-1] != res2[|res2|-1];
       } else {
-        assume n1/10 != n2/10;
-        NatToStringInjective(n1/10, n2/10);
-
+        assert NatToString(n1/10) != NatToString(n2/10) by {
+          assert n1/10 != n2/10;
+          NatToStringInjective(n1/10, n2/10);
+        }
+        assert res1[0..|res1|-1] != res2[0..|res2|-1];
       }
     }
   }
-  */
 
   function method BoolToString(b: bool) : string {
     if b then "true" else "false"
@@ -115,10 +103,8 @@ module Util {
     case Some(true) =>
     case Some(false) =>
   }
-
   /*
     (forall i, j {:trigger s[i], s[j]}:: 0 <= i < |s| && 0 <= j < |s| && i != j ==> s[i] != s[j])
-  */
   lemma HasNoDuplicatesAppDisj2<T>(s1: seq<T>, s2: seq<T>)
   requires 
     && Seq.HasNoDuplicates(s1)
@@ -126,13 +112,10 @@ module Util {
     && (set s | s in s1) !! (set s | s in s2)
   ensures 
     Seq.HasNoDuplicates(s1+s2)
-  {
     reveal Seq.HasNoDuplicates();
-
     var s := s1+s2;
     forall i,j | 0 <= i < |s| && 0 <= j < |s| && i != j
     ensures s[i] != s[j]
-    {
       if 0 <= i < |s1| && 0 <= j < |s1| {
         //use that s1 has no duplicates
       } else if |s1| <= i < |s| && |s1| <= j < |s| {
@@ -147,6 +130,4 @@ module Util {
         assert s[i'] in xs;
         assert s[j'] in ys;
       } 
-    }
-  }
 }

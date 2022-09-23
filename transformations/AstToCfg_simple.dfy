@@ -20,6 +20,8 @@ module AstToCfg {
     (set x : nat | oldVersion <= x < newVersion) - {exclude}
   }
 
+  //TODO: figure out why compiler complains if directly use triple as result type
+  datatype AstCfgResult = AstCfgResult(cfg: Cfg, nextVersion: BlockId, exitOpt: Option<BlockId>)
   /** 
     Transforms the Ast `c` into a Cfg.
     `nextVersion`: basic block id that is not reserved (including all ids larger than this one)
@@ -29,10 +31,10 @@ module AstToCfg {
       next free version
       exit block of returned cfg 
   */
-  function method AstToCfgAux(c: Cmd, nextVersion: BlockId) : (Cfg, BlockId, Option<BlockId>) 
+  function method AstToCfgAux(c: Cmd, nextVersion: BlockId) : AstCfgResult
     //Option for exit block needed once break statements are taken into account
     requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
-    ensures  var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
+    ensures  var AstCfgResult(cfg, nextVersion', exitOpt) := AstToCfgAux(c, nextVersion); 
                 exitOpt != None  &&
                 var exit := exitOpt.value;
                 && cfg.successors.Keys == cfg.blocks.Keys - {exit}
@@ -47,19 +49,19 @@ module AstToCfg {
   {
     match c
     case SimpleCmd(simpleC) =>
-      (Cfg(nextVersion, map[nextVersion := simpleC], map[]), nextVersion+1, Some(nextVersion))
+      AstCfgResult(Cfg(nextVersion, map[nextVersion := simpleC], map[]), nextVersion+1, Some(nextVersion))
     case Seq(c1, c2) =>
-      var (cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
+      var AstCfgResult(cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
       if exitOpt1.None? then
         //c2 will never be reached
-        (cfg1, nextVersion1, exitOpt1)
+        AstCfgResult(cfg1, nextVersion1, exitOpt1)
       else 
-        var (cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
+        var AstCfgResult(cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
 
         var blocks := cfg1.blocks + cfg2.blocks;
         var successors := (cfg1.successors + cfg2.successors)[exitOpt1.value := [cfg2.entry]];
   
-        (Cfg(cfg1.entry, cfg1.blocks + cfg2.blocks, successors), nextVersion2, exitOpt2)
+        AstCfgResult(Cfg(cfg1.entry, cfg1.blocks + cfg2.blocks, successors), nextVersion2, exitOpt2)
     case Scope(_, varDecls, body) =>
       // scoped variable declarations have been compiled away
       assert varDecls == [];
@@ -73,7 +75,7 @@ module AstToCfg {
     case If(optCond, thn, els) => 
       /** CFG thn branch */
       var (entryId, entryBlock) := (nextVersion, Skip);
-      var (cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entryId+1);
+      var AstCfgResult(cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entryId+1);
 
       var cfgThn' := 
         if optCond.Some? then
@@ -82,7 +84,7 @@ module AstToCfg {
           cfgThn;
 
       /** CFG els branch */
-      var (cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
+      var AstCfgResult(cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
 
       var cfgEls' := 
         if optCond.Some? then
@@ -112,11 +114,58 @@ module AstToCfg {
         var successors := successorsBeforeJoin[thnExit := [joinId]][elsExit := [joinId]];
         var cfg := Cfg(entryId, blocks, successors);
 
-        (cfg, nextVersion2+1, Some(joinId))
+        AstCfgResult(cfg, nextVersion2+1, Some(joinId))
       else 
         var cfg := Cfg(entryId, blocksBeforeJoin, successorsBeforeJoin);
         var exitOptResult := if exitOpt1.Some? then exitOpt1 else exitOpt2;
-        (cfg, nextVersion2, exitOptResult)
+        AstCfgResult(cfg, nextVersion2, exitOptResult)
+  }
+
+  function method AstToCfg(c: Cmd) : (Cfg, seq<BlockId>, ghost set<BlockId>)
+    requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
+    ensures 
+      var (g', blocks, cover) := AstToCfg(c);
+      && (set n | n in blocks) == g'.blocks.Keys
+      && CfgWf(g')
+      && IsAcyclic(g'.successors, g'.entry, cover)
+      /*
+      && g.blocks.Keys == g.successors.Keys
+      && (forall n :: n in g.successors.Keys ==>   
+          (forall i :: 0 <= i < |g.successors[n]| ==> (g.successors[n][i] in g.successors.Keys))) 
+      */
+  {
+    var AstCfgResult(g, nextVersion, exit) := AstToCfgAux(c, 0);
+    var blocksSeq := seq(nextVersion, i => i);
+    var ns1 := (set n | 0 <= n < nextVersion);
+    var ns2 := (set n | n in blocksSeq);
+
+    calc {
+      g.blocks.Keys;
+      ns1;
+      {
+        forall n | n in ns1
+        ensures n in ns2
+        { 
+          assert blocksSeq[n] == n;
+        }
+
+        forall n | n in ns2
+        ensures n in ns1
+        { }
+      }
+      ns2;
+    }
+
+    AstToCfgAcyclic(c, 0);
+
+    ghost var cover := CoveringSet(0, nextVersion, exit.value);
+
+    assert IsAcyclic(g.successors[exit.value := []], g.entry, cover+{exit.value}) by {
+      IsAcyclicUpdate2(g.successors, g.entry, exit.value, [], cover);
+    }
+    var g' := Cfg(g.entry, g.blocks, g.successors[exit.value := []]);
+
+    (g', blocksSeq, ghost cover+{exit.value})
   }
 
   function method AstToCfg(c: Cmd) : (Cfg, seq<BlockId>)
@@ -162,7 +211,7 @@ module AstToCfg {
     nextVersion: BlockId)
     requires NoLoopsNoIfGuardNoScopedVars(c) && NoBreaks(c)
     ensures  
-      var (cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
+      var AstCfgResult(cfg, nextVersion', exitOpt):= AstToCfgAux(c, nextVersion); 
 
       var exit := exitOpt.value;
       var s := cfg.successors;
@@ -175,11 +224,11 @@ module AstToCfg {
     match c {
       case SimpleCmd(sc) =>  
       case Seq(c1, c2) =>
-        var (cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
+        var AstCfgResult(cfg1, nextVersion1, exitOpt1) := AstToCfgAux(c1, nextVersion);
         var exit1 := exitOpt1.value;
         assert IsAcyclic(cfg1.successors, cfg1.entry, CoveringSet(nextVersion, nextVersion1, exit1));
 
-        var (cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
+        var AstCfgResult(cfg2, nextVersion2, exitOpt2) := AstToCfgAux(c2, nextVersion1);
         AstToCfgAcyclic(c2, nextVersion2);
 
         var exit2 := exitOpt2.value;
@@ -221,7 +270,7 @@ module AstToCfg {
       case If(optCond, thn, els) => 
         /** CFG thn branch */
         var (entryId, entryBlock) := (nextVersion, Skip);
-        var (cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entryId+1);
+        var AstCfgResult(cfgThn, nextVersion1, exitOpt1) := AstToCfgAux(thn, entryId+1);
 
         var cfgThn' := 
           if optCond.Some? then
@@ -230,7 +279,7 @@ module AstToCfg {
             cfgThn;
 
         /** CFG els branch */
-        var (cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
+        var AstCfgResult(cfgEls, nextVersion2, exitOpt2) := AstToCfgAux(els, nextVersion1);
 
         var cfgEls' := 
           if optCond.Some? then
