@@ -8,6 +8,15 @@ module SemanticsUtil {
   import opened BoogieCfg
   import opened Wrappers
 
+  lemma WpIfEquivAnd<A(!new)>(a: absval_interp<A>, thn: Cmd, els: Cmd, post: WpPost<A>)
+    requires LabelsWellDefAux(If(None, thn, els), post.scopes.Keys)
+    ensures forall s :: 
+      WpCmd(a, If(None, thn, els), post)(s)
+    == 
+      Util.AndOpt(WpCmd(a, thn, post)(s), WpCmd(a, els, post)(s))
+  {
+    reveal WpCmd();
+  }
 
   lemma WpShallowAssumeFalse<A(!new)>(a: absval_interp<A>, e: Expr, thn: Cmd, els: Cmd, post: Predicate<A>, s: state<A>)
   requires ExprEvalBoolOpt(a, e, s) == Some(false)
@@ -149,6 +158,66 @@ module SemanticsUtil {
           WpSimpleCmd(a, SeqSimple(prefix, suffix), WpCfgConjunction(a, cfg', successors, p, cover - {entry}));
           WpSimpleCmd(a, prefix, WpSimpleCmd(a, suffix, WpCfgConjunction(a, cfg', successors, p, cover - {entry})));
           WpSimpleCmd(a, prefix, WpCfg(a, cfg', entry, p, cover));
+        }
+      }
+    }
+  }
+
+  lemma ForallVarDeclsAnd<A(!new)>(a: absval_interp<A>, d: seq<VarDecl>, p: Predicate<A>, q: Predicate<A>, s: state<A>)
+  ensures ForallVarDecls(a, d, s' => Util.AndOpt(p(s'), q(s')))(s) == Util.AndOpt(ForallVarDecls(a, d, p)(s), ForallVarDecls(a, d, q)(s))
+  {
+    var r := s' => Util.AndOpt(p(s'), q(s'));
+    var res := ForallVarDecls(a, d, r)(s);
+
+    if |d| == 0 {
+      reveal ForallVarDecls();
+    } else {
+      if res == None {
+        NoneForallVarDecls(a, d, r, s);
+        var vs :| ValuesRespectDecls(a, vs, d) && Util.AndOpt(p(StateUpdVarDecls(s, d, vs)), q(StateUpdVarDecls(s, d, vs))) == None;
+        var s' := StateUpdVarDecls(s, d, vs); 
+        if p(s') == None {
+          NoneForallVarDecls2(a, d, vs, p, s);
+        } else {
+          assert q(s') == None;
+          NoneForallVarDecls2(a, d, vs, q, s);
+        }
+      } else if res == Some(true) {
+        forall vs
+        | ValuesRespectDecls(a, vs, d)
+        ensures Util.AndOpt(p(StateUpdVarDecls(s, d, vs)), q(StateUpdVarDecls(s, d, vs))) == Some(true)
+        {
+          SomeTrueForallVarDecls2(a, d, r, s, vs);
+        }
+
+        SomeTrueForallVarDecls(a, d, p, s);
+        SomeTrueForallVarDecls(a, d, q, s);
+      } else {
+        assert res == Some(false) by {
+          reveal ForallVarDecls();
+        }
+
+        forall vs 
+        | ValuesRespectDecls(a, vs, d)
+        ensures p(StateUpdVarDecls(s, d, vs)).Some? && q(StateUpdVarDecls(s, d, vs)).Some?
+        {
+          SomeForallVarDecls2(a, d, r, s, vs);
+        }
+
+        SomeForallVarDecls3(a, d, p, s);
+        SomeForallVarDecls3(a, d, q, s);
+
+        SomeFalseForallVarDecls2(a, d, r, s);
+
+        var vs :| ValuesRespectDecls(a, vs, d) && r(StateUpdVarDecls(s, d, vs)) == Some(false);
+        var s' := StateUpdVarDecls(s, d, vs);
+        var b1, b2 :| p(s') == Some(b1) && q(s') == Some(b2);
+
+        if(!b1) {
+          SomeFalseForallVarDecls(a, d, p, s, vs);
+        } else {
+          assert !b2;
+          SomeFalseForallVarDecls(a, d, q, s, vs);
         }
       }
     }

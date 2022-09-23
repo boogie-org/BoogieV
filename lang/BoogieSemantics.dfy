@@ -331,6 +331,51 @@ module BoogieSemantics {
     TypeOfValues(a, vs) == seq(|varDecls|, i requires 0 <= i < |varDecls| => varDecls[i].1)
   }
 
+  lemma WfAbsvalInterpInhabited<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>, t: tcon_name)
+    requires WfAbsvalInterp(a, tcons)
+    requires t in tcons
+    ensures exists v :: a(v) == t
+  {
+    reveal WfAbsvalInterp();
+  }
+
+  lemma ExistsIntroAux<A(!new)>(a: absval_interp<A>, vs: seq<Val<A>>, d: seq<VarDecl>)
+    requires ValuesRespectDecls(a, vs, d)
+    ensures exists vs :: ValuesRespectDecls(a, vs, d)
+  { }
+
+  lemma  TypeInhabitedWfInterpAux<A(!new)>(a: absval_interp<A>, tcons: set<tcon_name>, d: seq<VarDecl>)
+    requires WfAbsvalInterp(a, tcons)
+    requires GetTypeConstr(d) <= tcons
+    ensures exists vs :: ValuesRespectDecls(a, vs, d)
+  {
+      var vs := seq(|d|, i requires 0 <= i < |d| => 
+        var ty := d[i].1;
+        if ty.TPrim? then
+          if ty.primType == TInt then LitV(LitInt(0)) else LitV(LitBool(false))
+        else
+          WfAbsvalInterpInhabited(a, tcons, ty.constrName);
+          var absVal :| a(absVal) == ty.constrName;
+          AbsV(absVal)
+      );
+
+      assert ValuesRespectDecls(a, vs, d) by { 
+        forall i | 0 <= i < |d|
+        ensures TypeOfVal(a, vs[i]) == d[i].1
+        {
+            var tV := TypeOfVal(a, vs[i]);
+            var tD := d[i].1;
+            if tD.TPrim? {
+                if tD.primType == TInt {
+
+                } 
+            }
+        }
+      }
+
+      ExistsIntroAux(a, vs, d);
+  }
+
   function StateUpdVarDecls<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>) : state<A>
     requires |varDecls| == |vs|
     ensures StateUpdVarDecls(s, varDecls, vs).Keys == s.Keys + GetVarNames(varDecls)
@@ -349,6 +394,13 @@ module BoogieSemantics {
     ensures Maps.Get(StateUpdVarDecls(s, varDecls, vs), k) == Maps.Get(s, k)
   { }
 
+  lemma StateUpdVarDeclsLookup2<A>(s: state<A>, varDecls: seq<(var_name, Ty)>, vs: seq<Val<A>>)
+    requires |varDecls| == |vs| 
+    ensures forall k 
+            | k !in GetVarNames(varDecls) 
+            :: Maps.Get(StateUpdVarDecls(s, varDecls, vs), k) == Maps.Get(s, k)
+  { }
+
   function {:opaque} ForallVarDecls<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
   {
     if |varDecls| == 0 then p
@@ -358,6 +410,17 @@ module BoogieSemantics {
           Some(forall vs | ValuesRespectDecls(a, vs, varDecls) :: p(StateUpdVarDecls(s, varDecls, vs)) == Some(true))
         else
           None
+  }
+
+  function ForallScopes<A(!new)>(a: absval_interp<A>, d: seq<VarDecl>, scopes: map<lbl_name, Predicate<A>>) : (result: map<lbl_name, Predicate<A>>)
+  ensures result.Keys == scopes.Keys
+  {
+    map l | l in scopes.Keys :: ForallVarDecls(a, d, scopes[l])
+  }
+
+  function ForallVarDeclsPost<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, post: WpPost<A>) : WpPost<A>
+  {
+    WpPost(ForallVarDecls(a, varDecls, post.normal), ForallVarDecls(a, varDecls, post.currentScope),ForallScopes(a, varDecls, post.scopes))
   }
 
   function {:opaque} ForallVarDeclsOld<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, p: Predicate<A>) : Predicate<A>
@@ -497,6 +560,10 @@ module BoogieSemantics {
       }
     }
 
+  lemma ResetVarsPostEmpty<A(!new)>(p: WpPost<A>, s: state<A>) 
+  ensures ResetVarsPost([], p, s) == p
+  { }
+
   function ResetVarsState<A(!new)>(varDecls: seq<(var_name,Ty)>, s: state<A>, sOrig: state<A>) : state<A>
   {
     if |varDecls| == 0 then 
@@ -595,19 +662,13 @@ module BoogieSemantics {
   ensures ForallVarDecls(a, varDecls, P)(s) == ForallVarDecls(a, varDecls, Q)(s)
   {
     reveal ForallVarDecls();
-      /* proof below needed when using the recursive version of ForallVarDecls
-      reveal ForallVarDecls();
-      if |varDecls| == 0 {
-          //trivial from precondition P(s) == Q(s)
-      } else {
-          var (x,t) := varDecls[0];
-          forall v: Val<A> | true
-              ensures ForallVarDecls(a, varDecls[1..], P)(s[x := v]) == ForallVarDecls(a, varDecls[1..], Q)(s[x := v])
-          {
-              ForallVarDeclsPointwise(a, varDecls[1..], P, Q, s[x := v]);
-          }
-      }
-      */
+  }
+  
+  lemma ForallVarDeclsPointwise2<A(!new)>(a: absval_interp<A>, varDecls: seq<(var_name, Ty)>, P: Predicate<A>, Q: Predicate<A>)
+  requires forall s: state<A> :: P(s) == Q(s)
+  ensures forall s :: ForallVarDecls(a, varDecls, P)(s) == ForallVarDecls(a, varDecls, Q)(s)
+  {
+    reveal ForallVarDecls();
   }
 
   lemma WpSimpleCmdPointwise<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, P: Predicate<A>, Q: Predicate<A>, s: state<A>)
@@ -714,23 +775,6 @@ module BoogieSemantics {
   {
       a.None? || (a.Some? && b.Some? && (a.value ==> b.value))
   }
-
-  /*
-  lemma WpShallowSimpleCmdMono<A(!new)>(a: absval_interp<A>, c: SimpleCmd, s: state<A>, P: Predicate<A>, Q: Predicate<A>)
-  requires (forall s' :: ImpliesOpt(P(s'), Q(s'))) 
-  ensures ImpliesOpt(WpSimpleCmd(a, c, P)(s), WpSimpleCmd(a, c, Q)(s))
-
-  lemma WpShallowSimpleCmdSeqMono<A(!new)>(a: absval_interp<A>, scs: seq<SimpleCmd>, s: state<A>, P: Predicate<A>, Q: Predicate<A>)
-  requires (forall s' :: ImpliesOpt(P(s'), Q(s'))) 
-  ensures ImpliesOpt(WpShallowSimpleCmdSeq(a, scs, P)(s), WpShallowSimpleCmdSeq(a, scs, Q)(s))
-  */
-  
-  /*
-    lemma WpShallowNormalMono<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, P: WpPost, Q: WpPost)
-    requires LabelsWellDefAux(c, P.scopes.Keys) && LabelsWellDefAux(c, Q.scopes.Keys)
-    requires (forall s' :: ImpliesOpt<A>(P.normal(s'), Q.normal(s'))) && P.currentScope == Q.currentScope && P.scopes == Q.scopes
-    ensures ImpliesOpt<A>(WpCmd(a, c, P)(s), WpCmd(a, c, Q)(s))
-  */
 
   /************************** operational semantics ***************************/
 

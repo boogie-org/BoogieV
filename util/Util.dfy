@@ -103,4 +103,34 @@ module Util {
     case Some(true) =>
     case Some(false) =>
   }
+
+  lemma HasNoDuplicatesAppDisj2<T>(s1: seq<T>, s2: seq<T>)
+  requires 
+    && Seq.HasNoDuplicates(s1)
+    && Seq.HasNoDuplicates(s2)
+    && (set s | s in s1) !! (set s | s in s2)
+  ensures 
+    Seq.HasNoDuplicates(s1+s2)
+  {
+    reveal Seq.HasNoDuplicates();
+    var s := s1+s2;
+    forall i,j | 0 <= i < |s| && 0 <= j < |s| && i != j
+    ensures s[i] != s[j]
+    {
+      if 0 <= i < |s1| && 0 <= j < |s1| {
+        //use that s1 has no duplicates
+      } else if |s1| <= i < |s| && |s1| <= j < |s| {
+        //use that s2 has no duplicates
+      } else {
+        var (i',j') := if 0 <= i < |s1| then (i,j) else (j,i);
+        assert 0 <= i' < |s1|;
+        assert |s1| <= j' < |s|;
+        var xs := (set s | s in s1);
+        var ys := (set s | s in s2);
+        assert xs !! ys;
+        assert s[i'] in xs;
+        assert s[j'] in ys;
+      } 
+    }
+  }
 }

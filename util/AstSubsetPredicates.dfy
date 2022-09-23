@@ -38,6 +38,12 @@ module AstSubsetPredicates
     c.PredicateRec((c: Cmd) => !c.Break?, sc => true, e => true)
   }
 
+  predicate method NoBreaksScopedVarsLoops(c: Cmd)
+  {
+    && NoBreaks(c)
+    && NoScopedVars(c)
+  }
+
   predicate method IsPassive(sc: SimpleCmd)
   {
     sc.PredicateRec((sc': SimpleCmd) => !sc'.Assign? && !sc'.Havoc?, e => true)
