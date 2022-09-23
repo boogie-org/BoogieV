@@ -325,6 +325,7 @@ module BoogieSemantics {
     assert emptyMap.Keys == {};
     forall s: state<A> :: WpCmd(a, c, WpPost(truePred, truePred, emptyMap))(s) == Some(true)
   }
+
   predicate ValuesRespectDecls<A>(a: absval_interp<A>, vs: seq<Val<A>>, varDecls: seq<(var_name, Ty)>)
   {
     TypeOfValues(a, vs) == seq(|varDecls|, i requires 0 <= i < |varDecls| => varDecls[i].1)
@@ -559,34 +560,6 @@ module BoogieSemantics {
       }
     }
 
-  /*
-  lemma  ForallVarDeclsEquiv2<A(!new)>(
-      a: absval_interp<A>, 
-      varDecls: seq<VarDecl>, 
-      varDecls': seq<VarDecl>, 
-      f: seq<Val<A>> -> seq<Val<A>>,
-      p1: Predicate<A>, 
-      p2: Predicate<A>,
-      s1: state<A>,
-      s2: state<A>)
-    requires 
-      && |varDecls| == |varDecls'|
-      && (forall vs :: ValuesRespectDecls(a, vs, varDecls) == ValuesRespectDecls(a, f(vs), varDecls'))
-      && (forall vs | ValuesRespectDecls(a, vs, varDecls) :: 
-          p1(StateUpdVarDecls(s1, varDecls, vs)) == p2(StateUpdVarDecls(s2, varDecls', f(vs))))
-    ensures 
-      ForallVarDecls(a, varDecls, p1)(s1) == ForallVarDecls(a, varDecls', p2)(s2)
-    {
-      reveal ForallVarDecls();
-      if |varDecls| == 0 {
-        assert p1(s1) == p2(s2) by {
-          //need this for Dafny to trigger the quantifier
-          assert ValuesRespectDecls(a, [], []);  
-        }
-      }
-    }
-    */
-  
   lemma ResetVarsPostEmpty<A(!new)>(p: WpPost<A>, s: state<A>) 
   ensures ResetVarsPost([], p, s) == p
   { }
