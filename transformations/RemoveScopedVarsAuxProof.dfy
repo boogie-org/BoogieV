@@ -1,6 +1,5 @@
 include "../lang/BoogieSemantics.dfy"
 include "../transformations/DesugarScopedVarsImpl.dfy"
-include "../transformations/MakeScopedVarsUniqueProof.dfy"
 include "../util/Naming.dfy"
 include "../util/SemanticsUtil.dfy"
 include "../util/ForallAppend.dfy"
@@ -8,7 +7,7 @@ include "../dafny-libraries/src/Collections/Sequences/Seq.dfy"
 include "../dafny-libraries/src/Collections/Maps/Maps.dfy"
 include "../util/AstSubsetPredicates.dfy"
 
-module RemoveScopedVarsAuxUniqueProof {
+module RemoveScopedVarsAuxProof {
 
   import opened BoogieLang
   import opened BoogieSemantics
@@ -18,7 +17,6 @@ module RemoveScopedVarsAuxUniqueProof {
   import SemanticsUtil
   import opened Wrappers
   import opened DesugarScopedVarsImpl
-  import MakeScopedVarsUniqueProof
   import opened Naming
   import ForallAppend
   import opened AstSubsetPredicates

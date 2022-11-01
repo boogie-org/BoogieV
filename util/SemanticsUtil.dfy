@@ -8,6 +8,17 @@ module SemanticsUtil {
   import opened BoogieCfg
   import opened Wrappers
 
+  function TruePred<A>() : Predicate<A>
+  {
+    s' => Some(true)
+  }
+
+  function TruePost<A>() : WpPost<A>
+  {
+    WpPost(TruePred(), TruePred(), map[])
+  }
+
+
   lemma WpIfEquivAnd<A(!new)>(a: absval_interp<A>, thn: Cmd, els: Cmd, post: WpPost<A>)
     requires LabelsWellDefAux(If(None, thn, els), post.scopes.Keys)
     ensures forall s :: 

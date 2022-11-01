@@ -59,12 +59,19 @@ module IfGuardElim {
       }
     case _ => 
   }
+  lemma EliminateIfGuardsLabelsWellDefPreserve(c: Cmd, labels: set<lbl_name>)
+    requires LabelsWellDefAux(c, labels)
+    ensures LabelsWellDefAux(EliminateIfGuards(c), labels)
+  { }
 
   lemma EliminateIfGuardsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPost)
   requires NoLoops(c)
-  requires LabelsWellDefAux(c, post.scopes.Keys) && LabelsWellDefAux(EliminateIfGuards(c), post.scopes.Keys)
-  ensures WpCmd(a, EliminateIfGuards(c), post)(s) == WpCmd(a, c, post)(s)
+  requires LabelsWellDefAux(c, post.scopes.Keys) 
+  ensures 
+    && LabelsWellDefAux(EliminateIfGuards(c), post.scopes.Keys)
+    && WpCmd(a, EliminateIfGuards(c), post)(s) == WpCmd(a, c, post)(s)
   {
+    EliminateIfGuardsLabelsWellDefPreserve(c, post.scopes.Keys);
     reveal WpCmd();
     match c
     case Seq(c1, c2) => 

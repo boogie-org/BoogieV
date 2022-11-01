@@ -98,6 +98,12 @@ module LoopElim {
         PredicateRecSeqToCmd(cs, (cmd: Cmd) => !cmd.Loop?, sc => true, e => true);
     }
 
+    lemma LabelsWellDefAuxSeqToCmd(cs: seq<Cmd>, labels: set<lbl_name>)
+      requires |cs| > 0
+      requires forall c | c in cs :: LabelsWellDefAux(c, labels);
+      ensures LabelsWellDefAux(SeqToCmd(cs), labels)
+    { }
+
     function method EliminateLoops(c: Cmd) : Cmd 
     ensures NoLoops(EliminateLoops(c))
     {
@@ -150,11 +156,37 @@ module LoopElim {
         NoBreaksSeqToCmd(seqResult);
       case _ => 
     }
+    lemma EliminateLoopsLabelsWellDefPreserve(c: Cmd, labels: set<lbl_name>)
+    requires LabelsWellDefAux(c, labels)
+    ensures LabelsWellDefAux(EliminateLoops(c), labels)
+    {
+      match c
+      case Loop(invs, body) =>
+        var modDecls : seq<(var_name, Ty)> := ModifiedVars(body);
+        var invsConj := NAryBinOp(And, Expr.TrueExpr, invs);
+        var body' := EliminateLoops(body);
+
+        var seqResult :=
+            [ SimpleCmd(Assert(invsConj)),
+            SimpleCmd(Havoc(modDecls)),
+            SimpleCmd(Assume(invsConj)),
+            body',
+            SimpleCmd(Assert(invsConj)),
+            SimpleCmd(Assume(Expr.FalseExpr))
+            ];
+        
+        assert LabelsWellDefAux(body', labels);
+        LabelsWellDefAuxSeqToCmd(seqResult, labels);
+      case _ => 
+    }
 
     lemma EliminateLoopsCorrect<A(!new)>(a: absval_interp<A>, c: Cmd, s: state<A>, post: WpPost)
-    requires LabelsWellDefAux(c, post.scopes.Keys) && LabelsWellDefAux(EliminateLoops(c), post.scopes.Keys)
-    ensures  WpCmd(a, EliminateLoops(c), post)(s) == WpCmd(a, c, post)(s)
+    requires LabelsWellDefAux(c, post.scopes.Keys) 
+    ensures  
+        && LabelsWellDefAux(EliminateLoops(c), post.scopes.Keys)
+        && WpCmd(a, EliminateLoops(c), post)(s) == WpCmd(a, c, post)(s)
     {
+        EliminateLoopsLabelsWellDefPreserve(c, post.scopes.Keys);
         reveal WpCmd();
         match c
         case Seq(c1, c2) => 
@@ -202,11 +234,15 @@ module LoopElim {
 
             var desugaredLoop := body' => [SimpleCmd(Assert(invsConj)), SimpleCmd(Havoc(loopTargets)), SimpleCmd(Assume(invsConj)), body',  SimpleCmd(Assert(invsConj)), SimpleCmd(Assume(Expr.FalseExpr))];
 
+            EliminateLoopsLabelsWellDefPreserve(body, post.scopes.Keys);
+
             assert LabelsWellDefAux(SeqToCmd(desugaredLoop(body)), post.scopes.Keys);
             assert LabelsWellDefAux(SeqToCmd(desugaredLoop(body')), post.scopes.Keys);
 
             forall s', post' : WpPost<A> | post'.scopes.Keys == post.scopes.Keys
-            ensures WpCmd(a, body, post')(s') == WpCmd(a, body', post')(s')
+            ensures 
+                assert LabelsWellDefAux(body, post'.scopes.Keys);
+                WpCmd(a, body, post')(s') == WpCmd(a, body', post')(s')
             {
               assert LabelsWellDefAux(body, post.scopes.Keys) by {
                 assert desugaredLoop(body)[3] == body;
