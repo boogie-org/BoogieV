@@ -1,8 +1,10 @@
 include "../Passification.dfy"
 include "../MakeScopedVarsUniqueProof.dfy" //for RelPred (TODO move to a better place)
+include "../RemoveScopedVarsAuxProof.dfy" //for ForallVarDecls lemmas 
 include "../../util/Naming.dfy"
 include "../../util/SemanticsUtil.dfy"
 include "../../util/AstSubsetPredicates.dfy"
+include "../../util/ForallAppend.dfy"
 
 
 module SSAProof {
@@ -11,10 +13,12 @@ module SSAProof {
     import opened BoogieCfg
     import opened BoogieSemantics
     import opened MakeScopedVarsUniqueProof
+    import RemoveScopedVarsAuxProof
     import opened Naming
     import opened SemanticsUtil
     import opened AstSubsetPredicates
     import Sequences = Seq
+    import ForallAppend
 
     lemma SSACorrect<A>(
         a: absval_interp<A>,
@@ -109,18 +113,180 @@ module SSAProof {
     else
       []
   }
+
+  function PassifiedBlocks(blocks: map<BlockId, BasicBlock>): map<BlockId, BasicBlock>
+  {
+    map blockId | blockId in blocks.Keys :: PassifySimpleCmd(blocks[blockId])
+  }
   
-  lemma PassifyCfgSeqCorrect<A>(a: absval_interp<A>, g: Cfg, ns: seq<BlockId>, pred: map<BlockId, seq<BlockId>>, cover: set<BlockId>)
-    requires IsAcyclicSeq(g.successors, ns, cover)
+  lemma {:verify false} PassifyCfgSeqCorrect<A(!new)>(a: absval_interp<A>, g: Cfg, ns: seq<BlockId>, pred: map<BlockId, seq<BlockId>>, cover: set<BlockId>, s: state<A>)
+    requires 
+      && IsAcyclicSeq(g.successors, ns, cover)
+      && g.successors.Keys <= g.blocks.Keys
     ensures 
-      var blocks' := map blockId | blockId in g.blocks.Keys :: PassifySimpleCmd(g.blocks[blockId]);
+      var blocks' := PassifiedBlocks(g.blocks); //If inline PassifiedBlocks, in this lemma, then verification fails
       var g' := Cfg(g.entry, blocks', g.successors);
 
-      var modVars := set n | n in ns && n in ModifiedVarsCfg(g.successors, g.blocks, n, cover);
-      WpCfgConjunction(a, g, ns, TruePred(), cover) == 
-      ForallVarDecls(a, modVars, WpCfgConjunction(a, g', ns, TruePred(), cover))
+      forall n | n in ns ::
+        var modVars := (IsAcyclicElem(g.successors, ns, n, cover); ModifiedVarsCfg(g.successors, g.blocks, n, cover));
+        WpCfg(a, g, n, TruePred(), cover)(s) == 
+        ForallVarDecls(a, modVars, WpCfg(a, g', n, TruePred(), cover))(s)
+    decreases cover, 1, ns
+    {
+      var blocks' := PassifiedBlocks(g.blocks);
+      var g' := Cfg(g.entry, blocks', g.successors);
 
-  lemma PassifyCfgCorrect<A>(a: absval_interp<A>, g: Cfg, n: BlockId, pred: map<BlockId, seq<BlockId>>, cover: set<BlockId>)
+      forall n | n in ns 
+      ensures
+        var modVars := (IsAcyclicElem(g.successors, ns, n, cover); ModifiedVarsCfg(g.successors, g.blocks, n, cover));
+        WpCfg(a, g, n, TruePred(), cover)(s) == 
+        ForallVarDecls(a, modVars, WpCfg(a, g', n, TruePred(), cover))(s)
+      {
+        IsAcyclicElem(g.successors, ns, n, cover);
+        PassifyCfgCorrect(a, g, n, pred, cover, s);
+      }
+    }
+
+  predicate UseAfterDef(sc: SimpleCmd, defVars: set<var_name>)
+  {
+    match sc {
+      case Skip => true
+      case Assert(e) => e.FreeVars() <= defVars
+      case Assume(e) => e.FreeVars() <= defVars
+      case Assign(x, t, e) => e.FreeVars() <= defVars
+      case Havoc(varDecls) => true
+      case SeqSimple(sc1, sc2) => 
+        && UseAfterDef(sc1, defVars) 
+        && (var defVars' := GetVarNames(ModifiedVars(SimpleCmd(sc1))) + defVars;
+            UseAfterDef(sc2, defVars'))
+    }
+  }
+
+  lemma WellFormedTypesModVars(sc: SimpleCmd, tcons: set<tcon_name>)
+    requires 
+      && sc.WellFormedTypes(tcons)
+      && sc.PredicateRec((sc1: SimpleCmd) => !sc1.Havoc?, e => true) 
+      /* no havoc assumption is not required to prove the lemma
+         but sufficient for this file for now */
+    ensures GetTypeConstr(ModifiedVars(SimpleCmd(sc))) <= tcons;
+  {
+    match sc
+    case Assign(x, t, e) => 
+      calc {
+        ModifiedVars(SimpleCmd(sc));
+        Util.RemoveDuplicates(ModifiedVarsAux(SimpleCmd(sc), {}));
+        Util.RemoveDuplicates([(x,t)]);
+        { assert [(x,t)] + [] == [(x,t)]; }
+        [(x,t)] + Util.RemoveDuplicatesAux([], {(x,t)}+{});
+        [(x,t)];
+      }
+    case _ => 
+  }
+
+
+  lemma UseAfterDefWellFormed(sc: SimpleCmd, defVars: set<var_name>)
+    requires UseAfterDef(sc, defVars)
+    ensures sc.WellFormedVars(defVars+GetVarNames(ModifiedVars(SimpleCmd(sc))))
+  {
+    
+  }
+
+
+  lemma PassifyLocalLemma<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, post: Predicate<A>, defVars: set<var_name>, tcons: set<tcon_name>)
+    requires 
+      && Sequences.HasNoDuplicates(GetVarNamesSeq(ModifiedVars(SimpleCmd(sc))))
+      && UseAfterDef(sc, defVars)
+      && defVars !! GetVarNames(ModifiedVars(SimpleCmd(sc)))
+      && sc.PredicateRec((sc1: SimpleCmd) => !sc1.Havoc?, e => true)
+      && WfAbsvalInterp(a, tcons)
+      && sc.WellFormedTypes(tcons)
+    ensures 
+      var passiveSc := PassifySimpleCmd(sc);
+      var modVars := ModifiedVars(SimpleCmd(sc));
+      forall s :: WpSimpleCmd(a, sc, post)(s) == ForallVarDecls(a, modVars, WpSimpleCmd(a, passiveSc, post))(s)
+  {
+    var passiveSc := PassifySimpleCmd(sc);
+    var modVars := ModifiedVars(SimpleCmd(sc));
+
+    forall s 
+    ensures WpSimpleCmd(a, sc, post)(s) == ForallVarDecls(a, modVars, WpSimpleCmd(a, passiveSc, post))(s)
+    {
+        match sc {
+          case Assign(x, t, e) => assume false;  
+          case SeqSimple(sc1, sc2) => 
+            var defVars2 := GetVarNames(ModifiedVars(SimpleCmd(sc1))) + defVars;
+            var modVars2 := ModifiedVars(SimpleCmd(sc2));
+            var modVars1 := ModifiedVars(SimpleCmd(sc1));
+            var passiveSc2 := PassifySimpleCmd(sc2);
+            var passiveSc1 := PassifySimpleCmd(sc1);
+            var forallSc2Post := ForallVarDecls(a, modVars2, WpSimpleCmd(a, passiveSc2, post));
+            calc {
+              WpSimpleCmd(a, sc, post)(s);
+              WpSimpleCmd(a, sc1, WpSimpleCmd(a, sc2, post))(s);
+              {
+                assume Sequences.HasNoDuplicates(GetVarNamesSeq(ModifiedVars(SimpleCmd(sc2))));
+                assume defVars2 !! GetVarNames(ModifiedVars(SimpleCmd(sc2)));
+                PassifyLocalLemma(a, sc2, post, defVars2, tcons);
+                WpSimpleCmdPointwise2(a, sc1, WpSimpleCmd(a, sc2, post), forallSc2Post);
+              }
+              WpSimpleCmd(a, sc1, forallSc2Post)(s);
+              {
+                assume Sequences.HasNoDuplicates(GetVarNamesSeq(ModifiedVars(SimpleCmd(sc1))));
+                assume defVars !! GetVarNames(ModifiedVars(SimpleCmd(sc1)));
+                PassifyLocalLemma(a, sc1, post, defVars, tcons);
+              }
+              ForallVarDecls(a, modVars1, WpSimpleCmd(a, passiveSc1, forallSc2Post))(s);
+              { 
+                //using htat modVars2 does not appear in passiveSc1
+                forall s'
+                ensures WpSimpleCmd(a, passiveSc1, forallSc2Post)(s') ==
+                        ForallVarDecls(a, modVars2, WpSimpleCmd(a, passiveSc1, WpSimpleCmd(a, passiveSc2, post)))(s')
+                {
+                    assert passiveSc1.WellFormedVars((defVars+GetVarNames(modVars1)) + {}) by {
+                      assume false;
+                    }
+                    
+                    assert (defVars+GetVarNames(modVars1)) !! GetVarNames(modVars2) by {
+                      assume false;
+                    }
+
+                    assert GetTypeConstr(modVars2) <= tcons by {
+                      WellFormedTypesModVars(sc2, tcons);
+                    }
+
+                    RemoveScopedVarsAuxProof.PullForallWpSimpleCmd(a, tcons, defVars+GetVarNames(modVars1), {}, modVars2, passiveSc1, WpSimpleCmd(a, passiveSc2, post), s');
+                }
+
+                ForallVarDeclsPointwise(a, modVars1, 
+                  WpSimpleCmd(a, passiveSc1, forallSc2Post),
+                  ForallVarDecls(a, modVars2, WpSimpleCmd(a, passiveSc1, WpSimpleCmd(a, passiveSc2, post))),
+                  s);
+              }
+              ForallVarDecls(a, modVars1, ForallVarDecls(a, modVars2, WpSimpleCmd(a, passiveSc1, WpSimpleCmd(a, passiveSc2, post))))(s);
+              { 
+                assert GetVarNames(modVars1) !! GetVarNames(modVars2) by {
+                  assume false;
+                }
+                ForallAppend.ForallVarDeclsAppend(a, modVars1, modVars2, WpSimpleCmd(a, passiveSc1, WpSimpleCmd(a, passiveSc2, post)), s); 
+              }
+              ForallVarDecls(a, modVars1+modVars2, WpSimpleCmd(a, passiveSc1, WpSimpleCmd(a, passiveSc2, post)))(s);
+              { assume false; }
+              ForallVarDecls(a, modVars, WpSimpleCmd(a, passiveSc1, WpSimpleCmd(a, passiveSc2, post)))(s);
+              ForallVarDecls(a, modVars, WpSimpleCmd(a, SeqSimple(passiveSc1, passiveSc2), post))(s);
+            }
+          case _ => 
+            calc {
+              ForallVarDecls(a, modVars, WpSimpleCmd(a, passiveSc, post))(s);
+              ForallVarDecls(a, [], WpSimpleCmd(a, passiveSc, post))(s);
+              { ForallVarDeclsEmpty(a, WpSimpleCmd(a, passiveSc, post)); }
+              WpSimpleCmd(a, passiveSc, post)(s);
+            }
+        }
+    }
+  }
+      
+
+  lemma {:verify false} PassifyCfgCorrect<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, pred: map<BlockId, seq<BlockId>>, cover: set<BlockId>, s: state<A>)
     requires 
       /*
       && pred.Keys <= g.blocks.Keys
@@ -133,15 +299,35 @@ module SSAProof {
       && g.successors.Keys <= g.blocks.Keys
       */
       && IsAcyclic(g.successors, n, cover)
+      && g.successors.Keys <= g.blocks.Keys
     ensures 
-      var blocks' := map blockId | blockId in g.blocks.Keys :: PassifySimpleCmd(g.blocks[blockId]);
+      var blocks' := PassifiedBlocks(g.blocks);
       var g' := Cfg(g.entry, blocks', g.successors);
 
       var modVars := ModifiedVarsCfg(g.successors, g.blocks, n, cover);
-      WpCfg(a, g, n, TruePred(), cover) == 
-      ForallVarDecls(a, modVars, WpCfg(a, g', n, TruePred(), cover))
+      WpCfg(a, g, n, TruePred(), cover)(s) == 
+      ForallVarDecls(a, modVars, WpCfg(a, g', n, TruePred(), cover))(s)
+    decreases cover, 0
     {
+        var blocks' := PassifiedBlocks(g.blocks);
+        var modVars := ModifiedVarsCfg(g.successors, g.blocks, n, cover);
+        var g' := Cfg(g.entry, blocks', g.successors);
 
+        if n !in g.blocks.Keys {
+            assume false;
+        } else {
+            var successors := if n in g.successors.Keys then g.successors[n] else [];
+            if |successors| == 0 {
+              calc {
+                WpCfg(a, g, n, TruePred(), cover);
+                WpSimpleCmd(a, g.blocks[n], TruePred());
+                { assume false; }
+                ForallVarDecls(a, modVars, WpCfg(a, g', n, TruePred(), cover));
+              }
+            } else {
+              assume false;
+            }
+        }
     }
  
 }

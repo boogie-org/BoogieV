@@ -194,7 +194,7 @@ module BoogieLang {
     | Skip //one reason to add Skip instead of using Assert/Assume true: make explicit that the command does nothing
     | Assert(Expr)
     | Assume(Expr)
-    | Assign(var_name, Ty, Expr) 
+    | Assign(targetVar: var_name, targetType: Ty, Expr) 
     | Havoc(varDecls: seq<VarDecl>)
     | SeqSimple(SimpleCmd, SimpleCmd) 
     /* The reason for adding a separate sequential composition for simple commands is to be able to transform the AST
@@ -239,7 +239,10 @@ module BoogieLang {
     predicate WellFormedTypes(tcons: set<tcon_name>)
     {
       PredicateRec(
-        (sc : SimpleCmd) => (sc.Havoc? ==> GetTypeConstr(sc.varDecls) <= tcons), e => true
+        (sc : SimpleCmd) => 
+          && (sc.Havoc? ==> GetTypeConstr(sc.varDecls) <= tcons)
+          && (sc.Assign? && sc.targetType.TCon? ==> sc.targetType.constrName in tcons),
+        e => true
       )
     }
 
