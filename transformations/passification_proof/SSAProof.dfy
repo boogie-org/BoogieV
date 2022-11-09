@@ -76,42 +76,24 @@ module SSAProof {
                   ForallVarDecls(a, modVars, WpCfg(a, cfg', topo[idTopo], TruePred(), cover)),
                   map[])
 
-  /*
-  function ComputeCoverSetsSeq(r: SuccessorRel, ns: seq<BlockId>, cover: set<BlockId>) : (res: map<BlockId, set<BlockId>>)
-    requires IsAcyclicSeq(r, ns, cover)
-    decreases cover, 1, ns
-    ensures (forall n2 | n2 in res.Keys :: IsAcyclic(r, n2, res[n2]))
-  {
-    if |ns| != 0 then
-        ComputeCoverSets(r, ns[0], cover) + ComputeCoverSetsSeq(r, ns[1..], cover)
-    else
-        map[]
-  }
-
-  function ComputeCoverSets(r: SuccessorRel, n: BlockId, cover: set<BlockId>) : (res: map<BlockId, set<BlockId>>)
-    requires IsAcyclic(r, n, cover)
-    decreases cover, 0
-    ensures (forall n2 | n2 in res.Keys :: IsAcyclic(r, n2, res[n2]))
-  {
-    if n in r.Keys then
-        ComputeCoverSetsSeq(r, r[n], cover - {n})
-    else 
-        map[]
-  }
-  */
-
-  function ModifiedVarsSeqCfg(r: SuccessorRel, blocks: map<BlockId, BasicBlock>, ns: seq<BlockId>, cover: set<BlockId>) : (res: seq<(var_name, Ty)>)
+  function ModifiedVarsSeqCfgAux(r: SuccessorRel, blocks: map<BlockId, BasicBlock>, ns: seq<BlockId>, cover: set<BlockId>) : (res: seq<(var_name, Ty)>)
     requires IsAcyclicSeq(r, ns, cover)
     decreases cover, 1, ns
 
-  function ModifiedVarsCfg(r: SuccessorRel, blocks: map<BlockId, BasicBlock>, n: BlockId, cover: set<BlockId>) : (res: seq<(var_name, Ty)>)
+  function ModifiedVarsCfgAux(r: SuccessorRel, blocks: map<BlockId, BasicBlock>, n: BlockId, cover: set<BlockId>) : (res: seq<(var_name, Ty)>)
     requires IsAcyclic(r, n, cover) && r.Keys <= blocks.Keys
     decreases cover, 0
   {
     if n in r.Keys then
-      ModifiedVars(SimpleCmd(blocks[n])) + ModifiedVarsSeqCfg(r, blocks, r[n], cover - {n})
+      ModifiedVars(SimpleCmd(blocks[n])) + ModifiedVarsSeqCfgAux(r, blocks, r[n], cover - {n})
     else
       []
+  }
+
+  function ModifiedVarsCfg(r: SuccessorRel, blocks: map<BlockId, BasicBlock>, n: BlockId, cover: set<BlockId>) : (res: seq<(var_name, Ty)>)
+  requires IsAcyclic(r, n, cover) && r.Keys <= blocks.Keys
+  {
+    Util.RemoveDuplicates(ModifiedVarsCfgAux(r, blocks, n, cover))
   }
 
   function PassifiedBlocks(blocks: map<BlockId, BasicBlock>): map<BlockId, BasicBlock>
@@ -119,7 +101,7 @@ module SSAProof {
     map blockId | blockId in blocks.Keys :: PassifySimpleCmd(blocks[blockId])
   }
   
-  lemma {:verify false} PassifyCfgSeqCorrect<A(!new)>(a: absval_interp<A>, g: Cfg, ns: seq<BlockId>, pred: map<BlockId, seq<BlockId>>, cover: set<BlockId>, s: state<A>)
+  lemma PassifyCfgSeqCorrect<A(!new)>(a: absval_interp<A>, g: Cfg, ns: seq<BlockId>, pred: map<BlockId, seq<BlockId>>, cover: set<BlockId>, s: state<A>)
     requires 
       && IsAcyclicSeq(g.successors, ns, cover)
       && g.successors.Keys <= g.blocks.Keys
@@ -132,20 +114,20 @@ module SSAProof {
         WpCfg(a, g, n, TruePred(), cover)(s) == 
         ForallVarDecls(a, modVars, WpCfg(a, g', n, TruePred(), cover))(s)
     decreases cover, 1, ns
-    {
-      var blocks' := PassifiedBlocks(g.blocks);
-      var g' := Cfg(g.entry, blocks', g.successors);
+  {
+    var blocks' := PassifiedBlocks(g.blocks);
+    var g' := Cfg(g.entry, blocks', g.successors);
 
-      forall n | n in ns 
-      ensures
-        var modVars := (IsAcyclicElem(g.successors, ns, n, cover); ModifiedVarsCfg(g.successors, g.blocks, n, cover));
-        WpCfg(a, g, n, TruePred(), cover)(s) == 
-        ForallVarDecls(a, modVars, WpCfg(a, g', n, TruePred(), cover))(s)
-      {
-        IsAcyclicElem(g.successors, ns, n, cover);
-        PassifyCfgCorrect(a, g, n, pred, cover, s);
-      }
+    forall n | n in ns 
+    ensures
+      var modVars := (IsAcyclicElem(g.successors, ns, n, cover); ModifiedVarsCfg(g.successors, g.blocks, n, cover));
+      WpCfg(a, g, n, TruePred(), cover)(s) == 
+      ForallVarDecls(a, modVars, WpCfg(a, g', n, TruePred(), cover))(s)
+    {
+      IsAcyclicElem(g.successors, ns, n, cover);
+      PassifyCfgCorrect(a, g, n, pred, cover, s);
     }
+  }
 
   predicate UseAfterDef(sc: SimpleCmd, defVars: set<var_name>)
   {
@@ -157,16 +139,84 @@ module SSAProof {
       case Havoc(varDecls) => true
       case SeqSimple(sc1, sc2) => 
         && UseAfterDef(sc1, defVars) 
-        && (var defVars' := GetVarNames(ModifiedVars(SimpleCmd(sc1))) + defVars;
+        && (var defVars' := defVars + GetVarNames(ModifiedVars(SimpleCmd(sc1)));
             UseAfterDef(sc2, defVars'))
     }
+  }
+
+  lemma GetVarNamesRemoveDuplicates(d: seq<(var_name, Ty)>)
+    ensures GetVarNames(Util.RemoveDuplicates(d)) == GetVarNames(d)
+  {
+    assert GetVarNames(Util.RemoveDuplicates(d)) <= GetVarNames(d) by {
+      forall x | x in Util.RemoveDuplicates(d)
+      ensures x in d
+      {
+        Util.RemoveDuplicatesAuxSubset1(d, {}, x);
+      }
+    }
+
+    assert GetVarNames(d) <= GetVarNames(Util.RemoveDuplicates(d))  by {
+      forall x | x in d
+      ensures x in Util.RemoveDuplicates(d)
+      {
+        Util.RemoveDuplicatesAuxSubset2(d, {}, x);
+      }
+    }
+  }
+
+  lemma GetTypeConstrRemoveDuplicates(d: seq<(var_name, Ty)>)
+    ensures GetTypeConstr(Util.RemoveDuplicates(d)) == GetTypeConstr(d)
+  {
+    assert GetTypeConstr(Util.RemoveDuplicates(d)) <= GetTypeConstr(d) by {
+      forall x | x in Util.RemoveDuplicates(d)
+      ensures x in d
+      {
+        Util.RemoveDuplicatesAuxSubset1(d, {}, x);
+      }
+    }
+
+    assert GetTypeConstr(d) <= GetTypeConstr(Util.RemoveDuplicates(d))  by {
+      forall x | x in d
+      ensures x in Util.RemoveDuplicates(d)
+      {
+        Util.RemoveDuplicatesAuxSubset2(d, {}, x);
+      }
+    }
+  }
+
+  lemma GetVarNamesModVarsAppend(sc1: SimpleCmd, sc2: SimpleCmd)
+    ensures GetVarNames(ModifiedVars(SimpleCmd(sc1))) + GetVarNames(ModifiedVars(SimpleCmd(sc2))) ==
+            GetVarNames(ModifiedVars(SimpleCmd(SeqSimple(sc1, sc2))))
+  {
+    calc {
+      GetVarNames(Util.RemoveDuplicates(ModifiedVarsAuxSimpleCmd(sc1, {}) + ModifiedVarsAuxSimpleCmd(sc2, {})));
+      { GetVarNamesRemoveDuplicates(ModifiedVarsAuxSimpleCmd(sc1, {}) + ModifiedVarsAuxSimpleCmd(sc2, {}));}
+      GetVarNames(ModifiedVarsAuxSimpleCmd(sc1, {}) + ModifiedVarsAuxSimpleCmd(sc2, {}));
+    }
+
+    GetVarNamesRemoveDuplicates(ModifiedVarsAux(SimpleCmd(sc1), {}));
+    GetVarNamesRemoveDuplicates(ModifiedVarsAux(SimpleCmd(sc2), {}));
+  }
+
+  lemma GetTypeConstrModVarsAppend(sc1: SimpleCmd, sc2: SimpleCmd)
+    ensures GetTypeConstr(ModifiedVars(SimpleCmd(sc1))) + GetTypeConstr(ModifiedVars(SimpleCmd(sc2))) ==
+            GetTypeConstr(ModifiedVars(SimpleCmd(SeqSimple(sc1, sc2)))) 
+  {
+    calc {
+      GetTypeConstr(Util.RemoveDuplicates(ModifiedVarsAuxSimpleCmd(sc1, {}) + ModifiedVarsAuxSimpleCmd(sc2, {})));
+      { GetTypeConstrRemoveDuplicates(ModifiedVarsAuxSimpleCmd(sc1, {}) + ModifiedVarsAuxSimpleCmd(sc2, {}));}
+      GetTypeConstr(ModifiedVarsAuxSimpleCmd(sc1, {}) + ModifiedVarsAuxSimpleCmd(sc2, {}));
+    }
+
+    GetTypeConstrRemoveDuplicates(ModifiedVarsAux(SimpleCmd(sc1), {}));
+    GetTypeConstrRemoveDuplicates(ModifiedVarsAux(SimpleCmd(sc2), {}));
   }
 
   lemma WellFormedTypesModVars(sc: SimpleCmd, tcons: set<tcon_name>)
     requires 
       && sc.WellFormedTypes(tcons)
       && sc.PredicateRec((sc1: SimpleCmd) => !sc1.Havoc?, e => true) 
-      /* no havoc assumption is not required to prove the lemma
+      /* "no havoc assumption" should not be required to prove the postcondition
          but sufficient for this file for now */
     ensures GetTypeConstr(ModifiedVars(SimpleCmd(sc))) <= tcons;
   {
@@ -180,17 +230,47 @@ module SSAProof {
         [(x,t)] + Util.RemoveDuplicatesAux([], {(x,t)}+{});
         [(x,t)];
       }
+    case SeqSimple(sc1, sc2) => 
+      assert GetTypeConstr(ModifiedVars(SimpleCmd(sc1))) <= tcons;
+      assert GetTypeConstr(ModifiedVars(SimpleCmd(sc2))) <= tcons;
+      GetTypeConstrModVarsAppend(sc1, sc2);
     case _ => 
   }
 
-
   lemma UseAfterDefWellFormed(sc: SimpleCmd, defVars: set<var_name>)
-    requires UseAfterDef(sc, defVars)
+    requires 
+      && UseAfterDef(sc, defVars)
+      && sc.PredicateRec((sc1: SimpleCmd) => !sc1.Havoc?, e => true) 
+      /* "no havoc assumption" should not be required to prove the postcondition
+         but sufficient for this file for now */
     ensures sc.WellFormedVars(defVars+GetVarNames(ModifiedVars(SimpleCmd(sc))))
   {
-    
+    match sc
+    case Assign(x, t, e) => 
+    case SeqSimple(sc1, sc2) =>
+      assert sc1.WellFormedVars(defVars+GetVarNames(ModifiedVars(SimpleCmd(sc1)))) by {
+        UseAfterDefWellFormed(sc1, defVars);
+      }
+      var defVars' := defVars + GetVarNames(ModifiedVars(SimpleCmd(sc1)));
+      assert UseAfterDef(sc2, defVars');
+      assert sc2.WellFormedVars(defVars'+GetVarNames(ModifiedVars(SimpleCmd(sc2))));
+      assert GetVarNames(ModifiedVars(SimpleCmd(sc))) == GetVarNames(ModifiedVars(SimpleCmd(sc1))) + GetVarNames(ModifiedVars(SimpleCmd(sc2))) by {
+        GetVarNamesModVarsAppend(sc1, sc2);
+      }
+
+      assert defVars+GetVarNames(ModifiedVars(SimpleCmd(sc))) == defVars'+GetVarNames(ModifiedVars(SimpleCmd(sc2)));
+      assert sc2.WellFormedVars(defVars+GetVarNames(ModifiedVars(SimpleCmd(sc))));
+
+      assert sc1.WellFormedVars(defVars+GetVarNames(ModifiedVars(SimpleCmd(sc)))) by {
+        SimpleCmdWellFormedVarsLarger(sc1, defVars+GetVarNames(ModifiedVars(SimpleCmd(sc1))), defVars'+GetVarNames(ModifiedVars(SimpleCmd(sc2))));
+      }
+    case _ =>
   }
 
+  lemma PassifyPreservesWellFormedVars(sc: SimpleCmd, xs: set<var_name>)
+    requires sc.WellFormedVars(xs)
+    ensures PassifySimpleCmd(sc).WellFormedVars(xs)
+  { }
 
   lemma PassifyLocalLemma<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, post: Predicate<A>, defVars: set<var_name>, tcons: set<tcon_name>)
     requires 
@@ -214,7 +294,7 @@ module SSAProof {
         match sc {
           case Assign(x, t, e) => assume false;  
           case SeqSimple(sc1, sc2) => 
-            var defVars2 := GetVarNames(ModifiedVars(SimpleCmd(sc1))) + defVars;
+            var defVars2 := defVars + GetVarNames(ModifiedVars(SimpleCmd(sc1)));
             var modVars2 := ModifiedVars(SimpleCmd(sc2));
             var modVars1 := ModifiedVars(SimpleCmd(sc1));
             var passiveSc2 := PassifySimpleCmd(sc2);
@@ -242,8 +322,9 @@ module SSAProof {
                 ensures WpSimpleCmd(a, passiveSc1, forallSc2Post)(s') ==
                         ForallVarDecls(a, modVars2, WpSimpleCmd(a, passiveSc1, WpSimpleCmd(a, passiveSc2, post)))(s')
                 {
-                    assert passiveSc1.WellFormedVars((defVars+GetVarNames(modVars1)) + {}) by {
-                      assume false;
+                    assert passiveSc1.WellFormedVars(defVars+GetVarNames(modVars1)) by {
+                      UseAfterDefWellFormed(sc1, defVars);
+                      PassifyPreservesWellFormedVars(sc1, defVars+GetVarNames(modVars1));
                     }
                     
                     assert (defVars+GetVarNames(modVars1)) !! GetVarNames(modVars2) by {
@@ -254,7 +335,7 @@ module SSAProof {
                       WellFormedTypesModVars(sc2, tcons);
                     }
 
-                    RemoveScopedVarsAuxProof.PullForallWpSimpleCmd(a, tcons, defVars+GetVarNames(modVars1), {}, modVars2, passiveSc1, WpSimpleCmd(a, passiveSc2, post), s');
+                    RemoveScopedVarsAuxProof.PullForallWpSimpleCmd(a, tcons, defVars, GetVarNames(modVars1), modVars2, passiveSc1, WpSimpleCmd(a, passiveSc2, post), s');
                 }
 
                 ForallVarDeclsPointwise(a, modVars1, 
@@ -286,7 +367,7 @@ module SSAProof {
   }
       
 
-  lemma {:verify false} PassifyCfgCorrect<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, pred: map<BlockId, seq<BlockId>>, cover: set<BlockId>, s: state<A>)
+  lemma PassifyCfgCorrect<A(!new)>(a: absval_interp<A>, g: Cfg, n: BlockId, pred: map<BlockId, seq<BlockId>>, cover: set<BlockId>, s: state<A>)
     requires 
       /*
       && pred.Keys <= g.blocks.Keys

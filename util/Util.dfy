@@ -20,6 +20,16 @@ module Util {
         [s[0]] + RemoveDuplicatesAux(s[1..], {s[0]}+alreadyIncluded)
   }
 
+  lemma RemoveDuplicatesAuxSubset1<T>(s: seq<T>, alreadyIncluded: set<T>, x :T) 
+    requires x in RemoveDuplicatesAux(s, alreadyIncluded)
+    ensures x in s
+  { }
+
+  lemma RemoveDuplicatesAuxSubset2<T>(s: seq<T>, alreadyIncluded: set<T>, x :T) 
+    requires x in s && x !in alreadyIncluded
+    ensures x in RemoveDuplicatesAux(s, alreadyIncluded)
+  { }
+
   function method IntToString(i: int) : string {
     if i < 0 then "-"+NatToString(-i) else NatToString(i)
   }
