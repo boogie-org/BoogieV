@@ -274,7 +274,7 @@ module SSAProof {
 
   lemma PassifyLocalLemma<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, post: Predicate<A>, defVars: set<var_name>, tcons: set<tcon_name>)
     requires 
-      && Sequences.HasNoDuplicates(GetVarNamesSeq(ModifiedVars(SimpleCmd(sc))))
+      && Sequences.HasNoDuplicates(GetVarNamesSeq(ModifiedVarsAux(SimpleCmd(sc), {})))
       && UseAfterDef(sc, defVars)
       && defVars !! GetVarNames(ModifiedVars(SimpleCmd(sc)))
       && sc.PredicateRec((sc1: SimpleCmd) => !sc1.Havoc?, e => true)
@@ -304,20 +304,20 @@ module SSAProof {
               WpSimpleCmd(a, sc, post)(s);
               WpSimpleCmd(a, sc1, WpSimpleCmd(a, sc2, post))(s);
               {
-                assume Sequences.HasNoDuplicates(GetVarNamesSeq(ModifiedVars(SimpleCmd(sc2))));
+                assume Sequences.HasNoDuplicates(GetVarNamesSeq(ModifiedVarsAux(SimpleCmd(sc2), {})));
                 assume defVars2 !! GetVarNames(ModifiedVars(SimpleCmd(sc2)));
                 PassifyLocalLemma(a, sc2, post, defVars2, tcons);
                 WpSimpleCmdPointwise2(a, sc1, WpSimpleCmd(a, sc2, post), forallSc2Post);
               }
               WpSimpleCmd(a, sc1, forallSc2Post)(s);
               {
-                assume Sequences.HasNoDuplicates(GetVarNamesSeq(ModifiedVars(SimpleCmd(sc1))));
+                assume Sequences.HasNoDuplicates(GetVarNamesSeq(ModifiedVarsAux(SimpleCmd(sc1), {})));
                 assume defVars !! GetVarNames(ModifiedVars(SimpleCmd(sc1)));
                 PassifyLocalLemma(a, sc1, post, defVars, tcons);
               }
               ForallVarDecls(a, modVars1, WpSimpleCmd(a, passiveSc1, forallSc2Post))(s);
               { 
-                //using htat modVars2 does not appear in passiveSc1
+                //using that modVars2 does not appear in passiveSc1
                 forall s'
                 ensures WpSimpleCmd(a, passiveSc1, forallSc2Post)(s') ==
                         ForallVarDecls(a, modVars2, WpSimpleCmd(a, passiveSc1, WpSimpleCmd(a, passiveSc2, post)))(s')
