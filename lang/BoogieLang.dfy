@@ -194,7 +194,7 @@ module BoogieLang {
     | Skip //one reason to add Skip instead of using Assert/Assume true: make explicit that the command does nothing
     | Assert(Expr)
     | Assume(Expr)
-    | Assign(var_name, Ty, Expr) 
+    | Assign(targetVar: var_name, targetType: Ty, Expr) 
     | Havoc(varDecls: seq<VarDecl>)
     | SeqSimple(SimpleCmd, SimpleCmd) 
     /* The reason for adding a separate sequential composition for simple commands is to be able to transform the AST
@@ -239,7 +239,10 @@ module BoogieLang {
     predicate WellFormedTypes(tcons: set<tcon_name>)
     {
       PredicateRec(
-        (sc : SimpleCmd) => (sc.Havoc? ==> GetTypeConstr(sc.varDecls) <= tcons), e => true
+        (sc : SimpleCmd) => 
+          && (sc.Havoc? ==> GetTypeConstr(sc.varDecls) <= tcons)
+          && (sc.Assign? && sc.targetType.TCon? ==> sc.targetType.constrName in tcons),
+        e => true
       )
     }
 
@@ -518,11 +521,21 @@ module BoogieLang {
     else (if decls[0].0 in exclude then [] else [decls[0]]) + ModifiedVarDecls(decls[1..], exclude)
   }
 
+  function method ModifiedVarsAuxSimpleCmd(sc: SimpleCmd, exclude: set<var_name>): seq<(var_name, Ty)>
+  {
+    match sc  
+    case Skip => []
+    case Assert(_) => []
+    case Assume(_) => []
+    case Assign(x,t,_) => if x in exclude then [] else [(x,t)]
+    case Havoc(decls) => ModifiedVarDecls(decls, exclude)
+    case SeqSimple(sc1, sc2) => ModifiedVarsAuxSimpleCmd(sc1, exclude) + ModifiedVarsAuxSimpleCmd(sc2, exclude)
+  }
+
   function method ModifiedVarsAux(c: Cmd, exclude: set<var_name>): seq<(var_name, Ty)>
   {
     match c 
-    case SimpleCmd(Assign(x,t,_)) => if x in exclude then [] else [(x,t)]
-    case SimpleCmd(Havoc(decls)) => ModifiedVarDecls(decls, exclude)
+    case SimpleCmd(sc) => ModifiedVarsAuxSimpleCmd(sc, exclude)
     case Scope(_, decls, c) => ModifiedVarsAux(c, exclude + GetVarNames(decls))
     case Seq(c1, c2) => ModifiedVarsAux(c1, exclude) + ModifiedVarsAux(c2, exclude)
     case Loop(_, body) => ModifiedVarsAux(body, exclude)
