@@ -1,3 +1,8 @@
+/**
+This file contains experiments towards developing a proof for the passification phase.
+There are various assume statements and the lemmas may not yet have the right specifications.
+*/
+
 include "../Passification.dfy"
 include "../MakeScopedVarsUniqueProof.dfy" //for RelPred (TODO move to a better place)
 include "../RemoveScopedVarsAuxProof.dfy" //for ForallVarDecls lemmas 
@@ -272,6 +277,7 @@ module SSAProof {
     ensures PassifySimpleCmd(sc).WellFormedVars(xs)
   { }
 
+  /** The following lemma captures the assumification step for a single basic block */
   lemma PassifyLocalLemma<A(!new)>(a: absval_interp<A>, sc: SimpleCmd, post: Predicate<A>, defVars: set<var_name>, tcons: set<tcon_name>)
     requires 
       && Sequences.HasNoDuplicates(GetVarNamesSeq(ModifiedVarsAux(SimpleCmd(sc), {})))
